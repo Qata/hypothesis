@@ -1,0 +1,14 @@
+[package]
+name = "hypothesis-swift"
+version = "0.1.0"
+edition = "2021"
+authors = ["David R. MacIver <david@drmaciver.com>", "Alex Weisberger <alex.m.weisberger@gmail.com>"]
+
+[lib]
+name="hypothesis_swift_core"
+crate-type = ["staticlib"]
+
+[dependencies]
+lazy_static = "1.4.0"
+rand = '0.3'
+conjecture = { path = '../conjecture-rust' }

@@ -36,6 +36,10 @@ dist
 .doctrees/
 .v*/
 
+# Swift
+
+hypothesis-swift/libs/*
+
 # encrypted files
 secrets.tar
 secrets

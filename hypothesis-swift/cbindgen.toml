@@ -1,0 +1,5 @@
+include_version = true
+
+[fn]
+args = "Vertical"
+rename_args = "GeckoCase"

@@ -1,0 +1,4 @@
+module Conjecture {
+  header "conjecture.h"
+  export *
+}
