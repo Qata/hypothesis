@@ -4,15 +4,19 @@ import Testing
 @Suite
 struct BacktraceTests {
     @Test
-    func test() throws {
+    func test1() throws {
         try hypothesis {
             let int = try any(ConjectureIntegers.unbounded())
             print(int)
+            try verify(int < 51)
         }
     }
     
     @Test
-    func throwing() {
-        #expect(10 < 20)
+    func test2() throws {
+        try hypothesis {
+            let int = try any(ConjectureIntegers.unbounded())
+            print(int)
+        }
     }
 }

@@ -17,20 +17,18 @@ public func hypothesis(
     seed: UInt64 = UInt64.random(in: 0...UInt64.max),
     block: (TestCase) throws -> Void
 ) throws {
-    guard World.shared.currentEngine == nil else {
+    guard World.currentEngine == nil else {
         throw HypothesisError.usageError("Cannot nest hypothesis calls")
     }
-    defer { World.shared.setEngine(nil) }
-    World.shared.setEngine(
-        try Engine(
-            name: "",
-            databasePath: databasePath,
-            seed: seed,
-            maxExamples: maxValidTestCases,
-            phases: phases
-        )
+    defer { World.currentEngine = nil }
+    World.currentEngine = try Engine(
+        name: "",
+        databasePath: databasePath,
+        seed: seed,
+        maxExamples: maxValidTestCases,
+        phases: phases
     )
-    try World.shared.currentEngine?.run(block)
+    try World.currentEngine?.run(block)
 }
 
 public func hypothesis(

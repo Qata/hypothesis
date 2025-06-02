@@ -1,45 +1,37 @@
-class World {
-    nonisolated(unsafe)
-    static let shared: World = World()
+import Foundation
+
+enum World {
+    private static let threadKey = "HypothesisCurrentEngine"
     
-    /// The currently active Engine, if any
-    var currentEngine: Engine?
-    
-    private init() {}
-    
-    /// Sets the current engine for the duration of a test
-    func setEngine(_ engine: Engine?) {
-        currentEngine = engine
+    static var currentEngine: Engine? {
+        get {
+            Thread.current.threadDictionary[threadKey] as? Engine
+        }
+        set {
+            if let newValue = newValue {
+                Thread.current.threadDictionary[threadKey] = newValue
+            } else {
+                Thread.current.threadDictionary.removeObject(forKey: threadKey)
+            }
+        }
     }
     
-    /// Gets the current engine, throwing if none is set
-    func requireEngine() throws -> Engine {
+    static func requireEngine() throws -> Engine {
         guard let engine = currentEngine else {
             throw HypothesisError.outsideTestContext
         }
         return engine
-    }
-    
-    /// Safely executes a block with the given engine set as current
-    func withEngine<T>(
-        _ engine: Engine?,
-        execute: () throws -> T
-    ) rethrows -> T {
-        let previousEngine = currentEngine
-        setEngine(engine)
-        defer { setEngine(previousEngine) }
-        return try execute()
     }
 }
 
 // MARK: - Updated Global Functions
 
 /// Generate a value using the current engine's test case
-func any<T: ConjectureDistribution>(
+public func any<T: ConjectureDistribution>(
     _ distribution: T,
-    name: String? = nil
+    _ name: String? = nil
 ) throws -> T.Value {
-    let engine = try World.shared.requireEngine()
+    let engine = try World.requireEngine()
     guard let testCase = engine.currentTestCase else {
         throw HypothesisError.internal
     }
@@ -47,10 +39,18 @@ func any<T: ConjectureDistribution>(
 }
 
 /// Make an assumption about the current test case
-func assume(_ condition: Bool) throws {
-    let engine = try World.shared.requireEngine()
+public func assume(_ condition: Bool) throws {
+    let engine = try World.requireEngine()
     guard let testCase = engine.currentTestCase else {
         throw HypothesisError.internal
     }
     try testCase.assume(condition)
+}
+
+public func verify(_ condition: Bool, _ message: String? = nil) throws {
+    let engine = try World.requireEngine()
+    guard let testCase = engine.currentTestCase else {
+        throw HypothesisError.internal
+    }
+    try testCase.verify(condition, message)
 }

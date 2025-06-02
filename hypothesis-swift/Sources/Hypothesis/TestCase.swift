@@ -44,6 +44,12 @@ public class TestCase {
         }
     }
     
+    func verify(_ condition: Bool, _ message: String? = nil) throws {
+        guard condition else {
+            throw HypothesisError.unverifiable(message)
+        }
+    }
+    
     /// Generate a value using the provided distribution.
     /// Ruby equivalent: `def any(possible = nil, name: nil, &block)`
     /// - Parameters:

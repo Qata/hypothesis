@@ -44,8 +44,10 @@ public class Engine {
                 if isFind {
                     throw backtraced
                 }
+                print(backtraced.backtrace.stack.compactMap(\.description))
                 try conjectureEngine.finish(
-                    source, .interesting(
+                    source,
+                    .interesting(
                         label: exceptionToTags[backtraced.backtrace]
                     )
                 )
