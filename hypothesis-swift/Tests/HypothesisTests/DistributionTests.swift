@@ -1,4 +1,5 @@
 import Testing
+import Foundation
 @testable import Hypothesis
 
 @Suite
@@ -38,8 +39,8 @@ struct DistributionTests {
                 d6Results.append(roll6)
                 d20Results.append(roll20)
                 
-                #expect(roll6 >= 1 && roll6 <= 6)
-                #expect(roll20 >= 1 && roll20 <= 20)
+                #expect(1...6 ~= roll6)
+                #expect(1...20 ~= roll20)
                 
                 try engine.finish(source, .valid)
             } catch ConjectureError.dataOverflow {
@@ -142,7 +143,7 @@ struct DistributionTests {
         
         while let source = try engine.newSource() {
             do {
-                values.append(try source.draw(distribution))
+                try values.append(source.draw(distribution))
                 try engine.finish(source, .valid)
             } catch ConjectureError.dataOverflow {
                 try engine.finish(source, .overflow)
@@ -187,30 +188,32 @@ struct DistributionTests {
         }
     }
     
-//    @Test
-//    func testDistributionTransformation() throws {
-//        // Create a distribution of even numbers
-//        let evens = TransformedDistribution(
-//            base: try ConjectureBoundedIntegers(maxValue: 50),
-//            transform: { $0 * 2 }
-//        )
-//
-//        let values = try collectValues(evens, count: 20)
-//
-//        #expect(values.allSatisfy { $0 % 2 == 0 }, "All values should be even")
-//        #expect(values.allSatisfy { $0 <= 100 }, "All values should be <= 100")
-//
-//        // Create a distribution of strings from integers
-//        let strings = TransformedDistribution(
-//            base: try ConjectureBoundedIntegers(maxValue: 99),
-//            transform: { String(format: "%02d", $0) }
-//        )
-//
-//        let stringValues = try collectValues(strings, count: 10)
-//
-//        #expect(stringValues.allSatisfy { $0.count == 2 })
-//        #expect(stringValues.allSatisfy { Int($0) != nil })
-//    }
+    @Test
+    func testDistributionTransformation() throws {
+        // Create a distribution of even numbers
+        let evens = TransformedDistribution(
+            base: try ConjectureBoundedIntegers(maxValue: 50),
+            transform: { $0 * 2 }
+        )
+
+        let values = try collectValues(evens, count: 20)
+
+        #expect(values.allSatisfy { $0 % 2 == 0 }, "All values should be even")
+        #expect(values.allSatisfy { $0 <= 100 }, "All values should be <= 100")
+
+        // Create a distribution of strings from integers
+        let strings = TransformedDistribution(
+            base: try ConjectureBoundedIntegers(maxValue: 99),
+            transform: {
+                String($0, radix: 10, uppercase: true)
+            }
+        )
+
+        #expect(
+            try collectValues(strings, count: 10)
+                .allSatisfy { Int($0) != nil }
+        )
+    }
     
     // MARK: - Array Building Tests
     
