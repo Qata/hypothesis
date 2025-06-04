@@ -3,7 +3,7 @@ public class TestCase {
     // MARK: - Ruby API Port: Properties
     
     /// The underlying C data source (Ruby: @wrapped_data)
-    let wrappedData: ConjectureDataSource
+    let wrappedData: CoreDataSource
     
     /// Generated values for replay (Ruby: @draws)
     private(set) var draws: [Any]?
@@ -22,7 +22,7 @@ public class TestCase {
     ///   - printDraws: Whether to enable pretty-printing for error messages
     ///   - recordDraws: Whether to record draws for failure reproduction
     init(
-        _ wrappedData: ConjectureDataSource,
+        _ wrappedData: CoreDataSource,
         printDraws: Bool = false,
         recordDraws: Bool = false
     ) {
@@ -44,12 +44,6 @@ public class TestCase {
         }
     }
     
-    func verify(_ condition: Bool, _ message: String? = nil) throws {
-        guard condition else {
-            throw HypothesisError.unverifiable(message)
-        }
-    }
-    
     /// Generate a value using the provided distribution.
     /// Ruby equivalent: `def any(possible = nil, name: nil, &block)`
     /// - Parameters:
@@ -62,27 +56,16 @@ public class TestCase {
         name: String? = nil
     ) throws -> T.Value {
         let isTopLevel = depth == 0
+        depth += 1
+        defer { depth -= 1 }
         
-        defer {
-            depth -= 1  // Always restore depth (Ruby's ensure block)
-        }
-        
-        depth += 1  // Track nesting depth
-        
-        // Tell C layer we're starting a draw
-        try wrappedData.startDraw()
-        
-        // Generate the value
         let result: T.Value
+        try wrappedData.startDraw()
         do {
             result = try distribution.provide(from: wrappedData)
         } catch {
-            // Make sure we call stopDraw even if generation fails
-            try? wrappedData.stopDraw()
             throw error
         }
-        
-        // Tell C layer we're done drawing
         try wrappedData.stopDraw()
         
         // Only log top-level draws (Ruby: if top_level)

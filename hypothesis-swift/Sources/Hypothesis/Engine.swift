@@ -3,10 +3,11 @@ import Foundation
 
 public class Engine {
     private(set) var currentTestCase: TestCase?
-    private let conjectureEngine: ConjectureEngine
+    private let conjectureEngine: CoreEngine
     private let name: String
+    private let maxExamples: UInt64
     private var isFind: Bool = false
-    private var exceptionToTags: AutoIncrementingDictionary<Backtrace> = .init()
+    private var exceptionToTags: AutoIncrementingDictionary<String> = .init()
 
     public init(
         name: String,
@@ -16,7 +17,8 @@ public class Engine {
         phases: [Phase]
     ) throws {
         self.name = name
-        self.conjectureEngine = try ConjectureEngine(
+        self.maxExamples = maxExamples
+        self.conjectureEngine = try CoreEngine(
             name: name,
             databasePath: databasePath,
             seed: seed,
@@ -37,29 +39,40 @@ public class Engine {
                 }
             } catch HypothesisError.unsatisfiedAssumption {
                 try conjectureEngine.finish(source, .invalid)
-            } catch HypothesisError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try conjectureEngine.finish(source, .overflow)
-            } catch {
-                let backtraced = BacktracedError(underlying: error)
+            } catch let HypothesisError.unverifiable(message, location) {
                 if isFind {
-                    throw backtraced
+                    throw HypothesisError.unverifiable(message, location: location)
                 }
-                print(backtraced.backtrace.stack.compactMap(\.description))
                 try conjectureEngine.finish(
                     source,
                     .interesting(
-                        label: exceptionToTags[backtraced.backtrace]
+                        label: exceptionToTags[
+                            location + (message.map { ":\($0)" } ?? "")
+                        ]
+                    )
+                )
+            } catch {
+                try conjectureEngine.finish(
+                    source,
+                    .interesting(
+                        label: exceptionToTags[
+                            String(reflecting: error) + String(describing: error)
+                        ]
                     )
                 )
             }
         }
         
-        if try conjectureEngine.countFailingExamples() == 0 {
+        guard try conjectureEngine.countFailingExamples() != 0 else {
             if try conjectureEngine.wasUnsatisfiable() {
                 throw HypothesisError.unsatisfiable
             }
             self.currentTestCase = nil
-            return
+            return print(
+                "􁁛 Passed \(maxExamples) tests"
+            )
         }
         
         if isFind {
@@ -73,25 +86,24 @@ public class Engine {
                 let source = try conjectureEngine.failingExample(atIndex: example)
                 self.currentTestCase = TestCase(source, printDraws: true)
                 do {
-                    _ = try testBlock(currentTestCase!)
+                    try currentTestCase.map(testBlock)
                 } catch {
-                    let givens = currentTestCase?.printLog ?? []
-                    let givenStrings = givens.enumerated().map { (index, item) in
-                        let name = item.name ?? "#\(index + 1)"
-                        return "Given \(name): \(item.value)"
-                    }
-                    
-                    let enhancedError = error as? HypothesisEnhancedError
-                    ?? HypothesisWrappedError(
-                        originalError: error,
-                        givens: givenStrings,
-                        originalDescription: String(describing: error),
-                        originalDebugDescription: String(reflecting: error)
+                    let wrappedError = HypothesisWrappedError(
+                        error,
+                        givens: currentTestCase?
+                            .printLog?
+                            .enumerated()
+                            .map { index, item in
+                                let name = item.name ?? "#\(index + 1)"
+                                return "Given \(name): \(item.value)"
+                            }
+                        ?? []
                     )
+                    
                     if try conjectureEngine.countFailingExamples() == 1 {
-                        throw enhancedError
+                        throw wrappedError
                     }
-                    exceptions.append(enhancedError)
+                    exceptions.append(wrappedError)
                 }
             }
             throw HypothesisMultipleExceptionError(exceptions)

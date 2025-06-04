@@ -5,7 +5,7 @@ import Testing
 struct DataSourceTests {
     @Test
     func testDataSourceConsumption() throws {
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "consumption_test",
             seed: 12345,
             maxExamples: 1
@@ -21,16 +21,16 @@ struct DataSourceTests {
         #expect(handle != nil)
         
         // Second consumption should fail
-        #expect(throws: ConjectureError.dataSourceAlreadyConsumed) {
+        #expect(throws: CoreError.dataSourceAlreadyConsumed) {
             _ = try source.consume()
         }
         
         // Operations after consumption should fail
-        #expect(throws: ConjectureError.dataSourceAlreadyConsumed) {
+        #expect(throws: CoreError.dataSourceAlreadyConsumed) {
             _ = try source.bits(8)
         }
         
-        #expect(throws: ConjectureError.dataSourceAlreadyConsumed) {
+        #expect(throws: CoreError.dataSourceAlreadyConsumed) {
             try source.startDraw()
         }
     }

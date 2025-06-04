@@ -11,15 +11,15 @@ struct DistributionTests {
     struct Dice: ConjectureDistribution {
         let sides: UInt64
         
-        func provide(from source: ConjectureDataSource) throws -> UInt64 {
-            let bounded = try ConjectureBoundedIntegers(maxValue: sides - 1)
+        func provide(from source: CoreDataSource) throws -> UInt64 {
+            let bounded = try CoreBoundedIntegers(maxValue: sides - 1)
             return try bounded.provide(from: source) + 1
         }
     }
     
     @Test
     func testCustomDistribution() throws {
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "custom_distribution",
             seed: 42,
             maxExamples: 100
@@ -43,7 +43,7 @@ struct DistributionTests {
                 #expect(1...20 ~= roll20)
                 
                 try engine.finish(source, .valid)
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }
@@ -67,12 +67,12 @@ struct DistributionTests {
         let xRange: ClosedRange<Int64>
         let yRange: ClosedRange<Int64>
         
-        func provide(from source: ConjectureDataSource) throws -> Point {
+        func provide(from source: CoreDataSource) throws -> Point {
             // Note: This is a workaround since we don't have signed bounded integers
-            let xBase = try ConjectureBoundedIntegers(
+            let xBase = try CoreBoundedIntegers(
                 maxValue: UInt64(xRange.upperBound - xRange.lowerBound)
             ).provide(from: source)
-            let yBase = try ConjectureBoundedIntegers(
+            let yBase = try CoreBoundedIntegers(
                 maxValue: UInt64(yRange.upperBound - yRange.lowerBound)
             ).provide(from: source)
             
@@ -85,7 +85,7 @@ struct DistributionTests {
     
     @Test
     func testCompositeDistribution() throws {
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "composite_distribution",
             seed: 12345,
             maxExamples: 50
@@ -117,7 +117,7 @@ struct DistributionTests {
                 quadrants[quadrant, default: 0] += 1
                 
                 try engine.finish(source, .valid)
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }
@@ -133,7 +133,7 @@ struct DistributionTests {
         count: Int,
         seed: UInt64 = 99999
     ) throws -> [D.Value] {
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "collect_values",
             seed: seed,
             maxExamples: UInt64(count)
@@ -145,7 +145,7 @@ struct DistributionTests {
             do {
                 try values.append(source.draw(distribution))
                 try engine.finish(source, .valid)
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }
@@ -157,14 +157,14 @@ struct DistributionTests {
     func testGenericCollectionFunction() throws {
         // Test with integers
         let integers = try collectValues(
-            ConjectureIntegers.unbounded(),
+            CoreIntegers.unbounded(),
             count: 10
         )
         #expect(integers.count == 10)
         
         // Test with bounded integers
         let bounded = try collectValues(
-            ConjectureBoundedIntegers(maxValue: 5),
+            CoreBoundedIntegers(maxValue: 5),
             count: 20
         )
         #expect(bounded.count == 20)
@@ -182,7 +182,7 @@ struct DistributionTests {
         let base: Base
         let transform: (Base.Value) throws -> Output
         
-        func provide(from source: ConjectureDataSource) throws -> Output {
+        func provide(from source: CoreDataSource) throws -> Output {
             let baseValue = try base.provide(from: source)
             return try transform(baseValue)
         }
@@ -192,7 +192,7 @@ struct DistributionTests {
     func testDistributionTransformation() throws {
         // Create a distribution of even numbers
         let evens = TransformedDistribution(
-            base: try ConjectureBoundedIntegers(maxValue: 50),
+            base: try CoreBoundedIntegers(maxValue: 50),
             transform: { $0 * 2 }
         )
 
@@ -203,7 +203,7 @@ struct DistributionTests {
 
         // Create a distribution of strings from integers
         let strings = TransformedDistribution(
-            base: try ConjectureBoundedIntegers(maxValue: 99),
+            base: try CoreBoundedIntegers(maxValue: 99),
             transform: {
                 String($0, radix: 10, uppercase: true)
             }
@@ -223,8 +223,8 @@ struct DistributionTests {
         let element: Element
         let sizeRange: ClosedRange<UInt64>
         
-        func provide(from source: ConjectureDataSource) throws -> [Element.Value] {
-            let repeat_ = try ConjectureRepeatValues.range(sizeRange)
+        func provide(from source: CoreDataSource) throws -> [Element.Value] {
+            let repeat_ = try CoreRepeatValues.range(sizeRange)
             var result: [Element.Value] = []
             
             while try repeat_.shouldContinue(with: source) {
@@ -238,7 +238,7 @@ struct DistributionTests {
     @Test
     func testArrayDistribution() throws {
         let arrays = Arrays(
-            element: try ConjectureBoundedIntegers(maxValue: 10),
+            element: try CoreBoundedIntegers(maxValue: 10),
             sizeRange: 0...5
         )
         
@@ -265,7 +265,7 @@ struct DistributionTests {
         struct Constant: ConjectureDistribution {
             let value: Int
             
-            func provide(from source: ConjectureDataSource) throws -> Int {
+            func provide(from source: CoreDataSource) throws -> Int {
                 // Still consume some randomness to advance the source
                 _ = try source.bits(8)
                 return value
@@ -282,7 +282,7 @@ struct DistributionTests {
     
     @Test
     func testLargeArrayGeneration() throws {
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "large_array_test",
             seed: 54321,
             maxExamples: 10
@@ -291,8 +291,8 @@ struct DistributionTests {
         while let source = try engine.newSource() {
             do {
                 // Generate a potentially large array
-                let repeat_ = try ConjectureRepeatValues.range(0...1000)
-                let bounded = try ConjectureBoundedIntegers(maxValue: 255)
+                let repeat_ = try CoreRepeatValues.range(0...1000)
+                let bounded = try CoreBoundedIntegers(maxValue: 255)
                 
                 var array: [UInt64] = []
                 while try repeat_.shouldContinue(with: source) {
@@ -302,7 +302,7 @@ struct DistributionTests {
                 #expect(array.count <= 1000)
                 
                 try engine.finish(source, .valid)
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }

@@ -16,7 +16,7 @@ struct RepeatValuesTests {
         ]
         
         for testCase in testCases {
-            let engine = try ConjectureEngine(
+            let engine = try CoreEngine(
                 name: "bounds_test_\(testCase.min)_\(testCase.max)",
                 seed: .random(in: 0...UInt64.max),
                 maxExamples: 100
@@ -26,7 +26,7 @@ struct RepeatValuesTests {
             
             while let source = try engine.newSource() {
                 do {
-                    let repeat_ = try ConjectureRepeatValues(
+                    let repeat_ = try CoreRepeatValues(
                         minCount: testCase.min,
                         maxCount: testCase.max,
                         expectedCount: testCase.expected
@@ -49,7 +49,7 @@ struct RepeatValuesTests {
                     counts.append(count)
                     try engine.finish(source, .valid)
                     
-                } catch ConjectureError.dataOverflow {
+                } catch CoreError.dataOverflow {
                     try engine.finish(source, .overflow)
                 }
             }
@@ -93,7 +93,7 @@ struct RepeatValuesTests {
         ]
         
         for testCase in testCases {
-            let engine = try ConjectureEngine(
+            let engine = try CoreEngine(
                 name: "distribution_test",
                 seed: 98765,
                 maxExamples: 500  // More examples for better statistics
@@ -103,7 +103,7 @@ struct RepeatValuesTests {
             
             while let source = try engine.newSource() {
                 do {
-                    let repeat_ = try ConjectureRepeatValues(
+                    let repeat_ = try CoreRepeatValues(
                         minCount: testCase.min,
                         maxCount: testCase.max,
                         expectedCount: testCase.expected
@@ -120,7 +120,7 @@ struct RepeatValuesTests {
                     counts.append(count)
                     try engine.finish(source, .valid)
                     
-                } catch ConjectureError.dataOverflow {
+                } catch CoreError.dataOverflow {
                     try engine.finish(source, .overflow)
                 }
             }
@@ -143,7 +143,7 @@ struct RepeatValuesTests {
     func testRejectionMechanismWorks() throws {
         // Property: Calling reject() should decrease the count by 1
         
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "rejection_test",
             seed: 11111,
             maxExamples: 50
@@ -151,7 +151,7 @@ struct RepeatValuesTests {
         
         while let source = try engine.newSource() {
             do {
-                let repeat_ = try ConjectureRepeatValues(
+                let repeat_ = try CoreRepeatValues(
                     minCount: 3,
                     maxCount: 10,
                     expectedCount: 6.5
@@ -192,7 +192,7 @@ struct RepeatValuesTests {
                 
                 try engine.finish(source, .valid)
                 
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }
@@ -221,7 +221,7 @@ struct RepeatValuesTests {
         // Property: shouldContinue must eventually return false
         // (within max_count calls when drawing data)
         
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "no_infinite_loops_test",
             seed: 99999,
             maxExamples: 100
@@ -230,7 +230,7 @@ struct RepeatValuesTests {
         while let source = try engine.newSource() {
             do {
                 let maxCount: UInt64 = 10
-                let repeat_ = try ConjectureRepeatValues(
+                let repeat_ = try CoreRepeatValues(
                     minCount: 0,
                     maxCount: maxCount,
                     expectedCount: 5.0
@@ -258,7 +258,7 @@ struct RepeatValuesTests {
                 
                 try engine.finish(source, .valid)
                 
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }
@@ -271,7 +271,7 @@ struct RepeatValuesTests {
         expectedCount: Double
     ) throws {
         
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "exact_count_test",
             seed: 55555,
             maxExamples: 20
@@ -281,7 +281,7 @@ struct RepeatValuesTests {
         
         while let source = try engine.newSource() {
             do {
-                let repeat_ = try ConjectureRepeatValues(
+                let repeat_ = try CoreRepeatValues(
                     minCount: count,
                     maxCount: count,
                     expectedCount: expectedCount
@@ -298,7 +298,7 @@ struct RepeatValuesTests {
                 counts.append(count)
                 try engine.finish(source, .valid)
                 
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }
@@ -315,7 +315,7 @@ struct RepeatValuesTests {
         expectedCount: Double,
         maxExamples: UInt64
     ) throws {
-        let engine = try ConjectureEngine(
+        let engine = try CoreEngine(
             name: "bounds_verification_test",
             seed: 77777,
             maxExamples: maxExamples
@@ -325,7 +325,7 @@ struct RepeatValuesTests {
         
         while let source = try engine.newSource() {
             do {
-                let repeat_ = try ConjectureRepeatValues(
+                let repeat_ = try CoreRepeatValues(
                     minCount: min,
                     maxCount: max,
                     expectedCount: expectedCount
@@ -349,7 +349,7 @@ struct RepeatValuesTests {
                 counts.append(count)
                 try engine.finish(source, .valid)
                 
-            } catch ConjectureError.dataOverflow {
+            } catch CoreError.dataOverflow {
                 try engine.finish(source, .overflow)
             }
         }

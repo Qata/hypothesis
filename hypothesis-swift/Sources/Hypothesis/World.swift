@@ -47,10 +47,21 @@ public func assume(_ condition: Bool) throws {
     try testCase.assume(condition)
 }
 
-public func verify(_ condition: Bool, _ message: String? = nil) throws {
+public func verify(
+    _ condition: Bool,
+    _ message: String? = nil,
+    file: String = #file,
+    line: Int = #line,
+    column: Int = #column
+) throws {
     let engine = try World.requireEngine()
-    guard let testCase = engine.currentTestCase else {
+    guard engine.currentTestCase != nil else {
         throw HypothesisError.internal
     }
-    try testCase.verify(condition, message)
+    guard condition else {
+        throw HypothesisError.unverifiable(
+            message,
+            location: "\(file):\(line):\(column)"
+        )
+    }
 }

@@ -6,17 +6,16 @@ struct BacktraceTests {
     @Test
     func test1() throws {
         try hypothesis {
-            let int = try any(ConjectureIntegers.unbounded())
-            print(int)
-            try verify(int < 51)
+            let int = try any(CoreIntegers.unbounded())
+            let int2 = try any(CoreIntegers.unbounded())
+            try verify(int < int2, "Just checking")
         }
     }
     
     @Test
     func test2() throws {
         try hypothesis {
-            let int = try any(ConjectureIntegers.unbounded())
-            print(int)
+            let int = try any(CoreIntegers.unbounded())
         }
     }
 }
