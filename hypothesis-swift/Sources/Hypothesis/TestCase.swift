@@ -51,7 +51,7 @@ public class TestCase {
     ///   - name: Optional name for debugging/pretty-printing
     /// - Returns: A generated value
     /// - Throws: Various errors from the generation process
-    func any<T: ConjectureDistribution>(
+    func any<T: Possible>(
         _ distribution: T,
         name: String? = nil
     ) throws -> T.Value {

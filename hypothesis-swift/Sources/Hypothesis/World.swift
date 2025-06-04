@@ -27,7 +27,7 @@ enum World {
 // MARK: - Updated Global Functions
 
 /// Generate a value using the current engine's test case
-public func any<T: ConjectureDistribution>(
+public func any<T: Possible>(
     _ distribution: T,
     _ name: String? = nil
 ) throws -> T.Value {

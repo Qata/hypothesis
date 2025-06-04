@@ -81,7 +81,6 @@ public class Engine {
             try testBlock(currentTestCase!)
         } else {
             var exceptions: [Error] = []
-            
             for example in try 0..<conjectureEngine.countFailingExamples() {
                 let source = try conjectureEngine.failingExample(atIndex: example)
                 self.currentTestCase = TestCase(source, printDraws: true)
