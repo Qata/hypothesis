@@ -1,6 +1,36 @@
 # frozen_string_literal: true
 
 # @!visibility private
+class HypothesisCoreFloatsAny
+  def initialize
+    @core_floats = HypothesisCoreFloats.new
+  end
+
+  def provide(source)
+    result = @core_floats.provide_any(source)
+    raise Hypothesis::DataOverflow if result.nil?
+    result
+  end
+end
+
+# @!visibility private
+class HypothesisCoreFloatsBounded
+  def initialize(min_value, max_value, allow_nan, allow_infinity)
+    @core_floats = HypothesisCoreFloats.new
+    @min_value = min_value
+    @max_value = max_value
+    @allow_nan = allow_nan
+    @allow_infinity = allow_infinity
+  end
+
+  def provide(source)
+    result = @core_floats.provide_bounded(source, @min_value, @max_value, @allow_nan, @allow_infinity)
+    raise Hypothesis::DataOverflow if result.nil?
+    result
+  end
+end
+
+# @!visibility private
 class HypothesisCoreRepeatValues
   def should_continue(source)
     result = _should_continue(source.wrapped_data)
@@ -358,6 +388,39 @@ module Hypothesis
     end
 
     alias integer integers
+
+    # A Possible float (double precision)
+    # @return [Possible]
+    # @param min [Float] The smallest value float to provide.
+    # @param max [Float] The largest value float to provide.
+    # @param allow_nan [Boolean] Whether NaN values are allowed.
+    # @param allow_infinity [Boolean] Whether infinite values are allowed.
+    def floats(min: nil, max: nil, allow_nan: nil, allow_infinity: nil)
+      # Set defaults for special value handling
+      allow_nan = false if allow_nan.nil?
+      allow_infinity = false if allow_infinity.nil?
+      
+      if min.nil? && max.nil?
+        # Generate any float using sophisticated lexicographic encoding
+        core_floats_any = HypothesisCoreFloatsAny.new
+        from_hypothesis_core(core_floats_any)
+      else
+        # Set defaults for bounds
+        min = -Float::INFINITY if min.nil?
+        max = Float::INFINITY if max.nil?
+        
+        # Validate bounds
+        if min.finite? && max.finite? && min > max
+          raise ArgumentError, "min must be less than or equal to max"
+        end
+        
+        # Generate bounded floats
+        core_floats_bounded = HypothesisCoreFloatsBounded.new(min, max, allow_nan, allow_infinity)
+        from_hypothesis_core(core_floats_bounded)
+      end
+    end
+
+    alias float floats
 
     private
 

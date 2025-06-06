@@ -425,6 +425,114 @@ methods!(
     }
 );
 
+pub struct HypothesisCoreFloatsStruct {}
+
+impl HypothesisCoreFloatsStruct {
+    fn new() -> HypothesisCoreFloatsStruct {
+        HypothesisCoreFloatsStruct {}
+    }
+
+    fn provide_bounded(
+        &mut self,
+        data: &mut HypothesisCoreDataSourceStruct,
+        min_value: f64,
+        max_value: f64,
+        allow_nan: bool,
+        allow_infinity: bool,
+    ) -> Option<f64> {
+        data.source.as_mut().and_then(|ref mut source| {
+            distributions::float_with_bounds(source, min_value, max_value, allow_nan, allow_infinity).ok()
+        })
+    }
+
+    fn provide_any(&mut self, data: &mut HypothesisCoreDataSourceStruct) -> Option<f64> {
+        data.source.as_mut().and_then(|ref mut source| {
+            distributions::any_float(source).ok()
+        })
+    }
+
+    fn provide_uniform(
+        &mut self,
+        data: &mut HypothesisCoreDataSourceStruct,
+        min_value: f64,
+        max_value: f64,
+    ) -> Option<f64> {
+        data.source.as_mut().and_then(|ref mut source| {
+            distributions::uniform_float(source, min_value, max_value).ok()
+        })
+    }
+}
+
+wrappable_struct!(
+    HypothesisCoreFloatsStruct,
+    HypothesisCoreFloatsStructWrapper,
+    HYPOTHESIS_CORE_FLOATS_STRUCT_WRAPPER
+);
+
+class!(HypothesisCoreFloats);
+
+#[rustfmt::skip]
+methods!(
+    HypothesisCoreFloats,
+    itself,
+    fn ruby_hypothesis_core_floats_new() -> AnyObject {
+        let core_floats = HypothesisCoreFloatsStruct::new();
+
+        Class::from_existing("HypothesisCoreFloats")
+            .wrap_data(core_floats, &*HYPOTHESIS_CORE_FLOATS_STRUCT_WRAPPER)
+    }
+    fn ruby_hypothesis_core_floats_provide_bounded(
+        data: AnyObject,
+        min_value: Float,
+        max_value: Float,
+        allow_nan: Boolean,
+        allow_infinity: Boolean
+    ) -> AnyObject {
+        let mut rdata = safe_access(data);
+        let data_source = rdata.get_data_mut(&*HYPOTHESIS_CORE_DATA_SOURCE_STRUCT_WRAPPER);
+        let core_floats = itself.get_data_mut(&*HYPOTHESIS_CORE_FLOATS_STRUCT_WRAPPER);
+
+        match core_floats.provide_bounded(
+            data_source,
+            safe_access(min_value).to_f64(),
+            safe_access(max_value).to_f64(),
+            safe_access(allow_nan).to_bool(),
+            safe_access(allow_infinity).to_bool(),
+        ) {
+            Some(f) => Float::new(f).into(),
+            None => NilClass::new().into(),
+        }
+    }
+    fn ruby_hypothesis_core_floats_provide_any(data: AnyObject) -> AnyObject {
+        let mut rdata = safe_access(data);
+        let data_source = rdata.get_data_mut(&*HYPOTHESIS_CORE_DATA_SOURCE_STRUCT_WRAPPER);
+        let core_floats = itself.get_data_mut(&*HYPOTHESIS_CORE_FLOATS_STRUCT_WRAPPER);
+
+        match core_floats.provide_any(data_source) {
+            Some(f) => Float::new(f).into(),
+            None => NilClass::new().into(),
+        }
+    }
+    fn ruby_hypothesis_core_floats_provide_uniform(
+        data: AnyObject,
+        min_value: Float,
+        max_value: Float
+    ) -> AnyObject {
+        let mut rdata = safe_access(data);
+        let data_source = rdata.get_data_mut(&*HYPOTHESIS_CORE_DATA_SOURCE_STRUCT_WRAPPER);
+        let core_floats = itself.get_data_mut(&*HYPOTHESIS_CORE_FLOATS_STRUCT_WRAPPER);
+
+        match core_floats.provide_uniform(
+            data_source,
+            safe_access(min_value).to_f64(),
+            safe_access(max_value).to_f64(),
+        ) {
+            Some(f) => Float::new(f).into(),
+            None => NilClass::new().into(),
+        }
+    }
+);
+
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn Init_rutie_hypothesis_core() {
@@ -474,6 +582,13 @@ pub extern "C" fn Init_rutie_hypothesis_core() {
     Class::new("HypothesisCoreBoundedIntegers", None).define(|klass| {
         klass.def_self("new", ruby_hypothesis_core_bounded_integers_new);
         klass.def("provide", ruby_hypothesis_core_bounded_integers_provide);
+    });
+
+    Class::new("HypothesisCoreFloats", None).define(|klass| {
+        klass.def_self("new", ruby_hypothesis_core_floats_new);
+        klass.def("provide_bounded", ruby_hypothesis_core_floats_provide_bounded);
+        klass.def("provide_any", ruby_hypothesis_core_floats_provide_any);
+        klass.def("provide_uniform", ruby_hypothesis_core_floats_provide_uniform);
     });
 }
 
