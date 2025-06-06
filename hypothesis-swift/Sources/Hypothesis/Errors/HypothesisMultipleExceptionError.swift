@@ -8,7 +8,6 @@ struct HypothesisMultipleExceptionError: Error, CustomStringConvertible {
     var description: String {
         """
         Test raised \(errors.count) distinct errors:
-        
         \(errors.map(String.init(describing:)).joined(separator: "\n"))
         """
     }

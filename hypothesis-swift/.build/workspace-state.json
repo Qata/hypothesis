@@ -1,0 +1,24 @@
+{
+  "object" : {
+    "artifacts" : [
+      {
+        "kind" : "xcframework",
+        "packageRef" : {
+          "identity" : "hypothesis-swift",
+          "kind" : "root",
+          "location" : "/Users/ch/Develop/hypothesis/hypothesis-swift",
+          "name" : "hypothesis-swift"
+        },
+        "path" : "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework",
+        "source" : {
+          "type" : "local"
+        },
+        "targetName" : "Conjecture"
+      }
+    ],
+    "dependencies" : [
+
+    ]
+  },
+  "version" : 6
+}

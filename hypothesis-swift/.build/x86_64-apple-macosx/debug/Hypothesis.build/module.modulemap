@@ -1,0 +1,4 @@
+module Hypothesis {
+    header "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis-Swift.h"
+    requires objc
+}

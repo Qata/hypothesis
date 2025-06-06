@@ -6,18 +6,22 @@ public class Engine {
     private let conjectureEngine: CoreEngine
     private let name: String
     private let maxExamples: UInt64
+    private let maxFailingExamples: UInt64
     private var isFind: Bool = false
     private var exceptionToTags: AutoIncrementingDictionary<String> = .init()
+    private var interestingExampleCount: UInt64 = 0
 
     public init(
         name: String,
         databasePath: String?,
         seed: UInt64,
         maxExamples: UInt64,
+        maxFailingExamples: UInt64 = 500,
         phases: [Phase]
     ) throws {
         self.name = name
         self.maxExamples = maxExamples
+        self.maxFailingExamples = maxFailingExamples
         self.conjectureEngine = try CoreEngine(
             name: name,
             databasePath: databasePath,
@@ -45,23 +49,36 @@ public class Engine {
                 if isFind {
                     throw HypothesisError.unverifiable(message, location: location)
                 }
-                try conjectureEngine.finish(
-                    source,
-                    .interesting(
-                        label: exceptionToTags[
-                            location + (message.map { ":\($0)" } ?? "")
-                        ]
+                
+                if interestingExampleCount < maxFailingExamples {
+                    interestingExampleCount += 1
+                    try conjectureEngine.finish(
+                        source,
+                        .interesting(
+                            label: exceptionToTags[
+                                location + (message.map { ":\($0)" } ?? "")
+                            ]
+                        )
                     )
-                )
+                } else {
+                    // Mark as invalid to prevent collection of more examples
+                    try conjectureEngine.finish(source, .invalid)
+                }
             } catch {
-                try conjectureEngine.finish(
-                    source,
-                    .interesting(
-                        label: exceptionToTags[
-                            String(reflecting: error) + String(describing: error)
-                        ]
+                if interestingExampleCount < maxFailingExamples {
+                    interestingExampleCount += 1
+                    try conjectureEngine.finish(
+                        source,
+                        .interesting(
+                            label: exceptionToTags[
+                                String(reflecting: error) + String(describing: error)
+                            ]
+                        )
                     )
-                )
+                } else {
+                    // Mark as invalid to prevent collection of more examples
+                    try conjectureEngine.finish(source, .invalid)
+                }
             }
         }
         
@@ -81,14 +98,28 @@ public class Engine {
             try testBlock(currentTestCase!)
         } else {
             var exceptions: [Error] = []
+            let failingExampleCount = try conjectureEngine.countFailingExamples()
+            
+            print(
+            """
+            +++Interesting examples: \(interestingExampleCount)
+            +++Max failing examples: \(maxFailingExamples)
+            +++Failing examples: \(failingExampleCount)
+            """
+            )
+            
+            if interestingExampleCount >= maxFailingExamples && failingExampleCount > 0 {
+                print("⚠️ Failing example collection limited to \(maxFailingExamples) examples during test execution")
+            }
+            
             for example in try 0..<conjectureEngine.countFailingExamples() {
                 let source = try conjectureEngine.failingExample(atIndex: example)
                 self.currentTestCase = TestCase(source, printDraws: true)
                 do {
                     try currentTestCase.map(testBlock)
-                } catch {
+                } catch let caughtError {
                     let wrappedError = HypothesisWrappedError(
-                        error,
+                        caughtError,
                         givens: currentTestCase?
                             .printLog?
                             .enumerated()
@@ -105,6 +136,7 @@ public class Engine {
                     exceptions.append(wrappedError)
                 }
             }
+            
             throw HypothesisMultipleExceptionError(exceptions)
         }
     }

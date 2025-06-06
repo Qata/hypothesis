@@ -1,0 +1,131 @@
+{
+  "": {
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/master.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CHandle.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreBoundedIntegers.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/FFI.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Engine.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisEnhancedError.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisError.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisMultipleExceptionError.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Hypothesis.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Doubles.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Integers.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possibilities.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possible.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/TestCase.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Utility/AutoIncrementingDictionary.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/World.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World.swiftdeps"
+  }
+}

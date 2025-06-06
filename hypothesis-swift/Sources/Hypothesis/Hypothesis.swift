@@ -12,6 +12,7 @@ public enum Phase: CaseIterable {
 
 public func hypothesis(
     maxValidTestCases: UInt64 = 200,
+    maxFailingExamples: UInt64 = 500,
     phases: [Phase] = Phase.allCases,
     databasePath: String? = nil,
     seed: UInt64 = UInt64.random(in: 0...UInt64.max),
@@ -26,6 +27,7 @@ public func hypothesis(
         databasePath: databasePath,
         seed: seed,
         maxExamples: maxValidTestCases,
+        maxFailingExamples: maxFailingExamples,
         phases: phases
     )
     try World.currentEngine?.run(block)
@@ -33,6 +35,7 @@ public func hypothesis(
 
 public func hypothesis(
     maxValidTestCases: UInt64 = 200,
+    maxFailingExamples: UInt64 = 500,
     phases: [Phase] = Phase.allCases,
     databasePath: String? = nil,
     seed: UInt64 = UInt64.random(in: 0...UInt64.max),
@@ -40,6 +43,7 @@ public func hypothesis(
 ) throws {
     try hypothesis(
         maxValidTestCases: maxValidTestCases,
+        maxFailingExamples: maxFailingExamples,
         phases: phases,
         databasePath: databasePath,
         seed: seed,

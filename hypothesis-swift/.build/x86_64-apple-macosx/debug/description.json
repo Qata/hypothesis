@@ -1,0 +1,1099 @@
+{
+  "builtTestProducts" : [
+    {
+      "binaryPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.xctest/Contents/MacOS/HypothesisPackageTests",
+      "packagePath" : "/Users/ch/Develop/hypothesis/hypothesis-swift",
+      "productName" : "HypothesisPackageTests"
+    }
+  ],
+  "copyCommands" : {
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/libhypothesis_swift_core-macos.a" : {
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/libhypothesis_swift_core-macos.a"
+        }
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/libhypothesis_swift_core-macos.a"
+        }
+      ]
+    }
+  },
+  "explicitTargetDependencyImportCheckingMode" : {
+    "none" : {
+
+    }
+  },
+  "generatedSourceTargetSet" : [
+
+  ],
+  "pluginDescriptions" : [
+
+  ],
+  "swiftCommands" : {
+    "C.Hypothesis-x86_64-apple-macosx14.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/sources",
+      "importPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CHandle.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreBoundedIntegers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/FFI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Engine.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisEnhancedError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisMultipleExceptionError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Hypothesis.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Doubles.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Integers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possibilities.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possible.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/TestCase.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Utility/AutoIncrementingDictionary.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/World.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/libhypothesis_swift_core-macos.a"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "Hypothesis",
+      "moduleOutputPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/Hypothesis.swiftmodule",
+      "objects" : [
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-apple-macosx13.0",
+        "-v",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-I",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+        "-Xcc",
+        "-I",
+        "-Xcc",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+        "-module-cache-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-F",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis-Swift.h",
+        "-swift-version",
+        "6",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "hypothesis_swift"
+      ],
+      "outputFileMapPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/Hypothesis.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CHandle.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreBoundedIntegers.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/FFI.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Engine.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisEnhancedError.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisError.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisMultipleExceptionError.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Hypothesis.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Doubles.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Integers.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possibilities.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possible.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/TestCase.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Utility/AutoIncrementingDictionary.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/World.swift"
+      ],
+      "tempsPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.HypothesisPackageTests-x86_64-apple-macosx14.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/sources",
+      "importPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/HypothesisTests.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/libhypothesis_swift_core-macos.a"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "HypothesisPackageTests",
+      "moduleOutputPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/HypothesisPackageTests.swiftmodule",
+      "objects" : [
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-apple-macosx13.0",
+        "-v",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-I",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+        "-Xcc",
+        "-I",
+        "-Xcc",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+        "-module-cache-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-F",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug",
+        "-emit-objc-header",
+        "-emit-objc-header-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/HypothesisPackageTests-Swift.h",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "hypothesis_swift"
+      ],
+      "outputFileMapPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/HypothesisPackageTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift"
+      ],
+      "tempsPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build",
+      "wholeModuleOptimization" : false
+    },
+    "C.HypothesisTests-x86_64-apple-macosx14.0-debug.module" : {
+      "executable" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "fileList" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/sources",
+      "importPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
+      "inputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/ConjectureTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DataSourceTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DoubleTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/HypothesisTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/RepeatValuesTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/Hypothesis.swiftmodule"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/libhypothesis_swift_core-macos.a"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/sources"
+        }
+      ],
+      "isLibrary" : true,
+      "moduleName" : "HypothesisTests",
+      "moduleOutputPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/HypothesisTests.swiftmodule",
+      "objects" : [
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests.swift.o"
+      ],
+      "otherArguments" : [
+        "-target",
+        "x86_64-apple-macosx13.0",
+        "-v",
+        "-enable-batch-mode",
+        "-index-store-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
+        "-Onone",
+        "-enable-testing",
+        "-j8",
+        "-DSWIFT_PACKAGE",
+        "-DDEBUG",
+        "-I",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+        "-Xcc",
+        "-I",
+        "-Xcc",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+        "-module-cache-path",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/ModuleCache",
+        "-parseable-output",
+        "-parse-as-library",
+        "-F",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug",
+        "-swift-version",
+        "6",
+        "-sdk",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+        "-F",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-I",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-L",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+        "-g",
+        "-Xcc",
+        "-isysroot",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+        "-Xcc",
+        "-F",
+        "-Xcc",
+        "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+        "-Xcc",
+        "-fPIC",
+        "-Xcc",
+        "-g",
+        "-package-name",
+        "hypothesis_swift"
+      ],
+      "outputFileMapPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/output-file-map.json",
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules/HypothesisTests.swiftmodule"
+        }
+      ],
+      "prepareForIndexing" : false,
+      "sources" : [
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/ConjectureTests.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DataSourceTests.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DoubleTests.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/HypothesisTests.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/RepeatValuesTests.swift"
+      ],
+      "tempsPath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build",
+      "wholeModuleOptimization" : false
+    }
+  },
+  "swiftFrontendCommands" : {
+
+  },
+  "swiftTargetScanArgs" : {
+    "Hypothesis" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "Hypothesis",
+      "-package-name",
+      "hypothesis_swift",
+      "-incremental",
+      "-c",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CHandle.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreBoundedIntegers.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/FFI.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Engine.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisEnhancedError.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisError.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisMultipleExceptionError.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Hypothesis.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Doubles.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Integers.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possibilities.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possible.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/TestCase.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Utility/AutoIncrementingDictionary.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/World.swift",
+      "-I",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
+      "-target",
+      "x86_64-apple-macosx13.0",
+      "-v",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-I",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+      "-Xcc",
+      "-I",
+      "-Xcc",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+      "-module-cache-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-F",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis-Swift.h",
+      "-swift-version",
+      "6",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "hypothesis_swift",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "HypothesisPackageTests" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "HypothesisPackageTests",
+      "-package-name",
+      "hypothesis_swift",
+      "-incremental",
+      "-c",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift",
+      "-I",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
+      "-target",
+      "x86_64-apple-macosx13.0",
+      "-v",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-I",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+      "-Xcc",
+      "-I",
+      "-Xcc",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+      "-module-cache-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-F",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug",
+      "-emit-objc-header",
+      "-emit-objc-header-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/HypothesisPackageTests-Swift.h",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "hypothesis_swift",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ],
+    "HypothesisTests" : [
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc",
+      "-module-name",
+      "HypothesisTests",
+      "-package-name",
+      "hypothesis_swift",
+      "-incremental",
+      "-c",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/ConjectureTests.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DataSourceTests.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DoubleTests.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/HypothesisTests.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/RepeatValuesTests.swift",
+      "-I",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
+      "-target",
+      "x86_64-apple-macosx13.0",
+      "-v",
+      "-enable-batch-mode",
+      "-index-store-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
+      "-Onone",
+      "-enable-testing",
+      "-j8",
+      "-DSWIFT_PACKAGE",
+      "-DDEBUG",
+      "-I",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+      "-Xcc",
+      "-I",
+      "-Xcc",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/libs/Conjecture.xcframework/macos-arm64_x86_64/Headers",
+      "-module-cache-path",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/ModuleCache",
+      "-parseable-output",
+      "-parse-as-library",
+      "-F",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug",
+      "-swift-version",
+      "6",
+      "-sdk",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+      "-F",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-I",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-L",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib",
+      "-g",
+      "-Xcc",
+      "-isysroot",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.2.sdk",
+      "-Xcc",
+      "-F",
+      "-Xcc",
+      "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks",
+      "-Xcc",
+      "-fPIC",
+      "-Xcc",
+      "-g",
+      "-package-name",
+      "hypothesis_swift",
+      "-driver-use-frontend-path",
+      "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+    ]
+  },
+  "targetDependencyMap" : {
+    "Hypothesis" : [
+      "Conjecture"
+    ],
+    "HypothesisPackageTests" : [
+      "HypothesisTests",
+      "Hypothesis",
+      "Conjecture"
+    ],
+    "HypothesisTests" : [
+      "Hypothesis",
+      "Conjecture"
+    ]
+  },
+  "testDiscoveryCommands" : {
+
+  },
+  "testEntryPointCommands" : {
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift" : {
+      "inputs" : [
+
+      ],
+      "outputs" : [
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift"
+        }
+      ]
+    }
+  },
+  "writeCommands" : {
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CHandle.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreBoundedIntegers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/FFI.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Engine.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisEnhancedError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Errors/HypothesisMultipleExceptionError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Hypothesis.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Doubles.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Integers.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possibilities.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Possibles/Possible.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/TestCase.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Utility/AutoIncrementingDictionary.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/World.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/sources"
+    },
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/sources"
+    },
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.product/Objects.LinkFileList" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<link-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/AutoIncrementingDictionary.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CHandle.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreBoundedIntegers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Doubles.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Engine.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/FFI.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Hypothesis.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisEnhancedError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/HypothesisMultipleExceptionError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Integers.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possibilities.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/Possible.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/TestCase.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/World.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests.swift.o"
+        }
+      ],
+      "outputFilePath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.product/Objects.LinkFileList"
+    },
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/sources" : {
+      "alwaysOutOfDate" : false,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<sources-file-list>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/ConjectureTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DataSourceTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DoubleTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/HypothesisTests.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/RepeatValuesTests.swift"
+        }
+      ],
+      "outputFilePath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/sources"
+    },
+    "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt" : {
+      "alwaysOutOfDate" : true,
+      "inputs" : [
+        {
+          "kind" : "virtual",
+          "name" : "<swift-get-version>"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"
+        }
+      ],
+      "outputFilePath" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/swift-version--58304C5D6DBC2206.txt"
+    }
+  }
+}

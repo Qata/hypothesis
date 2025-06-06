@@ -1,0 +1,11 @@
+{
+  "": {
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/master.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.derived/runner.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/runner.swiftdeps"
+  }
+}

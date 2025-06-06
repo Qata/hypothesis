@@ -1,0 +1,4 @@
+module HypothesisPackageTests {
+    header "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisPackageTests.build/HypothesisPackageTests-Swift.h"
+    requires objc
+}

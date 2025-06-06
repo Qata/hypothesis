@@ -175,7 +175,7 @@ struct DoublesTests {
         var finiteCount = 0
         var verySmallCount = 0 // count values close to zero
         
-        try hypothesis(maxValidTestCases: 500) {
+        try hypothesis(maxValidTestCases: 500, maxFailingExamples: 200) {
             let value = try any(Possibilities.positiveDoubles())
             generatedValues.append(value)
             
@@ -241,7 +241,7 @@ struct DoublesTests {
         var finiteCount = 0
         var nanCount = 0
         
-        try hypothesis(maxValidTestCases: 500) {
+        try hypothesis(maxValidTestCases: 500, maxFailingExamples: 200) {
             let value = try any(Possibilities.doubles(allowInfinity: true))
             generatedValues.append(value)
             
@@ -265,6 +265,30 @@ struct DoublesTests {
         
         print("Value distribution: \(finiteCount) finite, \(positiveInfCount) +∞, \(negativeInfCount) -∞, \(nanCount) NaN")
         print("Infinity generation rate: \(Double(positiveInfCount + negativeInfCount)/Double(generatedValues.count) * 100)%")
+    }
+    
+    @Test
+    func testMaxFailingExamplesLimiting() throws {
+        print("\n=== Testing Max Failing Examples Limiting ===")
+        var caughtError: Error?
+        
+        do {
+            try hypothesis(maxValidTestCases: 100, maxFailingExamples: 3) {
+                let value = try any(Possibilities.doubles())
+                // This should fail for most values and generate many failing examples
+                try verify(value > 999.0 && value < 1000.0, "Value should be in very narrow range, got: \(value)")
+            }
+        } catch {
+            caughtError = error
+            print("Caught expected error: \(type(of: error))")
+        }
+        
+        // Should have caught an error since the range is very narrow
+        if caughtError == nil {
+            print("⚠️ Expected the test to fail, but it passed")
+        } else {
+            print("✅ Test correctly failed and example collection was limited")
+        }
     }
     
     @Test

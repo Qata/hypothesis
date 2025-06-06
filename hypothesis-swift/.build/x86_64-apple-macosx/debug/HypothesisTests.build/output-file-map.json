@@ -1,0 +1,35 @@
+{
+  "": {
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/master.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/ConjectureTests.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/ConjectureTests.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DataSourceTests.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DataSourceTests.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/DoubleTests.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/DoubleTests.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/HypothesisTests.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/HypothesisTests.swiftdeps"
+  },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Tests/HypothesisTests/RepeatValuesTests.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/HypothesisTests.build/RepeatValuesTests.swiftdeps"
+  }
+}
