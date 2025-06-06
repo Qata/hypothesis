@@ -53,11 +53,10 @@ ios: common
 		target/x86_64-apple-ios/release/libhypothesis_swift_core.a
 
 tvos: common
-	@cargo build build-std --release --lib --target aarch64-apple-tvos
-	@cargo build build-std --release --lib --target aarch64-apple-tvos-sim
-	@cargo build build-std --release --lib --target x86_64-apple-tvos
-	@cargo build --release --lib --target aarch64-apple-tvos-sim
-	@cargo build --release --lib --target x86_64-apple-tvos
+	@rustup install nightly
+	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-tvos
+	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-tvos-sim
+	@cargo +nightly build -Zbuild-std --release --lib --target x86_64-apple-tvos
 	@$(RM) -f libs/libhypothesis_swift_core-tvos.a
 	@$(RM) -f libs/libhypothesis_swift_core-tvos-sim.a
 	@cp target/aarch64-apple-tvos/release/libhypothesis_swift_core.a libs/libhypothesis_swift_core-tvos.a
@@ -66,12 +65,10 @@ tvos: common
 		target/x86_64-apple-tvos/release/libhypothesis_swift_core.a
 
 watchos: common
-	@rustup target add aarch64-apple-watchos
-	@rustup target add aarch64-apple-watchos-sim
-	@rustup target add x86_64-apple-watchos
-	@cargo build --release --lib --target aarch64-apple-watchos
-	@cargo build --release --lib --target aarch64-apple-watchos-sim
-	@cargo build --release --lib --target x86_64-apple-watchos
+	@rustup install nightly
+	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-watchos
+	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-watchos-sim
+	@cargo +nightly build -Zbuild-std --release --lib --target x86_64-apple-watchos
 	@$(RM) -f libs/libhypothesis_swift_core-watchos.a
 	@$(RM) -f libs/libhypothesis_swift_core-watchos-sim.a
 	@cp target/aarch64-apple-watchos/release/libhypothesis_swift_core.a libs/libhypothesis_swift_core-watchos.a
@@ -80,10 +77,9 @@ watchos: common
 		target/x86_64-apple-watchos/release/libhypothesis_swift_core.a
 
 visionos: common
-	@rustup target add aarch64-apple-visionos
-	@rustup target add aarch64-apple-visionos-sim
-	@cargo build --release --lib --target aarch64-apple-visionos
-	@cargo build --release --lib --target aarch64-apple-visionos-sim
+	@rustup install nightly
+	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-visionos
+	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-visionos-sim
 	@$(RM) -f libs/libhypothesis_swift_core-visionos.a
 	@$(RM) -f libs/libhypothesis_swift_core-visionos-sim.a
 	@cp target/aarch64-apple-visionos/release/libhypothesis_swift_core.a libs/libhypothesis_swift_core-visionos.a
