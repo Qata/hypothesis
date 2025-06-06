@@ -28,7 +28,8 @@ public struct DoublesPossible: Possible {
         allowSubnormal: Bool? = nil
     ) throws {
         // Handle default values like Python implementation
-        let resolvedAllowNaN = allowNaN ?? (min == nil && max == nil)
+        // Only allow NaN by default when both min/max are nil AND allowInfinity is not explicitly set to true
+        let resolvedAllowNaN = allowNaN ?? (min == nil && max == nil && allowInfinity != true)
         let resolvedAllowInfinity = allowInfinity ?? (min == nil || max == nil)
         
         // Validate arguments
@@ -164,7 +165,19 @@ public struct DoublesPossible: Possible {
         
         // Generate the components of a float
         let signChoice = try coreBounded.provide(from: source) % 2
-        let sign: Double = signChoice == 0 ? 1.0 : -1.0
+        let sign: Double
+        
+        // Respect bounds when choosing sign
+        if minValue >= 0.0 {
+            // Only positive values allowed
+            sign = 1.0
+        } else if maxValue <= 0.0 {
+            // Only negative values allowed
+            sign = -1.0
+        } else {
+            // Both positive and negative allowed
+            sign = signChoice == 0 ? 1.0 : -1.0
+        }
         
         // Choose between different magnitude ranges
         let magnitudeChoice = try coreBounded.provide(from: source) % 1000
@@ -234,7 +247,20 @@ public struct DoublesPossible: Possible {
         // Fallback: simple conversion from integer
         let intValue = try coreUnbounded.provide(from: source)
         let scaleFactor = pow(10.0, Double(Int(try coreBounded.provide(from: source) % 21) - 10))
-        return Double(intValue) * scaleFactor
+        let result = Double(intValue) * scaleFactor
+        
+        // Ensure result respects bounds
+        if result < minValue || result > maxValue {
+            // If we still can't generate a valid value, use bounded generation
+            if minValue.isFinite && maxValue.isFinite {
+                return try generateBoundedFiniteValue(from: source)
+            } else {
+                // Clamp to bounds
+                return Swift.max(minValue, Swift.min(maxValue, result))
+            }
+        }
+        
+        return result
     }
 }
 
