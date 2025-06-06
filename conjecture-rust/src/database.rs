@@ -1,9 +1,15 @@
-use crypto_hash::{hex_digest, Algorithm};
+use sha1::{Sha1, Digest};
 use std::fmt::Debug;
 use std::fs;
 use std::io;
 use std::io::prelude::*;
 use std::path::{Path, PathBuf};
+
+fn sha1_hex_digest(data: &[u8]) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(data);
+    format!("{:x}", hasher.finalize())
+}
 
 pub type Key = str;
 
@@ -52,7 +58,7 @@ impl DirectoryDatabase {
     }
 
     fn path_for_key(&self, key: &Key) -> PathBuf {
-        let hashed_key = hex_digest(Algorithm::SHA1, key.as_bytes());
+        let hashed_key = sha1_hex_digest(key.as_bytes());
         let mut result = PathBuf::new();
         result.push(&self.path);
         result.push(&hashed_key[0..7]);
@@ -62,7 +68,7 @@ impl DirectoryDatabase {
 
     fn path_for_entry(&self, key: &Key, value: &[u8]) -> PathBuf {
         let mut result = self.path_for_key(key);
-        result.push(&hex_digest(Algorithm::SHA1, value)[0..7]);
+        result.push(&sha1_hex_digest(value)[0..7]);
         result
     }
 }

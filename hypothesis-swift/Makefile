@@ -1,6 +1,6 @@
 .PHONY: all common macos ios tvos watchos visionos
 
-all: macos ios tvos watchos visionos
+all: macos ios tvos watchos visionos framework
 
 common:
 	@echo "Running common setup..."
