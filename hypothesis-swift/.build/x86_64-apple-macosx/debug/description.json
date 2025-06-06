@@ -61,6 +61,10 @@
         },
         {
           "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreFloats.swift"
+        },
+        {
+          "kind" : "file",
           "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift"
         },
         {
@@ -145,6 +149,7 @@
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreDataSource.swift.o",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreEngine.swift.o",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats.swift.o",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swift.o",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreRepeatValues.swift.o",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreResult.swift.o",
@@ -165,7 +170,6 @@
       "otherArguments" : [
         "-target",
         "x86_64-apple-macosx13.0",
-        "-v",
         "-enable-batch-mode",
         "-index-store-path",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
@@ -236,6 +240,10 @@
         {
           "kind" : "file",
           "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats.swift.o"
         },
         {
           "kind" : "file",
@@ -313,6 +321,7 @@
         "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift",
+        "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreFloats.swift",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift",
@@ -368,7 +377,6 @@
       "otherArguments" : [
         "-target",
         "x86_64-apple-macosx13.0",
-        "-v",
         "-enable-batch-mode",
         "-index-store-path",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
@@ -489,7 +497,6 @@
       "otherArguments" : [
         "-target",
         "x86_64-apple-macosx13.0",
-        "-v",
         "-enable-batch-mode",
         "-index-store-path",
         "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
@@ -592,6 +599,7 @@
       "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift",
+      "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreFloats.swift",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift",
@@ -612,7 +620,6 @@
       "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
       "-target",
       "x86_64-apple-macosx13.0",
-      "-v",
       "-enable-batch-mode",
       "-index-store-path",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
@@ -677,7 +684,6 @@
       "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
       "-target",
       "x86_64-apple-macosx13.0",
-      "-v",
       "-enable-batch-mode",
       "-index-store-path",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
@@ -744,7 +750,6 @@
       "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Modules",
       "-target",
       "x86_64-apple-macosx13.0",
-      "-v",
       "-enable-batch-mode",
       "-index-store-path",
       "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/index/store",
@@ -851,6 +856,10 @@
         {
           "kind" : "file",
           "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreFloats.swift"
         },
         {
           "kind" : "file",
@@ -963,6 +972,10 @@
         {
           "kind" : "file",
           "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swift.o"
+        },
+        {
+          "kind" : "file",
+          "name" : "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats.swift.o"
         },
         {
           "kind" : "file",

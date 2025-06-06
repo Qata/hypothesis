@@ -104,4 +104,26 @@ int32_t conjecture_bounded_integers_provide(void *aBoundedHandle,
                                             void *aDsHandle,
                                             uint64_t *aResult);
 
+int32_t conjecture_floats_new(void **aResult);
+
+void conjecture_floats_free(void *aHandle);
+
+int32_t conjecture_floats_provide_bounded(void *aFloatsHandle,
+                                          void *aDsHandle,
+                                          double aMinValue,
+                                          double aMaxValue,
+                                          bool aAllowNan,
+                                          bool aAllowInfinity,
+                                          double *aResult);
+
+int32_t conjecture_floats_provide_any(void *aFloatsHandle,
+                                      void *aDsHandle,
+                                      double *aResult);
+
+int32_t conjecture_floats_provide_uniform(void *aFloatsHandle,
+                                          void *aDsHandle,
+                                          double aMinValue,
+                                          double aMaxValue,
+                                          double *aResult);
+
 uint32_t conjecture_ffi_version(void);

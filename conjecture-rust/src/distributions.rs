@@ -1,4 +1,5 @@
 use crate::data::{DataSource, FailedDraw};
+use crate::floats::{draw_float, draw_float_from_parts, draw_float_uniform};
 
 use std::cmp::{Ord, Ordering, PartialOrd, Reverse};
 use std::collections::BinaryHeap;
@@ -239,4 +240,25 @@ pub fn integer_from_bitlengths(source: &mut DataSource, bitlengths: &Sampler) ->
     } else {
         Ok(base)
     }
+}
+
+/// Draw a floating point number with sophisticated shrinking properties
+pub fn float_with_bounds(
+    source: &mut DataSource,
+    min_value: f64,
+    max_value: f64,
+    allow_nan: bool,
+    allow_infinity: bool,
+) -> Draw<f64> {
+    draw_float(source, min_value, max_value, allow_nan, allow_infinity)
+}
+
+/// Draw any floating point number using lexicographic encoding
+pub fn any_float(source: &mut DataSource) -> Draw<f64> {
+    draw_float_from_parts(source)
+}
+
+/// Draw a floating point number uniformly in the given range
+pub fn uniform_float(source: &mut DataSource, min_value: f64, max_value: f64) -> Draw<f64> {
+    draw_float_uniform(source, min_value, max_value)
 }

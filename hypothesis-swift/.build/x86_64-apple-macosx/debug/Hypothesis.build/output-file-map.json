@@ -32,6 +32,12 @@
     "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError~partial.swiftmodule",
     "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreError.swiftdeps"
   },
+  "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreFloats.swift": {
+    "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats.d",
+    "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats.swift.o",
+    "swiftmodule": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats~partial.swiftmodule",
+    "swift-dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreFloats.swiftdeps"
+  },
   "/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift": {
     "dependencies": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.d",
     "object": "/Users/ch/Develop/hypothesis/hypothesis-swift/.build/x86_64-apple-macosx/debug/Hypothesis.build/CoreIntegers.swift.o",

@@ -3,6 +3,7 @@
 /Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreDataSource.swift
 /Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreEngine.swift
 /Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreError.swift
+/Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreFloats.swift
 /Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreIntegers.swift
 /Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreRepeatValues.swift
 /Users/ch/Develop/hypothesis/hypothesis-swift/Sources/Hypothesis/Conjecture/CoreResult.swift

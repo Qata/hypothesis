@@ -7,6 +7,7 @@ use conjecture::data::{DataSource, Status};
 use conjecture::database::{BoxedDatabase, DirectoryDatabase, NoDatabase};
 use conjecture::distributions::{self, Repeat};
 use conjecture::engine::{Engine, Phase};
+use conjecture::floats;
 
 // Error codes matching Swift
 pub const CONJECTURE_SUCCESS: i32 = 0;
@@ -73,6 +74,10 @@ struct BoundedIntegersWrapper {
 
 struct RepeatValuesWrapper {
     repeat: Repeat,
+}
+
+struct FloatsWrapper {
+    // No state needed - uses static functions
 }
 
 // Helper macro for null handle checks
@@ -519,6 +524,116 @@ pub extern "C" fn conjecture_bounded_integers_provide(
     
     if let Some(ref mut source) = ds_wrapper.source {
         match distributions::bounded_int(source, bounded_wrapper.max_value) {
+            Ok(value) => {
+                unsafe {
+                    *result = value;
+                }
+                CONJECTURE_SUCCESS
+            }
+            Err(_) => CONJECTURE_ERROR_DATA_OVERFLOW,
+        }
+    } else {
+        CONJECTURE_ERROR_INTERNAL
+    }
+}
+
+// Float generation FFI functions
+#[no_mangle]
+pub extern "C" fn conjecture_floats_new(result: *mut *mut c_void) -> i32 {
+    if result.is_null() {
+        return CONJECTURE_ERROR_NULL_HANDLE;
+    }
+    
+    let wrapper = Box::new(FloatsWrapper {});
+    unsafe {
+        *result = Box::into_raw(wrapper) as *mut c_void;
+    }
+    CONJECTURE_SUCCESS
+}
+
+#[no_mangle]
+pub extern "C" fn conjecture_floats_free(handle: *mut c_void) {
+    if !handle.is_null() {
+        unsafe {
+            let _wrapper = Box::from_raw(handle as *mut FloatsWrapper);
+        }
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn conjecture_floats_provide_bounded(
+    _floats_handle: *mut c_void,
+    ds_handle: *mut c_void,
+    min_value: f64,
+    max_value: f64,
+    allow_nan: bool,
+    allow_infinity: bool,
+    result: *mut f64,
+) -> i32 {
+    if result.is_null() {
+        return CONJECTURE_ERROR_NULL_HANDLE;
+    }
+    
+    let ds_wrapper = check_handle_mut!(ds_handle as *mut DataSourceWrapper);
+    
+    if let Some(ref mut source) = ds_wrapper.source {
+        match distributions::float_with_bounds(source, min_value, max_value, allow_nan, allow_infinity) {
+            Ok(value) => {
+                unsafe {
+                    *result = value;
+                }
+                CONJECTURE_SUCCESS
+            }
+            Err(_) => CONJECTURE_ERROR_DATA_OVERFLOW,
+        }
+    } else {
+        CONJECTURE_ERROR_INTERNAL
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn conjecture_floats_provide_any(
+    _floats_handle: *mut c_void,
+    ds_handle: *mut c_void,
+    result: *mut f64,
+) -> i32 {
+    if result.is_null() {
+        return CONJECTURE_ERROR_NULL_HANDLE;
+    }
+    
+    let ds_wrapper = check_handle_mut!(ds_handle as *mut DataSourceWrapper);
+    
+    if let Some(ref mut source) = ds_wrapper.source {
+        match distributions::any_float(source) {
+            Ok(value) => {
+                unsafe {
+                    *result = value;
+                }
+                CONJECTURE_SUCCESS
+            }
+            Err(_) => CONJECTURE_ERROR_DATA_OVERFLOW,
+        }
+    } else {
+        CONJECTURE_ERROR_INTERNAL
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn conjecture_floats_provide_uniform(
+    _floats_handle: *mut c_void,
+    ds_handle: *mut c_void,
+    min_value: f64,
+    max_value: f64,
+    result: *mut f64,
+) -> i32 {
+    if result.is_null() {
+        return CONJECTURE_ERROR_NULL_HANDLE;
+    }
+    
+    let ds_wrapper = check_handle_mut!(ds_handle as *mut DataSourceWrapper);
+    
+    if let Some(ref mut source) = ds_wrapper.source {
+        match distributions::uniform_float(source, min_value, max_value) {
             Ok(value) => {
                 unsafe {
                     *result = value;
