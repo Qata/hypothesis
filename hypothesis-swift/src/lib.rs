@@ -7,7 +7,6 @@ use conjecture::data::{DataSource, Status};
 use conjecture::database::{BoxedDatabase, DirectoryDatabase, NoDatabase};
 use conjecture::distributions::{self, Repeat};
 use conjecture::engine::{Engine, Phase};
-use conjecture::floats;
 
 // Error codes matching Swift
 pub const CONJECTURE_SUCCESS: i32 = 0;

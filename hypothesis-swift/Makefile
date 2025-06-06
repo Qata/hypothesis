@@ -68,13 +68,10 @@ watchos: common
 	@rustup install nightly
 	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-watchos
 	@cargo +nightly build -Zbuild-std --release --lib --target aarch64-apple-watchos-sim
-	@cargo +nightly build -Zbuild-std --release --lib --target x86_64-apple-watchos
 	@$(RM) -f libs/libhypothesis_swift_core-watchos.a
 	@$(RM) -f libs/libhypothesis_swift_core-watchos-sim.a
 	@cp target/aarch64-apple-watchos/release/libhypothesis_swift_core.a libs/libhypothesis_swift_core-watchos.a
-	@lipo -create -output libs/libhypothesis_swift_core-watchos-sim.a \
-		target/aarch64-apple-watchos-sim/release/libhypothesis_swift_core.a \
-		target/x86_64-apple-watchos/release/libhypothesis_swift_core.a
+	@cp target/aarch64-apple-watchos-sim/release/libhypothesis_swift_core.a libs/libhypothesis_swift_core-watchos-sim.a
 
 visionos: common
 	@rustup install nightly
