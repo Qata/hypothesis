@@ -4,4 +4,6 @@ pub mod data;
 pub mod database;
 pub mod distributions;
 pub mod engine;
+pub mod floats;
 pub mod intminimize;
+pub mod ints;

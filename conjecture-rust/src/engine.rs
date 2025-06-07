@@ -51,6 +51,7 @@ enum LoopExitReason {
 #[derive(Debug)]
 enum LoopCommand {
     RunThis(DataSource),
+    #[allow(dead_code)]
     Finished(LoopExitReason, MainGenerationLoop),
 }
 
@@ -729,9 +730,9 @@ impl Engine {
                 // very much under our control so this doesn't matter too much
                 // here, but yuck!
                 if let Some(msg) = boxed_msg.downcast_ref::<&str>() {
-                    panic!(msg.to_string());
+                    panic!("{}", msg);
                 } else if let Some(msg) = boxed_msg.downcast_ref::<String>() {
-                    panic!(msg.clone());
+                    panic!("{}", msg);
                 } else {
                     panic!("BUG: Unexpected panic format in main loop");
                 }
