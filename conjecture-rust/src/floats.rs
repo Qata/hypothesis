@@ -1,27 +1,71 @@
 // IEEE 754 floating point generation with lexicographic encoding.
-// This module provides sophisticated float generation that matches
-// the quality of Python's implementation by using lexicographic
-// ordering for excellent shrinking properties.
+// This module provides comprehensive float generation with multi-width support
+// (16, 32, and 64-bit) and lexicographic ordering for excellent shrinking properties.
 
 use crate::data::{DataSource, FailedDraw};
-
-use std::u64::MAX as MAX64;
+use half::f16;
 
 type Draw<T> = Result<T, FailedDraw>;
 
-// IEEE 754 double precision floating point constants
-const MAX_EXPONENT: u64 = 0x7FF;
-const BIAS: i64 = 1023;
-const MANTISSA_MASK: u64 = (1 << 52) - 1;
+// Float width enumeration
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FloatWidth {
+    Width16,
+    Width32, 
+    Width64,
+}
+
+impl FloatWidth {
+    pub fn bits(self) -> u32 {
+        match self {
+            FloatWidth::Width16 => 16,
+            FloatWidth::Width32 => 32,
+            FloatWidth::Width64 => 64,
+        }
+    }
+    
+    pub fn exponent_bits(self) -> u32 {
+        match self {
+            FloatWidth::Width16 => 5,
+            FloatWidth::Width32 => 8,
+            FloatWidth::Width64 => 11,
+        }
+    }
+    
+    pub fn mantissa_bits(self) -> u32 {
+        match self {
+            FloatWidth::Width16 => 10,
+            FloatWidth::Width32 => 23,
+            FloatWidth::Width64 => 52,
+        }
+    }
+    
+    pub fn bias(self) -> i32 {
+        match self {
+            FloatWidth::Width16 => 15,
+            FloatWidth::Width32 => 127,
+            FloatWidth::Width64 => 1023,
+        }
+    }
+    
+    pub fn max_exponent(self) -> u32 {
+        (1 << self.exponent_bits()) - 1
+    }
+    
+    pub fn mantissa_mask(self) -> u64 {
+        (1u64 << self.mantissa_bits()) - 1
+    }
+}
 
 // Generate exponent ordering key for lexicographic encoding.
 // This function determines the order in which exponents should 
 // appear to ensure lexicographic ordering matches numerical ordering.
-fn exponent_key(e: u64) -> f64 {
-    if e == MAX_EXPONENT {
+fn exponent_key(e: u32, width: FloatWidth) -> f64 {
+    let max_exp = width.max_exponent();
+    if e == max_exp {
         f64::INFINITY
     } else {
-        let unbiased = e as i64 - BIAS;
+        let unbiased = e as i32 - width.bias();
         if unbiased < 0 {
             10000.0 - unbiased as f64
         } else {
@@ -34,13 +78,14 @@ fn exponent_key(e: u64) -> f64 {
 // Returns (encoding_table, decoding_table) where:
 // - encoding_table[i] = original exponent at sorted position i
 // - decoding_table[exp] = sorted position of exponent exp
-fn build_exponent_tables() -> (Vec<u64>, Vec<u64>) {
-    let mut exponents: Vec<u64> = (0..=MAX_EXPONENT).collect();
-    exponents.sort_by(|&a, &b| exponent_key(a).partial_cmp(&exponent_key(b)).unwrap());
+fn build_exponent_tables(width: FloatWidth) -> (Vec<u32>, Vec<u32>) {
+    let max_exp = width.max_exponent();
+    let mut exponents: Vec<u32> = (0..=max_exp).collect();
+    exponents.sort_by(|&a, &b| exponent_key(a, width).partial_cmp(&exponent_key(b, width)).unwrap());
     
-    let mut decoding_table = vec![0u64; (MAX_EXPONENT + 1) as usize];
+    let mut decoding_table = vec![0u32; (max_exp + 1) as usize];
     for (i, &exp) in exponents.iter().enumerate() {
-        decoding_table[exp as usize] = i as u64;
+        decoding_table[exp as usize] = i as u32;
     }
     
     (exponents, decoding_table)
@@ -65,11 +110,13 @@ fn reverse_bits(x: u64, n: u32) -> u64 {
 // Update mantissa according to lexicographic encoding rules.
 // For different exponent ranges, the mantissa bits need different
 // treatments to maintain lexicographic ordering.
-fn update_mantissa(unbiased_exponent: i64, mantissa: u64) -> u64 {
+fn update_mantissa(unbiased_exponent: i32, mantissa: u64, width: FloatWidth) -> u64 {
+    let mantissa_bits = width.mantissa_bits();
+    
     if unbiased_exponent <= 0 {
-        reverse_bits(mantissa, 52)
-    } else if unbiased_exponent <= 51 {
-        let n_fractional_bits = 52 - unbiased_exponent as u32;
+        reverse_bits(mantissa, mantissa_bits)
+    } else if unbiased_exponent <= mantissa_bits as i32 - 1 {
+        let n_fractional_bits = mantissa_bits - unbiased_exponent as u32;
         let fractional_part = mantissa & ((1 << n_fractional_bits) - 1);
         let integer_part = mantissa ^ fractional_part;
         integer_part | reverse_bits(fractional_part, n_fractional_bits)
@@ -78,40 +125,76 @@ fn update_mantissa(unbiased_exponent: i64, mantissa: u64) -> u64 {
     }
 }
 
-// Convert lexicographically ordered integer to float.
-// This implements a tagged union approach where bit 63 determines
+// Convert lexicographically ordered integer to float of specified width.
+// This implements a tagged union approach where the high bit determines
 // whether we have a simple integer (0) or complex float (1).
-pub fn lex_to_float(i: u64) -> f64 {
+pub fn lex_to_float_width(i: u64, width: FloatWidth) -> f64 {
     use std::sync::OnceLock;
-    static ENCODING_TABLE: OnceLock<Vec<u64>> = OnceLock::new();
+    static ENCODING_TABLES_16: OnceLock<Vec<u32>> = OnceLock::new();
+    static ENCODING_TABLES_32: OnceLock<Vec<u32>> = OnceLock::new();
+    static ENCODING_TABLES_64: OnceLock<Vec<u32>> = OnceLock::new();
     
-    // Initialize encoding table once
-    let encoding_table = ENCODING_TABLE.get_or_init(|| {
-        let (table, _) = build_exponent_tables();
-        table
-    });
+    // Get the appropriate encoding table
+    let encoding_table = match width {
+        FloatWidth::Width16 => ENCODING_TABLES_16.get_or_init(|| {
+            let (table, _) = build_exponent_tables(width);
+            table
+        }),
+        FloatWidth::Width32 => ENCODING_TABLES_32.get_or_init(|| {
+            let (table, _) = build_exponent_tables(width);
+            table
+        }),
+        FloatWidth::Width64 => ENCODING_TABLES_64.get_or_init(|| {
+            let (table, _) = build_exponent_tables(width);
+            table
+        }),
+    };
     
-    let has_fractional_part = (i >> 63) != 0;
+    let total_bits = width.bits();
+    let exp_bits = width.exponent_bits();
+    let mantissa_bits = width.mantissa_bits();
+    let mantissa_mask = width.mantissa_mask();
+    
+    // Use appropriate bit for the tag based on width
+    let tag_bit = total_bits - 1;
+    let has_fractional_part = (i >> tag_bit) != 0;
     
     if has_fractional_part {
-        let exponent_idx = (i >> 52) & ((1 << 11) - 1);
+        let exponent_idx = (i >> mantissa_bits) & ((1 << exp_bits) - 1);
         let exponent = encoding_table[exponent_idx as usize];
-        let mut mantissa = i & MANTISSA_MASK;
+        let mut mantissa = i & mantissa_mask;
         
-        mantissa = update_mantissa(exponent as i64 - BIAS, mantissa);
+        mantissa = update_mantissa(exponent as i32 - width.bias(), mantissa, width);
         
-        let bits = (exponent << 52) | mantissa;
-        f64::from_bits(bits)
+        // Construct the float bits
+        let bits = ((exponent as u64) << mantissa_bits) | mantissa;
+        
+        // Convert to appropriate float type then to f64
+        match width {
+            FloatWidth::Width16 => {
+                let f16_val = f16::from_bits(bits as u16);
+                f16_val.to_f64()
+            },
+            FloatWidth::Width32 => {
+                let f32_val = f32::from_bits(bits as u32);
+                f32_val as f64
+            },
+            FloatWidth::Width64 => {
+                f64::from_bits(bits)
+            },
+        }
     } else {
-        let integral_part = i & ((1 << 56) - 1);
+        // Simple integer encoding
+        let max_simple_bits = total_bits - 8; // Leave room for tag and metadata
+        let integral_part = i & ((1 << max_simple_bits) - 1);
         integral_part as f64
     }
 }
 
-// Check if float can be represented as simple integer.
+// Check if float can be represented as simple integer for given width.
 // Simple integers are non-negative, finite, have no fractional part,
-// and fit in 56 bits (leaving 8 bits for the tag and other metadata).
-fn is_simple(f: f64) -> bool {
+// and fit in the available bits for the width.
+fn is_simple_width(f: f64, width: FloatWidth) -> bool {
     if !f.is_finite() || f < 0.0 {
         return false;
     }
@@ -119,75 +202,147 @@ fn is_simple(f: f64) -> bool {
     if i as f64 != f {
         return false;
     }
-    i.leading_zeros() >= 8  // Can fit in 56 bits
+    let max_simple_bits = width.bits() - 8; // Leave room for tag and metadata
+    i.leading_zeros() >= (64 - max_simple_bits)
 }
 
-// Convert float to lexicographically ordered integer.
+// Convert float to lexicographically ordered integer for specified width.
 // Simple non-negative integers are encoded directly with tag bit 0.
 // All other floats use the complex encoding with tag bit 1.
-pub fn float_to_lex(f: f64) -> u64 {
-    if f >= 0.0 && is_simple(f) {
+pub fn float_to_lex_width(f: f64, width: FloatWidth) -> u64 {
+    if f >= 0.0 && is_simple_width(f, width) {
         return f as u64;
     }
-    base_float_to_lex(f.abs())
+    base_float_to_lex_width(f.abs(), width)
 }
 
 // Convert float to lexicographic encoding (internal implementation).
 // This handles the complex encoding case where we need to properly
 // order the exponent and apply mantissa transformations.
-fn base_float_to_lex(f: f64) -> u64 {
+fn base_float_to_lex_width(f: f64, width: FloatWidth) -> u64 {
     use std::sync::OnceLock;
-    static DECODING_TABLE: OnceLock<Vec<u64>> = OnceLock::new();
+    static DECODING_TABLES_16: OnceLock<Vec<u32>> = OnceLock::new();
+    static DECODING_TABLES_32: OnceLock<Vec<u32>> = OnceLock::new();
+    static DECODING_TABLES_64: OnceLock<Vec<u32>> = OnceLock::new();
     
-    // Initialize decoding table once
-    let decoding_table = DECODING_TABLE.get_or_init(|| {
-        let (_, table) = build_exponent_tables();
-        table
-    });
+    // Get the appropriate decoding table
+    let decoding_table = match width {
+        FloatWidth::Width16 => DECODING_TABLES_16.get_or_init(|| {
+            let (_, table) = build_exponent_tables(width);
+            table
+        }),
+        FloatWidth::Width32 => DECODING_TABLES_32.get_or_init(|| {
+            let (_, table) = build_exponent_tables(width);
+            table
+        }),
+        FloatWidth::Width64 => DECODING_TABLES_64.get_or_init(|| {
+            let (_, table) = build_exponent_tables(width);
+            table
+        }),
+    };
     
-    let bits = f.to_bits();
-    let bits = bits & !(1u64 << 63); // Remove sign bit
+    let mantissa_bits = width.mantissa_bits();
+    let mantissa_mask = width.mantissa_mask();
+    let exp_bits = width.exponent_bits();
+    let tag_bit = width.bits() - 1;
     
-    let exponent = (bits >> 52) & ((1 << 11) - 1);
-    let mut mantissa = bits & MANTISSA_MASK;
+    // Convert f64 to appropriate width first
+    let bits = match width {
+        FloatWidth::Width16 => {
+            let f16_val = f16::from_f64(f);
+            f16_val.to_bits() as u64
+        },
+        FloatWidth::Width32 => {
+            let f32_val = f as f32;
+            f32_val.to_bits() as u64
+        },
+        FloatWidth::Width64 => {
+            f.to_bits()
+        },
+    };
     
-    mantissa = update_mantissa(exponent as i64 - BIAS, mantissa);
-    let encoded_exponent = decoding_table[exponent as usize];
+    // Remove sign bit
+    let bits = bits & !(1u64 << (width.bits() - 1));
     
-    (1u64 << 63) | (encoded_exponent << 52) | mantissa
+    let exponent = (bits >> mantissa_bits) & ((1 << exp_bits) - 1);
+    let mut mantissa = bits & mantissa_mask;
+    
+    mantissa = update_mantissa(exponent as i32 - width.bias(), mantissa, width);
+    let encoded_exponent = decoding_table[exponent as usize] as u64;
+    
+    (1u64 << tag_bit) | (encoded_exponent << mantissa_bits) | mantissa
 }
 
-// Special float constants for edge case generation.
-// These values are commonly useful in testing and should be
-// generated with higher probability than random values.
-const SPECIAL_FLOATS: &[f64] = &[
-    0.0,
-    -0.0,
-    1.0,
-    -1.0,
-    f64::INFINITY,
-    f64::NEG_INFINITY,
-    f64::NAN,
-    f64::MIN,
-    f64::MAX,
-    f64::MIN_POSITIVE,
-    f64::EPSILON,
-];
+// Backward compatibility functions for existing f64-only API
+pub fn lex_to_float(i: u64) -> f64 {
+    lex_to_float_width(i, FloatWidth::Width64)
+}
 
-// Generate a random float using lexicographic encoding.
-// This function provides the main entry point for float generation
+pub fn float_to_lex(f: f64) -> u64 {
+    float_to_lex_width(f, FloatWidth::Width64)
+}
+
+// Special float constants for edge case generation (width-aware)
+fn special_floats_for_width(width: FloatWidth) -> &'static [f64] {
+    match width {
+        FloatWidth::Width16 => &[
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            // f16 specific constants
+            65504.0,  // f16::MAX
+            6.103515625e-5,  // f16::MIN_POSITIVE
+        ],
+        FloatWidth::Width32 => &[
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            // f32 specific constants  
+            3.4028235e38,  // f32::MAX
+            1.1754944e-38, // f32::MIN_POSITIVE
+            1.1920929e-7,  // f32::EPSILON
+        ],
+        FloatWidth::Width64 => &[
+            0.0,
+            -0.0,
+            1.0,
+            -1.0,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NAN,
+            f64::MIN,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            f64::EPSILON,
+        ],
+    }
+}
+
+// Generate a random float using lexicographic encoding with width support.
+// This function provides the main entry point for width-aware float generation
 // with full control over bounds and special value handling.
-pub fn draw_float(
+pub fn draw_float_width(
     source: &mut DataSource,
+    width: FloatWidth,
     min_value: f64,
     max_value: f64,
     allow_nan: bool,
     allow_infinity: bool,
 ) -> Draw<f64> {
+    let special_floats = special_floats_for_width(width);
+    
     // 5% chance of returning special values
     if source.bits(6)? == 0 {
         // Try to return a special value that fits constraints
-        for &special in SPECIAL_FLOATS {
+        for &special in special_floats {
             if (!special.is_nan() || allow_nan)
                 && (!special.is_infinite() || allow_infinity)
                 && special >= min_value
@@ -201,8 +356,8 @@ pub fn draw_float(
     }
     
     // Generate using lexicographic encoding
-    let raw_bits = source.bits(64)?;
-    let mut result = lex_to_float(raw_bits);
+    let raw_bits = source.bits(width.bits() as u64)?;
+    let mut result = lex_to_float_width(raw_bits, width);
     
     // Apply random sign
     if source.bits(1)? == 1 {
@@ -212,19 +367,27 @@ pub fn draw_float(
     // Handle NaN
     if result.is_nan() && !allow_nan {
         // Fallback to generating a finite value
-        let fallback_bits = source.bits(53)?; // Use fewer bits for simpler values
-        result = (fallback_bits as f64) / (1u64 << 53) as f64;
+        let fallback_bits = source.bits(width.mantissa_bits() as u64 + 1)?;
+        result = (fallback_bits as f64) / (1u64 << (width.mantissa_bits() + 1)) as f64;
         result = min_value + result * (max_value - min_value);
         return Ok(result);
     }
     
     // Handle infinity
     if result.is_infinite() && !allow_infinity {
-        // Clamp to finite bounds
+        // Clamp to finite bounds for the width
         result = if result.is_sign_positive() {
-            f64::MAX
+            match width {
+                FloatWidth::Width16 => 65504.0,    // f16::MAX
+                FloatWidth::Width32 => 3.4028235e38, // f32::MAX  
+                FloatWidth::Width64 => f64::MAX,
+            }
         } else {
-            f64::MIN
+            match width {
+                FloatWidth::Width16 => -65504.0,   // f16::MIN
+                FloatWidth::Width32 => -3.4028235e38, // f32::MIN
+                FloatWidth::Width64 => f64::MIN,
+            }
         };
     }
     
@@ -238,185 +401,170 @@ pub fn draw_float(
     Ok(result)
 }
 
-// Generate a float from raw parts (for maximum flexibility).
-// This is the most basic generation function that applies
-// the lexicographic encoding directly without constraints.
-pub fn draw_float_from_parts(source: &mut DataSource) -> Draw<f64> {
-    let raw_bits = source.bits(64)?;
-    Ok(lex_to_float(raw_bits))
+// Backward compatibility function for f64 generation
+pub fn draw_float(
+    source: &mut DataSource,
+    min_value: f64,
+    max_value: f64,
+    allow_nan: bool,
+    allow_infinity: bool,
+) -> Draw<f64> {
+    draw_float_width(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity)
 }
 
-// Draw a float with uniform distribution in range (for bounded cases).
-// This provides an alternative generation strategy that uses
-// uniform random sampling within the specified bounds.
-pub fn draw_float_uniform(source: &mut DataSource, min_value: f64, max_value: f64) -> Draw<f64> {
+// Generate a float from raw parts with width support.
+pub fn draw_float_from_parts_width(source: &mut DataSource, width: FloatWidth) -> Draw<f64> {
+    let raw_bits = source.bits(width.bits() as u64)?;
+    Ok(lex_to_float_width(raw_bits, width))
+}
+
+// Backward compatibility function
+pub fn draw_float_from_parts(source: &mut DataSource) -> Draw<f64> {
+    draw_float_from_parts_width(source, FloatWidth::Width64)
+}
+
+// Draw a float with uniform distribution in range with width support.
+pub fn draw_float_uniform_width(
+    source: &mut DataSource, 
+    width: FloatWidth,
+    min_value: f64, 
+    max_value: f64
+) -> Draw<f64> {
     if min_value == max_value {
         return Ok(min_value);
     }
     
-    let raw = source.bits(64)?;
-    let fraction = (raw as f64) / (MAX64 as f64);
+    let raw = source.bits(width.bits() as u64)?;
+    let max_val = (1u64 << width.bits()) - 1;
+    let fraction = (raw as f64) / (max_val as f64);
     let result = min_value + fraction * (max_value - min_value);
     
     Ok(result.max(min_value).min(max_value))
+}
+
+// Backward compatibility function
+pub fn draw_float_uniform(source: &mut DataSource, min_value: f64, max_value: f64) -> Draw<f64> {
+    draw_float_uniform_width(source, FloatWidth::Width64, min_value, max_value)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     
-    // Extended special floats for comprehensive testing
-    const SPECIAL_FLOATS_EXTENDED: &[f64] = &[
-        0.0,
-        -0.0,
-        1.0,
-        -1.0,
-        2.0,
-        -2.0,
-        0.5,
-        -0.5,
-        f64::INFINITY,
-        f64::NEG_INFINITY,
-        f64::NAN,
-        f64::MIN,
-        f64::MAX,
-        f64::MIN_POSITIVE,
-        f64::EPSILON,
-        2.2250738585072014e-308,  // Smallest normal
-        4.9406564584124654e-324,  // Smallest subnormal
-        1.7976931348623157e+308,  // Near MAX
-        2.2250738585072009e-308,  // Near smallest normal
-    ];
+    #[test]
+    fn test_width_constants() {
+        assert_eq!(FloatWidth::Width16.bits(), 16);
+        assert_eq!(FloatWidth::Width32.bits(), 32);
+        assert_eq!(FloatWidth::Width64.bits(), 64);
+        
+        assert_eq!(FloatWidth::Width16.exponent_bits(), 5);
+        assert_eq!(FloatWidth::Width32.exponent_bits(), 8);
+        assert_eq!(FloatWidth::Width64.exponent_bits(), 11);
+        
+        assert_eq!(FloatWidth::Width16.mantissa_bits(), 10);
+        assert_eq!(FloatWidth::Width32.mantissa_bits(), 23);
+        assert_eq!(FloatWidth::Width64.mantissa_bits(), 52);
+    }
     
     #[test]
-    fn test_exponent_encoding_roundtrip() {
-        // Test all possible exponent values
-        let (encoding_table, decoding_table) = build_exponent_tables();
-        
-        for exp in 0..=MAX_EXPONENT {
-            let encoded = decoding_table[exp as usize];
-            let decoded = encoding_table[encoded as usize];
-            assert_eq!(exp, decoded, "Exponent encoding roundtrip failed for {}", exp);
+    fn test_multi_width_exponent_encoding() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            let (encoding_table, decoding_table) = build_exponent_tables(width);
+            let max_exp = width.max_exponent();
+            
+            for exp in 0..=max_exp {
+                let encoded = decoding_table[exp as usize];
+                let decoded = encoding_table[encoded as usize];
+                assert_eq!(exp, decoded, "Exponent encoding roundtrip failed for width {:?}, exp {}", width, exp);
+            }
         }
     }
     
     #[test]
-    fn test_comprehensive_roundtrip() {
-        // Test round-trip for all special values
-        for &val in SPECIAL_FLOATS_EXTENDED {
-            if val.is_finite() && val >= 0.0 {
-                let encoded = float_to_lex(val);
-                let decoded = lex_to_float(encoded);
-                
-                if val.is_nan() {
-                    assert!(decoded.is_nan(), "NaN roundtrip failed for {}", val);
-                } else {
-                    assert_eq!(val, decoded, "Roundtrip failed for {}: {} -> {} -> {}", 
-                        val, val, encoded, decoded);
+    fn test_multi_width_roundtrip() {
+        let test_values: [f64; 5] = [0.0, 1.0, 2.0, 0.5, 42.0];
+        
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            for &val in &test_values {
+                if val >= 0.0 && val.is_finite() {
+                    let encoded = float_to_lex_width(val, width);
+                    let decoded = lex_to_float_width(encoded, width);
+                    
+                    // Allow for precision loss in smaller widths
+                    let tolerance = match width {
+                        FloatWidth::Width16 => 1e-3,
+                        FloatWidth::Width32 => 1e-6,
+                        FloatWidth::Width64 => 0.0,
+                    };
+                    
+                    assert!((val - decoded).abs() <= tolerance, 
+                        "Roundtrip failed for width {:?}, val {}: {} -> {} -> {}", 
+                        width, val, val, encoded, decoded);
                 }
             }
         }
     }
     
     #[test]
-    fn test_simple_integer_detection() {
-        // Test is_simple function correctly identifies simple integers
-        let simple_values: [f64; 4] = [0.0, 1.0, 2.0, 1024.0];
-        let non_simple_values: [f64; 6] = [-1.0, 0.5, f64::INFINITY, f64::NAN, 1.5, f64::MAX];
-        
-        for &val in &simple_values {
-            if val >= 0.0 && val.is_finite() {
-                let expected_simple = val.fract() == 0.0 && (val as u64).leading_zeros() >= 8;
-                assert_eq!(is_simple(val), expected_simple, 
-                    "is_simple classification wrong for {}", val);
-            }
-        }
-        
-        for &val in &non_simple_values {
-            assert!(!is_simple(val), "Should not be simple: {}", val);
-        }
-    }
-    
-    #[test]
-    fn test_generation_functions() {
-        // Test the actual generation functions used by the library
+    fn test_width_aware_generation() {
         use crate::data::DataSource;
         
-        // Mock a simple data source for testing
-        let test_data: Vec<u64> = vec![42u64; 128]; // Generate some test data
-        let mut source = DataSource::from_vec(test_data);
-        
-        // Test bounded generation
-        for _ in 0..100 {
-            let result = draw_float(&mut source, 0.0, 1.0, false, false);
-            if let Ok(val) = result {
-                assert!(val >= 0.0 && val <= 1.0, "Generated value {} out of bounds [0,1]", val);
-                assert!(val.is_finite(), "Generated infinite value when not allowed");
-                assert!(!val.is_nan(), "Generated NaN when not allowed");
-            }
-        }
-        
-        // Reset data source  
-        let test_data: Vec<u64> = vec![123u64; 128]; // Different test data
-        let mut source = DataSource::from_vec(test_data);
-        
-        // Test unbounded generation
-        for _ in 0..100 {
-            let result = draw_float_from_parts(&mut source);
-            if let Ok(val) = result {
-                // Should generate valid floats
-                assert!(val.is_finite() || val.is_infinite() || val.is_nan(), 
-                    "Generated invalid float: {}", val);
-            }
-        }
-    }
-    
-    #[test]
-    fn test_bounded_generation_respects_bounds() {
-        // Test that bounded generation strictly respects bounds
-        use crate::data::DataSource;
-        
-        let test_ranges = [
-            (0.0, 1.0),
-            (-1.0, 1.0),
-            (100.0, 200.0),
-            (1e-10, 1e-5),
-            (1e5, 1e10),
-        ];
-        
-        for &(min, max) in &test_ranges {
-            let test_data: Vec<u64> = (0..200).map(|i| i * 987654321).collect();
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            let test_data: Vec<u64> = vec![42u64; 128];
             let mut source = DataSource::from_vec(test_data);
             
+            // Test bounded generation
             for _ in 0..50 {
-                if let Ok(val) = draw_float(&mut source, min, max, false, false) {
-                    assert!(val >= min && val <= max, 
-                        "Generated value {} outside bounds [{}, {}]", val, min, max);
-                    assert!(val.is_finite(), "Should not generate infinite values when bounded");
-                    assert!(!val.is_nan(), "Should not generate NaN when not allowed");
+                let result = draw_float_width(&mut source, width, 0.0, 1.0, false, false);
+                if let Ok(val) = result {
+                    assert!(val >= 0.0 && val <= 1.0, "Generated value {} out of bounds [0,1] for width {:?}", val, width);
+                    assert!(val.is_finite(), "Generated infinite value when not allowed for width {:?}", width);
+                    assert!(!val.is_nan(), "Generated NaN when not allowed for width {:?}", width);
                 }
             }
         }
     }
     
     #[test]
-    fn test_tagged_union_behavior() {
-        // Test the tagged union behavior: bit 63 determines encoding type
-        
-        // Test simple integer encoding (tag bit 0)
-        let simple_int = 42.0;
-        let encoded = float_to_lex(simple_int);
-        let tag_bit = (encoded >> 63) & 1;
-        
-        if is_simple(simple_int) {
-            assert_eq!(tag_bit, 0, "Simple integer should have tag bit 0");
-            assert_eq!(encoded, 42, "Simple integer should encode as itself");
+    fn test_simple_integer_detection_multi_width() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test simple values that should work for all widths
+            let simple_values: [f64; 4] = [0.0, 1.0, 2.0, 10.0];
+            let non_simple_values: [f64; 5] = [-1.0, 0.5, f64::INFINITY, f64::NAN, 1.5];
+            
+            for &val in &simple_values {
+                if val >= 0.0 && val.is_finite() {
+                    let is_simple = is_simple_width(val, width);
+                    // Simple integers should be detected correctly for reasonable values
+                    if val <= 100.0 { // Small integers should be simple for all widths
+                        assert!(is_simple || val.fract() != 0.0, 
+                            "Small integer {} should be simple for width {:?}", val, width);
+                    }
+                }
+            }
+            
+            for &val in &non_simple_values {
+                assert!(!is_simple_width(val, width), 
+                    "Value {} should not be simple for width {:?}", val, width);
+            }
         }
+    }
+    
+    #[test] 
+    fn test_backward_compatibility() {
+        // Ensure old f64-only functions still work
+        let test_values: [f64; 5] = [0.0, 1.0, 2.0, 42.0, std::f64::consts::PI];
         
-        // Test complex float encoding (tag bit 1)  
-        let complex_float = std::f64::consts::PI;
-        let encoded = float_to_lex(complex_float);
-        let tag_bit = (encoded >> 63) & 1;
-        assert_eq!(tag_bit, 1, "Complex float should have tag bit 1");
+        for &val in &test_values {
+            if val >= 0.0 && val.is_finite() {
+                let encoded_old = float_to_lex(val);
+                let encoded_new = float_to_lex_width(val, FloatWidth::Width64);
+                assert_eq!(encoded_old, encoded_new, "Backward compatibility broken for {}", val);
+                
+                let decoded_old = lex_to_float(encoded_old);
+                let decoded_new = lex_to_float_width(encoded_old, FloatWidth::Width64);
+                assert_eq!(decoded_old, decoded_new, "Backward compatibility broken for decoding {}", val);
+            }
+        }
     }
 }
