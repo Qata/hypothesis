@@ -681,6 +681,215 @@ pub fn is_subnormal(value: f64) -> bool {
     is_subnormal_width(value, FloatWidth::Width64)
 }
 
+// Float counting and cardinality utilities.
+// These functions provide precise counting of representable floats
+// within specified ranges for different widths.
+
+// Count the number of representable floats between min and max (inclusive).
+// Returns None if the range is invalid or contains infinite values.
+pub fn count_floats_in_range_width(min: f64, max: f64, width: FloatWidth) -> Option<u64> {
+    if min > max || min.is_infinite() || max.is_infinite() || min.is_nan() || max.is_nan() {
+        return None;
+    }
+    
+    // Convert to width precision
+    let min_bits = float_to_int(min, width);
+    let max_bits = float_to_int(max, width);
+    
+    // Handle the case where both values map to the same representable float
+    if min_bits == max_bits {
+        return Some(1);
+    }
+    
+    // For finite ranges, count by bit difference
+    // This works because IEEE 754 ordering matches bit ordering for positive numbers
+    if min >= 0.0 && max >= 0.0 {
+        // Both positive
+        Some(max_bits - min_bits + 1)
+    } else if min < 0.0 && max < 0.0 {
+        // Both negative - bit ordering is reversed for negative numbers
+        Some(min_bits - max_bits + 1)
+    } else {
+        // Range spans zero - count negative part + zero + positive part
+        let zero_bits = 0u64;
+        let neg_zero_bits = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+        
+        // Count from min to negative zero
+        let negative_count = if min < 0.0 {
+            let min_neg_bits = float_to_int(min, width);
+            min_neg_bits - neg_zero_bits + 1
+        } else {
+            0
+        };
+        
+        // Count from positive zero to max
+        let positive_count = if max > 0.0 {
+            let max_pos_bits = float_to_int(max, width);
+            max_pos_bits - zero_bits + 1
+        } else {
+            0
+        };
+        
+        // Add 1 for positive zero (negative zero is counted in negative_count if min < 0)
+        let zero_count = if min <= 0.0 && max >= 0.0 { 1 } else { 0 };
+        
+        Some(negative_count + zero_count + positive_count)
+    }
+}
+
+// Count all finite representable floats for a given width.
+// This excludes infinities and NaN values.
+pub fn count_finite_floats_width(width: FloatWidth) -> u64 {
+    // Count normal floats + subnormal floats + two zeros
+    count_normal_floats_width(width) + count_subnormal_floats_width(width) + 2
+}
+
+// Count all normal (non-subnormal, non-zero) floats for a given width.
+pub fn count_normal_floats_width(width: FloatWidth) -> u64 {
+    let exp_bits = width.exponent_bits();
+    let mantissa_bits = width.mantissa_bits();
+    
+    // Normal numbers have exponent from 1 to (2^exp_bits - 2)
+    // (0 is subnormal/zero, 2^exp_bits - 1 is infinity/NaN)
+    let normal_exponents = (1u64 << exp_bits) - 2;
+    
+    // Each normal exponent can have any mantissa value
+    let mantissa_combinations = 1u64 << mantissa_bits;
+    
+    // Count for both positive and negative
+    2 * normal_exponents * mantissa_combinations
+}
+
+// Count all subnormal floats for a given width.
+pub fn count_subnormal_floats_width(width: FloatWidth) -> u64 {
+    let mantissa_bits = width.mantissa_bits();
+    
+    // Subnormal numbers have exponent = 0 and mantissa != 0
+    // Each non-zero mantissa pattern gives a subnormal number
+    let subnormal_patterns = (1u64 << mantissa_bits) - 1; // -1 to exclude mantissa = 0 (which is zero)
+    
+    // Count for both positive and negative
+    2 * subnormal_patterns
+}
+
+// Get the n-th representable float in the range [min, max] for given width.
+// Returns None if n is out of bounds or the range is invalid.
+pub fn nth_float_in_range_width(min: f64, max: f64, n: u64, width: FloatWidth) -> Option<f64> {
+    let count = count_floats_in_range_width(min, max, width)?;
+    
+    if n >= count {
+        return None;
+    }
+    
+    // Convert to width precision
+    let min_bits = float_to_int(min, width);
+    let _max_bits = float_to_int(max, width);
+    
+    if min >= 0.0 && max >= 0.0 {
+        // Both positive - simple bit arithmetic
+        Some(int_to_float(min_bits + n, width))
+    } else if min < 0.0 && max < 0.0 {
+        // Both negative - reverse bit arithmetic
+        Some(int_to_float(min_bits - n, width))
+    } else {
+        // Range spans zero - more complex logic needed
+        let zero_bits = 0u64;
+        let neg_zero_bits = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+        
+        // Count from min to negative zero
+        let negative_count = if min < 0.0 {
+            let min_neg_bits = float_to_int(min, width);
+            min_neg_bits - neg_zero_bits + 1
+        } else {
+            0
+        };
+        
+        if n < negative_count {
+            // n-th element is in negative range
+            let min_neg_bits = float_to_int(min, width);
+            Some(int_to_float(min_neg_bits - n, width))
+        } else if n == negative_count && min <= 0.0 && max >= 0.0 {
+            // n-th element is zero
+            Some(0.0)
+        } else {
+            // n-th element is in positive range
+            let positive_offset = n - negative_count - (if min <= 0.0 && max >= 0.0 { 1 } else { 0 });
+            Some(int_to_float(zero_bits + positive_offset, width))
+        }
+    }
+}
+
+// Find the index of a specific float within the range [min, max] for given width.
+// Returns None if the value is not in the range or the range is invalid.
+pub fn index_of_float_in_range_width(value: f64, min: f64, max: f64, width: FloatWidth) -> Option<u64> {
+    if value < min || value > max || min > max {
+        return None;
+    }
+    
+    if min.is_infinite() || max.is_infinite() || value.is_infinite() {
+        return None;
+    }
+    
+    if value.is_nan() || min.is_nan() || max.is_nan() {
+        return None;
+    }
+    
+    // Convert to width precision
+    let value_bits = float_to_int(value, width);
+    let min_bits = float_to_int(min, width);
+    let _max_bits = float_to_int(max, width);
+    
+    if min >= 0.0 && max >= 0.0 {
+        // Both positive
+        Some(value_bits - min_bits)
+    } else if min < 0.0 && max < 0.0 {
+        // Both negative
+        Some(min_bits - value_bits)
+    } else {
+        // Range spans zero
+        let _zero_bits = 0u64;
+        let neg_zero_bits = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+        
+        if value < 0.0 {
+            // Value is in negative range
+            let min_neg_bits = float_to_int(min, width);
+            Some(min_neg_bits - value_bits)
+        } else if value == 0.0 {
+            // Value is zero
+            let negative_count = if min < 0.0 {
+                let min_neg_bits = float_to_int(min, width);
+                min_neg_bits - neg_zero_bits + 1
+            } else {
+                0
+            };
+            Some(negative_count)
+        } else {
+            // Value is positive
+            let negative_count = if min < 0.0 {
+                let min_neg_bits = float_to_int(min, width);
+                min_neg_bits - neg_zero_bits + 1
+            } else {
+                0
+            };
+            let zero_count = if min <= 0.0 { 1 } else { 0 };
+            Some(negative_count + zero_count + value_bits)
+        }
+    }
+}
+
+// Backward compatibility functions for f64
+pub fn count_floats_in_range(min: f64, max: f64) -> Option<u64> {
+    count_floats_in_range_width(min, max, FloatWidth::Width64)
+}
+
+pub fn nth_float_in_range(min: f64, max: f64, n: u64) -> Option<f64> {
+    nth_float_in_range_width(min, max, n, FloatWidth::Width64)
+}
+
+pub fn index_of_float_in_range(value: f64, min: f64, max: f64) -> Option<u64> {
+    index_of_float_in_range_width(value, min, max, FloatWidth::Width64)
+}
+
 // Draw a float with uniform distribution in range with width support.
 pub fn draw_float_uniform_width(
     source: &mut DataSource, 
@@ -1108,6 +1317,200 @@ mod tests {
                     "prev_float compatibility broken for {}", val);
                 assert_eq!(is_subnormal(val), is_subnormal_width(val, FloatWidth::Width64),
                     "is_subnormal compatibility broken for {}", val);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_count_floats_in_range_basic() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test simple positive range
+            let count = count_floats_in_range_width(1.0, 2.0, width).unwrap();
+            assert!(count > 0, "Should have floats between 1.0 and 2.0 for width {:?}", width);
+            
+            // Test single value range
+            let single_count = count_floats_in_range_width(1.0, 1.0, width).unwrap();
+            assert_eq!(single_count, 1, "Single value range should count as 1 for width {:?}", width);
+            
+            // Test invalid ranges
+            assert!(count_floats_in_range_width(2.0, 1.0, width).is_none(), 
+                "Invalid range should return None for width {:?}", width);
+            assert!(count_floats_in_range_width(f64::INFINITY, 1.0, width).is_none(),
+                "Infinite range should return None for width {:?}", width);
+            assert!(count_floats_in_range_width(f64::NAN, 1.0, width).is_none(),
+                "NaN range should return None for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_count_floats_in_range_cross_zero() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test range that spans zero
+            let count = count_floats_in_range_width(-1.0, 1.0, width).unwrap();
+            assert!(count > 2, "Range spanning zero should have many floats for width {:?}", width);
+            
+            // Test negative only range
+            let neg_count = count_floats_in_range_width(-2.0, -1.0, width).unwrap();
+            assert!(neg_count > 0, "Negative range should have floats for width {:?}", width);
+            
+            // Test zero-inclusive ranges
+            let zero_pos_count = count_floats_in_range_width(0.0, 1.0, width).unwrap();
+            let zero_neg_count = count_floats_in_range_width(-1.0, 0.0, width).unwrap();
+            assert!(zero_pos_count > 1, "Zero to positive range should have multiple floats for width {:?}", width);
+            assert!(zero_neg_count > 1, "Negative to zero range should have multiple floats for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_nth_float_in_range() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            let min = 1.0;
+            let max = 2.0;
+            let count = count_floats_in_range_width(min, max, width).unwrap();
+            
+            // Test first and last elements
+            let first = nth_float_in_range_width(min, max, 0, width).unwrap();
+            let last = nth_float_in_range_width(min, max, count - 1, width).unwrap();
+            
+            // First element should be >= min (with width precision)
+            assert!(first >= min || (first - min).abs() < 1e-10, 
+                "First element should be >= min for width {:?}: {} vs {}", width, first, min);
+            
+            // Last element should be <= max (with width precision)  
+            assert!(last <= max || (last - max).abs() < 1e-10,
+                "Last element should be <= max for width {:?}: {} vs {}", width, last, max);
+            
+            // Test out of bounds
+            assert!(nth_float_in_range_width(min, max, count, width).is_none(),
+                "Out of bounds access should return None for width {:?}", width);
+            
+            // Test ordering
+            if count > 1 {
+                let second = nth_float_in_range_width(min, max, 1, width).unwrap();
+                assert!(second > first, "Elements should be ordered for width {:?}", width);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_index_of_float_in_range() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            let min = 1.0;
+            let max = 2.0;
+            let count = count_floats_in_range_width(min, max, width).unwrap();
+            
+            // Test roundtrip: nth -> index_of should return original index
+            for i in [0, count / 2, count - 1] {
+                if i < count {
+                    let val = nth_float_in_range_width(min, max, i, width).unwrap();
+                    let idx = index_of_float_in_range_width(val, min, max, width).unwrap();
+                    assert_eq!(i, idx, "Roundtrip failed for width {:?}, index {}", width, i);
+                }
+            }
+            
+            // Test out of range values
+            assert!(index_of_float_in_range_width(0.5, min, max, width).is_none(),
+                "Out of range value should return None for width {:?}", width);
+            assert!(index_of_float_in_range_width(3.0, min, max, width).is_none(),
+                "Out of range value should return None for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_cardinality_functions() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            let finite_count = count_finite_floats_width(width);
+            let normal_count = count_normal_floats_width(width);
+            let subnormal_count = count_subnormal_floats_width(width);
+            
+            // Basic sanity checks
+            assert!(finite_count > 0, "Should have finite floats for width {:?}", width);
+            assert!(normal_count > 0, "Should have normal floats for width {:?}", width);
+            assert!(subnormal_count > 0, "Should have subnormal floats for width {:?}", width);
+            
+            // Normal + subnormal + zeros should equal finite count
+            // (+ 2 for positive and negative zero)
+            assert_eq!(normal_count + subnormal_count + 2, finite_count,
+                "Normal + subnormal + zeros should equal finite for width {:?}", width);
+            
+            // Verify expected counts for known widths
+            match width {
+                FloatWidth::Width16 => {
+                    // f16: 5 exp bits, 10 mantissa bits
+                    // Normal exponents: 1 to 30 (30 values) 
+                    // Mantissa: 2^10 = 1024 values
+                    // Both signs: 2 * 30 * 1024 = 61440
+                    assert_eq!(normal_count, 61440, "f16 normal count should be 61440");
+                    
+                    // Subnormal: exponent 0, mantissa 1 to 1023 (1023 values)
+                    // Both signs: 2 * 1023 = 2046
+                    assert_eq!(subnormal_count, 2046, "f16 subnormal count should be 2046");
+                },
+                FloatWidth::Width32 => {
+                    // f32: 8 exp bits, 23 mantissa bits
+                    // Normal exponents: 1 to 254 (254 values)
+                    // Mantissa: 2^23 = 8388608 values  
+                    // Both signs: 2 * 254 * 8388608 = 4261412864
+                    assert_eq!(normal_count, 4261412864, "f32 normal count should be 4261412864");
+                    
+                    // Subnormal: 2 * (2^23 - 1) = 16777214
+                    assert_eq!(subnormal_count, 16777214, "f32 subnormal count should be 16777214");
+                },
+                FloatWidth::Width64 => {
+                    // f64: 11 exp bits, 52 mantissa bits
+                    // Normal exponents: 1 to 2046 (2046 values)
+                    // Mantissa: 2^52 values
+                    // Both signs: 2 * 2046 * 2^52 = very large number
+                    assert!(normal_count > 1u64 << 55, "f64 should have very many normal floats");
+                    
+                    // Subnormal: 2 * (2^52 - 1) 
+                    let expected_subnormal = 2 * ((1u64 << 52) - 1);
+                    assert_eq!(subnormal_count, expected_subnormal, "f64 subnormal count should be {}", expected_subnormal);
+                },
+            }
+        }
+    }
+    
+    #[test]
+    fn test_counting_with_subnormals() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test counting very small ranges that include subnormals
+            let min_subnormal = min_positive_subnormal_width(width);
+            let max_subnormal = max_subnormal_width(width);
+            
+            // Count all subnormals
+            let subnormal_range_count = count_floats_in_range_width(min_subnormal, max_subnormal, width).unwrap();
+            
+            // Should be roughly half the total subnormal count (positive only)
+            let total_subnormal_count = count_subnormal_floats_width(width);
+            let expected_positive_subnormals = total_subnormal_count / 2;
+            
+            assert_eq!(subnormal_range_count, expected_positive_subnormals,
+                "Positive subnormal range count should match expected for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_backward_compatibility_counting() {
+        let test_ranges = [(0.0, 1.0), (1.0, 2.0), (-1.0, 1.0)];
+        
+        for (min, max) in test_ranges {
+            // Test that width-agnostic functions match width64 functions
+            assert_eq!(count_floats_in_range(min, max), 
+                count_floats_in_range_width(min, max, FloatWidth::Width64),
+                "count_floats_in_range compatibility broken for [{}, {}]", min, max);
+            
+            if let Some(count) = count_floats_in_range(min, max) {
+                if count > 0 {
+                    assert_eq!(nth_float_in_range(min, max, 0),
+                        nth_float_in_range_width(min, max, 0, FloatWidth::Width64),
+                        "nth_float_in_range compatibility broken for [{}, {}]", min, max);
+                    
+                    let mid_val = nth_float_in_range(min, max, count / 2).unwrap();
+                    assert_eq!(index_of_float_in_range(mid_val, min, max),
+                        index_of_float_in_range_width(mid_val, min, max, FloatWidth::Width64),
+                        "index_of_float_in_range compatibility broken for [{}, {}]", min, max);
+                }
             }
         }
     }
