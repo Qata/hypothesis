@@ -534,6 +534,153 @@ pub fn draw_float_from_parts(source: &mut DataSource) -> Draw<f64> {
     draw_float_from_parts_width(source, FloatWidth::Width64)
 }
 
+// Successor/predecessor and subnormal handling utilities.
+// These functions provide precise control over float ordering and
+// handle edge cases around subnormal numbers.
+
+// Get the next representable float after the given value for specified width.
+// Handles special cases including subnormals, infinities, and NaN.
+pub fn next_float_width(value: f64, width: FloatWidth) -> f64 {
+    if value.is_nan() {
+        return value;
+    }
+    
+    if value == f64::INFINITY {
+        return value;
+    }
+    
+    // Convert to appropriate width and get raw bits
+    let bits = float_to_int(value, width);
+    let max_bits = if width.bits() == 64 { u64::MAX } else { (1u64 << width.bits()) - 1 };
+    
+    // Handle negative infinity -> most negative finite
+    if value == f64::NEG_INFINITY {
+        let sign_bit = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+        let max_exp = ((1u64 << width.exponent_bits()) - 2) << width.mantissa_bits(); // Not infinity
+        let max_mantissa = (1u64 << width.mantissa_bits()) - 1;
+        return int_to_float(sign_bit | max_exp | max_mantissa, width);
+    }
+    
+    // For positive numbers, increment bits
+    if value >= 0.0 {
+        if bits == max_bits - 1 { // Just before positive infinity
+            return f64::INFINITY;
+        }
+        return int_to_float(bits + 1, width);
+    }
+    
+    // For negative numbers, decrement bits (moving toward zero)
+    let sign_bit = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+    if bits == sign_bit { // Negative zero -> smallest negative subnormal
+        return int_to_float(sign_bit | 1, width);
+    }
+    
+    int_to_float(bits - 1, width)
+}
+
+// Get the previous representable float before the given value for specified width.
+// Handles special cases including subnormals, infinities, and NaN.
+pub fn prev_float_width(value: f64, width: FloatWidth) -> f64 {
+    if value.is_nan() {
+        return value;
+    }
+    
+    if value == f64::NEG_INFINITY {
+        return value;
+    }
+    
+    // Convert to appropriate width and get raw bits
+    let bits = float_to_int(value, width);
+    
+    // Handle positive infinity -> most positive finite
+    if value == f64::INFINITY {
+        let max_exp = ((1u64 << width.exponent_bits()) - 2) << width.mantissa_bits();
+        let max_mantissa = (1u64 << width.mantissa_bits()) - 1;
+        return int_to_float(max_exp | max_mantissa, width);
+    }
+    
+    // For positive numbers (including positive zero), decrement bits (moving toward zero/negative)
+    if value >= 0.0 {
+        let sign_bit = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+        if bits == 0 { // Positive zero -> smallest negative subnormal
+            return int_to_float(sign_bit | 1, width);
+        }
+        return int_to_float(bits - 1, width);
+    }
+    
+    // For negative numbers, increment bits (moving away from zero)
+    let sign_bit = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+    let max_bits = if width.bits() == 64 { u64::MAX } else { (1u64 << width.bits()) - 1 };
+    
+    if bits == sign_bit { // Negative zero -> smallest positive subnormal  
+        return int_to_float(1, width);
+    }
+    
+    if bits == max_bits - 1 { // Just before negative infinity
+        return f64::NEG_INFINITY;
+    }
+    
+    int_to_float(bits + 1, width)
+}
+
+// Check if a float is subnormal (denormalized) for the given width.
+// Subnormal numbers have exponent bits all zero but non-zero mantissa.
+pub fn is_subnormal_width(value: f64, width: FloatWidth) -> bool {
+    if !value.is_finite() || value == 0.0 {
+        return false;
+    }
+    
+    let bits = float_to_int(value, width);
+    let mantissa_bits = width.mantissa_bits();
+    let exp_bits = width.exponent_bits();
+    
+    // Remove sign bit
+    let sign_mask = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+    let unsigned_bits = bits & !sign_mask;
+    
+    // Extract exponent
+    let exponent = (unsigned_bits >> mantissa_bits) & ((1u64 << exp_bits) - 1);
+    
+    // Extract mantissa
+    let mantissa = unsigned_bits & ((1u64 << mantissa_bits) - 1);
+    
+    // Subnormal: exponent is zero, mantissa is non-zero
+    exponent == 0 && mantissa != 0
+}
+
+// Get the smallest positive subnormal number for the given width.
+pub fn min_positive_subnormal_width(width: FloatWidth) -> f64 {
+    // Smallest subnormal has only the least significant mantissa bit set
+    int_to_float(1, width)
+}
+
+// Get the largest subnormal number for the given width.
+pub fn max_subnormal_width(width: FloatWidth) -> f64 {
+    // Largest subnormal has all mantissa bits set, exponent zero
+    let mantissa_mask = (1u64 << width.mantissa_bits()) - 1;
+    int_to_float(mantissa_mask, width)
+}
+
+// Get the smallest positive normal number for the given width.
+pub fn min_positive_normal_width(width: FloatWidth) -> f64 {
+    // Smallest normal has exponent = 1, mantissa = 0
+    let min_normal_exp = 1u64 << width.mantissa_bits();
+    int_to_float(min_normal_exp, width)
+}
+
+// Backward compatibility functions for f64
+pub fn next_float(value: f64) -> f64 {
+    next_float_width(value, FloatWidth::Width64)
+}
+
+pub fn prev_float(value: f64) -> f64 {
+    prev_float_width(value, FloatWidth::Width64)
+}
+
+pub fn is_subnormal(value: f64) -> bool {
+    is_subnormal_width(value, FloatWidth::Width64)
+}
+
 // Draw a float with uniform distribution in range with width support.
 pub fn draw_float_uniform_width(
     source: &mut DataSource, 
@@ -809,5 +956,159 @@ mod tests {
         let f16_one_bits = 0x3C00u64; // 1.0 in f16
         assert_eq!(int_to_float(f16_one_bits, FloatWidth::Width16), 1.0);
         assert_eq!(float_to_int(1.0, FloatWidth::Width16), f16_one_bits);
+    }
+    
+    #[test]
+    fn test_next_float_width() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test basic increment
+            let next_zero = next_float_width(0.0, width);
+            assert!(next_zero > 0.0, "Next after zero should be positive for width {:?}", width);
+            assert!(is_subnormal_width(next_zero, width), "Next after zero should be subnormal for width {:?}", width);
+            
+            let next_one = next_float_width(1.0, width);
+            assert!(next_one > 1.0, "Next after 1.0 should be greater for width {:?}", width);
+            
+            // Test negative numbers
+            let next_neg_one = next_float_width(-1.0, width);
+            assert!(next_neg_one > -1.0 && next_neg_one < 0.0, "Next after -1.0 should be closer to zero for width {:?}", width);
+            
+            // Test special values
+            assert!(next_float_width(f64::INFINITY, width).is_infinite(), "Next after infinity should be infinity for width {:?}", width);
+            assert!(next_float_width(f64::NAN, width).is_nan(), "Next after NaN should be NaN for width {:?}", width);
+            
+            // Test that next after negative infinity is finite
+            let next_neg_inf = next_float_width(f64::NEG_INFINITY, width);
+            assert!(next_neg_inf.is_finite(), "Next after negative infinity should be finite for width {:?}", width);
+            assert!(next_neg_inf < 0.0, "Next after negative infinity should be negative for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_prev_float_width() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test basic decrement
+            let prev_zero = prev_float_width(0.0, width);
+            assert!(prev_zero < 0.0, "Prev before zero should be negative for width {:?}", width);
+            assert!(is_subnormal_width(prev_zero.abs(), width), "Prev before zero should be subnormal for width {:?}", width);
+            
+            let prev_one = prev_float_width(1.0, width);
+            assert!(prev_one < 1.0 && prev_one > 0.0, "Prev before 1.0 should be smaller positive for width {:?}", width);
+            
+            // Test negative numbers
+            let prev_neg_one = prev_float_width(-1.0, width);
+            assert!(prev_neg_one < -1.0, "Prev before -1.0 should be more negative for width {:?}", width);
+            
+            // Test special values
+            assert!(prev_float_width(f64::NEG_INFINITY, width).is_infinite(), "Prev before negative infinity should be negative infinity for width {:?}", width);
+            assert!(prev_float_width(f64::NAN, width).is_nan(), "Prev before NaN should be NaN for width {:?}", width);
+            
+            // Test that prev before positive infinity is finite
+            let prev_pos_inf = prev_float_width(f64::INFINITY, width);
+            assert!(prev_pos_inf.is_finite(), "Prev before positive infinity should be finite for width {:?}", width);
+            assert!(prev_pos_inf > 0.0, "Prev before positive infinity should be positive for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_next_prev_roundtrip() {
+        let test_values: [f64; 5] = [0.0, 1.0, -1.0, 42.5, 1e-10];
+        
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            for &val in &test_values {
+                if val.is_finite() {
+                    // Convert to width precision first
+                    let width_val = int_to_float(float_to_int(val, width), width);
+                    
+                    let next_val = next_float_width(width_val, width);
+                    if next_val.is_finite() && next_val != width_val {
+                        let prev_of_next = prev_float_width(next_val, width);
+                        assert_eq!(width_val, prev_of_next, 
+                            "Next/prev roundtrip failed for width {:?}, val {}: {} -> {} -> {}", 
+                            width, val, width_val, next_val, prev_of_next);
+                    }
+                    
+                    let prev_val = prev_float_width(width_val, width);
+                    if prev_val.is_finite() && prev_val != width_val {
+                        let next_of_prev = next_float_width(prev_val, width);
+                        assert_eq!(width_val, next_of_prev,
+                            "Prev/next roundtrip failed for width {:?}, val {}: {} -> {} -> {}",
+                            width, val, width_val, prev_val, next_of_prev);
+                    }
+                }
+            }
+        }
+    }
+    
+    #[test]
+    fn test_subnormal_detection() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            // Test that zero is not subnormal
+            assert!(!is_subnormal_width(0.0, width), "Zero should not be subnormal for width {:?}", width);
+            assert!(!is_subnormal_width(-0.0, width), "Negative zero should not be subnormal for width {:?}", width);
+            
+            // Test that infinity and NaN are not subnormal
+            assert!(!is_subnormal_width(f64::INFINITY, width), "Infinity should not be subnormal for width {:?}", width);
+            assert!(!is_subnormal_width(f64::NEG_INFINITY, width), "Negative infinity should not be subnormal for width {:?}", width);
+            assert!(!is_subnormal_width(f64::NAN, width), "NaN should not be subnormal for width {:?}", width);
+            
+            // Test that normal numbers are not subnormal
+            assert!(!is_subnormal_width(1.0, width), "1.0 should not be subnormal for width {:?}", width);
+            assert!(!is_subnormal_width(-1.0, width), "-1.0 should not be subnormal for width {:?}", width);
+            
+            // Test actual subnormal numbers
+            let min_subnormal = min_positive_subnormal_width(width);
+            assert!(is_subnormal_width(min_subnormal, width), "Min subnormal should be detected as subnormal for width {:?}", width);
+            assert!(min_subnormal > 0.0, "Min subnormal should be positive for width {:?}", width);
+            
+            let max_subnormal = max_subnormal_width(width);
+            assert!(is_subnormal_width(max_subnormal, width), "Max subnormal should be detected as subnormal for width {:?}", width);
+            assert!(max_subnormal > min_subnormal, "Max subnormal should be larger than min for width {:?}", width);
+            
+            // Test that min normal is not subnormal but is close to subnormal range
+            let min_normal = min_positive_normal_width(width);
+            assert!(!is_subnormal_width(min_normal, width), "Min normal should not be subnormal for width {:?}", width);
+            assert!(min_normal > max_subnormal, "Min normal should be larger than max subnormal for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_subnormal_boundaries() {
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            let min_subnormal = min_positive_subnormal_width(width);
+            let max_subnormal = max_subnormal_width(width);
+            let min_normal = min_positive_normal_width(width);
+            
+            // Test ordering
+            assert!(min_subnormal < max_subnormal, "Min subnormal should be less than max for width {:?}", width);
+            assert!(max_subnormal < min_normal, "Max subnormal should be less than min normal for width {:?}", width);
+            
+            // Test that prev of min normal is max subnormal
+            let prev_min_normal = prev_float_width(min_normal, width);
+            assert_eq!(max_subnormal, prev_min_normal, 
+                "Prev of min normal should be max subnormal for width {:?}", width);
+            
+            // Test that next of zero is min subnormal
+            let next_zero = next_float_width(0.0, width);
+            assert_eq!(min_subnormal, next_zero,
+                "Next of zero should be min subnormal for width {:?}", width);
+        }
+    }
+    
+    #[test]
+    fn test_backward_compatibility_successor_predecessor() {
+        let test_values: [f64; 4] = [0.0, 1.0, -1.0, std::f64::consts::PI];
+        
+        for &val in &test_values {
+            if val.is_finite() {
+                // Test that width-agnostic functions match width64 functions
+                assert_eq!(next_float(val), next_float_width(val, FloatWidth::Width64),
+                    "next_float compatibility broken for {}", val);
+                assert_eq!(prev_float(val), prev_float_width(val, FloatWidth::Width64),
+                    "prev_float compatibility broken for {}", val);
+                assert_eq!(is_subnormal(val), is_subnormal_width(val, FloatWidth::Width64),
+                    "is_subnormal compatibility broken for {}", val);
+            }
+        }
     }
 }
