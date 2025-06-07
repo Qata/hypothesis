@@ -412,6 +412,117 @@ pub fn draw_float(
     draw_float_width(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity)
 }
 
+// Bit-level reinterpretation utilities for float/integer conversion.
+// These functions provide direct access to the underlying bit representations
+// of floats without any encoding transformations.
+
+// Convert float to raw integer bits for specified width.
+// This provides direct access to the IEEE 754 representation.
+pub fn float_to_int(value: f64, width: FloatWidth) -> u64 {
+    match width {
+        FloatWidth::Width16 => {
+            let f16_val = f16::from_f64(value);
+            f16_val.to_bits() as u64
+        },
+        FloatWidth::Width32 => {
+            let f32_val = value as f32;
+            f32_val.to_bits() as u64
+        },
+        FloatWidth::Width64 => {
+            value.to_bits()
+        },
+    }
+}
+
+// Convert raw integer bits to float for specified width.
+// This interprets the bits directly as IEEE 754 representation.
+pub fn int_to_float(value: u64, width: FloatWidth) -> f64 {
+    match width {
+        FloatWidth::Width16 => {
+            let f16_val = f16::from_bits(value as u16);
+            f16_val.to_f64()
+        },
+        FloatWidth::Width32 => {
+            let f32_val = f32::from_bits(value as u32);
+            f32_val as f64
+        },
+        FloatWidth::Width64 => {
+            f64::from_bits(value)
+        },
+    }
+}
+
+// Generic reinterpretation wrapper that handles conversion between
+// different float formats. This is the main utility for bit-level operations.
+pub fn reinterpret_bits(value: f64, from_width: FloatWidth, to_width: FloatWidth) -> f64 {
+    if from_width == to_width {
+        return value;
+    }
+    
+    // Convert to bits in source format, then interpret in target format
+    let bits = float_to_int(value, from_width);
+    
+    // For conversions between different widths, we need to handle bit layout differences
+    match (from_width, to_width) {
+        (FloatWidth::Width16, FloatWidth::Width32) => {
+            // Expand f16 to f32: sign(1) + exp(5->8) + mantissa(10->23)
+            let f16_bits = bits as u16;
+            let sign = (f16_bits >> 15) as u32;
+            let exp = ((f16_bits >> 10) & 0x1F) as u32;
+            let mantissa = (f16_bits & 0x3FF) as u32;
+            
+            let f32_bits = if exp == 0x1F {
+                // Special values (inf/nan)
+                (sign << 31) | (0xFF << 23) | (mantissa << 13)
+            } else if exp == 0 {
+                // Zero or subnormal
+                if mantissa == 0 {
+                    sign << 31  // Zero
+                } else {
+                    // Convert subnormal to normal
+                    let leading_zeros = mantissa.leading_zeros() - 22;
+                    let normalized_mantissa = (mantissa << (leading_zeros + 1)) & 0x7FFFFF;
+                    let normalized_exp = 127 - 15 - leading_zeros;
+                    (sign << 31) | (normalized_exp << 23) | normalized_mantissa
+                }
+            } else {
+                // Normal number
+                let f32_exp = exp + 127 - 15;
+                (sign << 31) | (f32_exp << 23) | (mantissa << 13)
+            };
+            
+            f32::from_bits(f32_bits) as f64
+        },
+        (FloatWidth::Width16, FloatWidth::Width64) => {
+            // Expand f16 to f64: similar to f16->f32 but with f64 layout
+            let f16_val = f16::from_bits(bits as u16);
+            f16_val.to_f64()
+        },
+        (FloatWidth::Width32, FloatWidth::Width16) => {
+            // Compress f32 to f16: may lose precision
+            let f32_val = f32::from_bits(bits as u32);
+            let f16_val = f16::from_f32(f32_val);
+            f16_val.to_f64()
+        },
+        (FloatWidth::Width32, FloatWidth::Width64) => {
+            // Expand f32 to f64
+            let f32_val = f32::from_bits(bits as u32);
+            f32_val as f64
+        },
+        (FloatWidth::Width64, FloatWidth::Width16) => {
+            // Compress f64 to f16: may lose precision
+            let f16_val = f16::from_f64(value);
+            f16_val.to_f64()
+        },
+        (FloatWidth::Width64, FloatWidth::Width32) => {
+            // Compress f64 to f32: may lose precision
+            (value as f32) as f64
+        },
+        // Same width cases (should not reach here due to early return)
+        _ => value,
+    }
+}
+
 // Generate a float from raw parts with width support.
 pub fn draw_float_from_parts_width(source: &mut DataSource, width: FloatWidth) -> Draw<f64> {
     let raw_bits = source.bits(width.bits() as u64)?;
@@ -566,5 +677,137 @@ mod tests {
                 assert_eq!(decoded_old, decoded_new, "Backward compatibility broken for decoding {}", val);
             }
         }
+    }
+    
+    #[test]
+    fn test_float_to_int_conversion() {
+        let test_values: [f64; 6] = [0.0, 1.0, -1.0, 42.5, f64::INFINITY, f64::NAN];
+        
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            for &val in &test_values {
+                let bits = float_to_int(val, width);
+                let reconstructed = int_to_float(bits, width);
+                
+                // Handle special cases
+                if val.is_nan() {
+                    assert!(reconstructed.is_nan(), "NaN not preserved through bit conversion for width {:?}", width);
+                } else if val.is_infinite() {
+                    assert_eq!(val.is_sign_positive(), reconstructed.is_sign_positive(), 
+                        "Infinity sign not preserved for width {:?}", width);
+                    assert!(reconstructed.is_infinite(), "Infinity not preserved for width {:?}", width);
+                } else {
+                    // Allow for precision loss in smaller widths
+                    let tolerance = match width {
+                        FloatWidth::Width16 => 1e-3,
+                        FloatWidth::Width32 => 1e-6,
+                        FloatWidth::Width64 => 0.0,
+                    };
+                    
+                    assert!((val - reconstructed).abs() <= tolerance, 
+                        "Float/int roundtrip failed for width {:?}, val {}: {} -> {} -> {}", 
+                        width, val, val, bits, reconstructed);
+                }
+            }
+        }
+    }
+    
+    #[test]
+    fn test_bit_reinterpretation_same_width() {
+        let test_values: [f64; 4] = [0.0, 1.0, 42.5, std::f64::consts::PI];
+        
+        for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+            for &val in &test_values {
+                let result = reinterpret_bits(val, width, width);
+                
+                // Same width should preserve exact value (with precision limits)
+                let tolerance = match width {
+                    FloatWidth::Width16 => 1e-3,
+                    FloatWidth::Width32 => 1e-6,
+                    FloatWidth::Width64 => 0.0,
+                };
+                
+                assert!((val - result).abs() <= tolerance, 
+                    "Same-width reinterpretation changed value for width {:?}: {} -> {}", 
+                    width, val, result);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_bit_reinterpretation_cross_width() {
+        let test_values: [f64; 4] = [0.0, 1.0, 2.0, 42.0];
+        
+        // Test f16 <-> f32 conversions
+        for &val in &test_values {
+            if val.is_finite() && val.abs() <= 65504.0 { // Within f16 range
+                let f16_to_f32 = reinterpret_bits(val, FloatWidth::Width16, FloatWidth::Width32);
+                let f32_to_f16 = reinterpret_bits(f16_to_f32, FloatWidth::Width32, FloatWidth::Width16);
+                
+                // Should roundtrip with some precision loss
+                assert!((val - f32_to_f16).abs() <= 1e-3, 
+                    "f16<->f32 roundtrip failed: {} -> {} -> {}", val, f16_to_f32, f32_to_f16);
+            }
+        }
+        
+        // Test f32 <-> f64 conversions
+        for &val in &test_values {
+            if val.is_finite() {
+                let f32_to_f64 = reinterpret_bits(val, FloatWidth::Width32, FloatWidth::Width64);
+                let f64_to_f32 = reinterpret_bits(f32_to_f64, FloatWidth::Width64, FloatWidth::Width32);
+                
+                // Should roundtrip with f32 precision
+                assert!((val - f64_to_f32).abs() <= 1e-6, 
+                    "f32<->f64 roundtrip failed: {} -> {} -> {}", val, f32_to_f64, f64_to_f32);
+            }
+        }
+    }
+    
+    #[test]
+    fn test_bit_reinterpretation_special_values() {
+        // Test that special values are handled correctly across widths
+        let special_values = [0.0, -0.0, f64::INFINITY, f64::NEG_INFINITY];
+        
+        for &val in &special_values {
+            for from_width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+                for to_width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+                    let result = reinterpret_bits(val, from_width, to_width);
+                    
+                    if val == 0.0 {
+                        assert_eq!(result, 0.0, "Zero not preserved in reinterpretation");
+                    } else if val == -0.0 {
+                        assert!(result == -0.0 || result == 0.0, "Negative zero handling failed");
+                    } else if val.is_infinite() {
+                        assert!(result.is_infinite(), "Infinity not preserved for {:?} -> {:?}", from_width, to_width);
+                        assert_eq!(val.is_sign_positive(), result.is_sign_positive(), 
+                            "Infinity sign not preserved for {:?} -> {:?}", from_width, to_width);
+                    }
+                }
+            }
+        }
+    }
+    
+    #[test]
+    fn test_raw_bit_access() {
+        // Test that float_to_int and int_to_float provide raw bit access
+        
+        // Test known bit patterns
+        let zero_bits = 0u64;
+        let one_bits = 0x3FF0000000000000u64; // 1.0 in f64
+        
+        // f64 tests
+        assert_eq!(int_to_float(zero_bits, FloatWidth::Width64), 0.0);
+        assert_eq!(int_to_float(one_bits, FloatWidth::Width64), 1.0);
+        assert_eq!(float_to_int(0.0, FloatWidth::Width64), zero_bits);
+        assert_eq!(float_to_int(1.0, FloatWidth::Width64), one_bits);
+        
+        // f32 tests
+        let f32_one_bits = 0x3F800000u64; // 1.0 in f32
+        assert_eq!(int_to_float(f32_one_bits, FloatWidth::Width32), 1.0);
+        assert_eq!(float_to_int(1.0, FloatWidth::Width32), f32_one_bits);
+        
+        // f16 tests  
+        let f16_one_bits = 0x3C00u64; // 1.0 in f16
+        assert_eq!(int_to_float(f16_one_bits, FloatWidth::Width16), 1.0);
+        assert_eq!(float_to_int(1.0, FloatWidth::Width16), f16_one_bits);
     }
 }
