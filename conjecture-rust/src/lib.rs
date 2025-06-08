@@ -7,3 +7,4 @@ pub mod engine;
 pub mod floats;
 pub mod intminimize;
 pub mod ints;
+pub mod strings;
