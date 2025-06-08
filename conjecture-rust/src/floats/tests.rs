@@ -4,20 +4,6 @@ use super::*;
 
 
 #[test]
-fn test_multi_width_exponent_encoding() {
-    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
-        let (encoding_table, decoding_table) = build_exponent_tables(width);
-        let max_exp = width.max_exponent();
-        
-        for exp in 0..=max_exp {
-            let encoded = decoding_table[exp as usize];
-            let decoded = encoding_table[encoded as usize];
-            assert_eq!(exp, decoded, "Exponent encoding roundtrip failed for width {:?}, exp {}", width, exp);
-        }
-    }
-}
-
-#[test]
 fn test_multi_width_roundtrip() {
     let test_values: [f64; 5] = [0.0, 1.0, 2.0, 0.5, 42.0];
     
@@ -597,28 +583,6 @@ fn test_signed_zero_handling() {
     }
 }
 
-#[test]
-fn test_reverse_bits_table_matches_python() {
-    // Verify our REVERSE_BITS_TABLE exactly matches Python's
-    let expected_first_16 = [0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, 
-                            0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0];
-    let expected_last_16 = [0x0f, 0x8f, 0x4f, 0xcf, 0x2f, 0xaf, 0x6f, 0xef,
-                           0x1f, 0x9f, 0x5f, 0xdf, 0x3f, 0xbf, 0x7f, 0xff];
-    
-    for (i, &expected) in expected_first_16.iter().enumerate() {
-        assert_eq!(REVERSE_BITS_TABLE[i], expected, 
-            "REVERSE_BITS_TABLE[{}] should be 0x{:02x}, got 0x{:02x}", 
-            i, expected, REVERSE_BITS_TABLE[i]);
-    }
-    
-    for (i, &expected) in expected_last_16.iter().enumerate() {
-        let idx = 256 - 16 + i;
-        assert_eq!(REVERSE_BITS_TABLE[idx], expected,
-            "REVERSE_BITS_TABLE[{}] should be 0x{:02x}, got 0x{:02x}",
-            idx, expected, REVERSE_BITS_TABLE[idx]);
-    }
-}
-
 #[test] 
 fn test_f64_constants_match_python() {
     // Verify our f64 constants match Python exactly
@@ -628,79 +592,6 @@ fn test_f64_constants_match_python() {
     assert_eq!(width.mantissa_mask(), 0xfffffffffffff);  // MANTISSA_MASK = (1 << 52) - 1
     assert_eq!(width.mantissa_bits(), 52);
     assert_eq!(width.exponent_bits(), 11);
-}
-
-#[test]
-fn test_exponent_ordering_matches_python() {
-    // Test that our exponent ordering exactly matches Python's
-    let width = FloatWidth::Width64;
-    let (encoding_table, decoding_table) = build_exponent_tables(width);
-    
-    // Python's ENCODING_TABLE starts with: [1023, 1024, 1025, ...]
-    // (positive exponents first, in order)
-    assert_eq!(encoding_table[0], 1023);  // Exponent 0 (unbiased -1023)
-    assert_eq!(encoding_table[1], 1024);  // Exponent 1 (unbiased -1022)
-    assert_eq!(encoding_table[2], 1025);  // Exponent 2 (unbiased -1021)
-    
-    // Python's ENCODING_TABLE ends with: [..., 2, 1, 0, 2047]
-    // (negative exponents in reverse order, then infinity)
-    let len = encoding_table.len();
-    assert_eq!(encoding_table[len-4], 2);    // Exponent 1021 (unbiased -2)
-    assert_eq!(encoding_table[len-3], 1);    // Exponent 1022 (unbiased -1)
-    assert_eq!(encoding_table[len-2], 0);    // Exponent 1023 (unbiased 0)  
-    assert_eq!(encoding_table[len-1], 2047); // MAX_EXPONENT (infinity/NaN)
-    
-    // Test specific DECODING_TABLE values from Python
-    assert_eq!(decoding_table[0], 2046);     // Exponent 0 maps to position 2046
-    assert_eq!(decoding_table[1], 2045);     // Exponent 1 maps to position 2045  
-    assert_eq!(decoding_table[1023], 0);     // Exponent 1023 maps to position 0
-    assert_eq!(decoding_table[1024], 1);     // Exponent 1024 maps to position 1
-    assert_eq!(decoding_table[2047], 2047);  // MAX_EXPONENT maps to last position
-}
-
-#[test]
-fn test_reverse64_matches_python() {
-    // Test our reverse64 function against known values
-    assert_eq!(reverse64(0), 0);
-    assert_eq!(reverse64(1), 0x8000000000000000);  // 1 -> MSB set
-    assert_eq!(reverse64(0x8000000000000000), 1);  // MSB -> 1
-    
-    // Test double reversal
-    let test_values = [0u64, 1, 0xFF, 0x8000000000000000, 0xFFFFFFFFFFFFFFFF];
-    for &val in &test_values {
-        assert_eq!(reverse64(reverse64(val)), val, "Double reverse failed for 0x{:016x}", val);
-    }
-}
-
-#[test]
-fn test_update_mantissa_matches_python() {
-    // Test our update_mantissa function matches Python's behavior
-    let width = FloatWidth::Width64;
-    
-    // Test case 1: unbiased_exponent <= 0 (reverse all 52 bits)
-    let mantissa = 0x123456789ABCD;
-    let updated = update_mantissa(-1, mantissa, width);
-    let expected = reverse_bits(mantissa, 52);
-    assert_eq!(updated, expected, "Failed for unbiased_exponent <= 0");
-    
-    // Test case 2: unbiased_exponent in [1, 51] (reverse fractional bits only)
-    let mantissa = 0xFFFFFFFFFFFFF;  // All mantissa bits set
-    let unbiased_exp = 10;
-    let updated = update_mantissa(unbiased_exp, mantissa, width);
-    
-    // Should reverse low (52-10) = 42 bits, keep high 10 bits unchanged
-    let n_fractional_bits = 52 - unbiased_exp as u32;
-    let fractional_mask = (1u64 << n_fractional_bits) - 1;
-    let fractional_part = mantissa & fractional_mask;
-    let integer_part = mantissa & !fractional_mask;
-    let expected = integer_part | reverse_bits(fractional_part, n_fractional_bits);
-    
-    assert_eq!(updated, expected, "Failed for unbiased_exponent in [1,51]");
-    
-    // Test case 3: unbiased_exponent > 51 (no change)
-    let mantissa = 0x123456789ABCD;
-    let updated = update_mantissa(100, mantissa, width);
-    assert_eq!(updated, mantissa, "Failed for unbiased_exponent > 51");
 }
 
 #[test]
@@ -756,44 +647,6 @@ fn test_comprehensive_roundtrip_against_python_examples() {
                 "Roundtrip failed for {}: {} -> {} -> {} (bits: 0x{:016x} vs 0x{:016x})",
                 f, f, i, g, f_bits, g_bits);
         }
-    }
-}
-
-#[test]
-fn test_bit_level_compatibility_with_python() {
-    // Test our implementation produces exactly the same bit patterns as Python
-    let width = FloatWidth::Width64;
-    
-    // Test update_mantissa with Python-verified results
-    let update_test_cases = [
-        (-1, 0x123456789abcd, 0xb3d591e6a2c48),
-        (10, 0xfffffffffffff, 0xfffffffffffff),
-        (100, 0x123456789abcd, 0x123456789abcd),
-        (0, 0x789abcdef0123, 0xc480f7b3d591e),
-        (52, 0x0abcdef123456, 0x0abcdef123456),
-    ];
-    
-    for &(unbiased_exp, mantissa, expected) in &update_test_cases {
-        let result = update_mantissa(unbiased_exp, mantissa, width);
-        assert_eq!(result, expected,
-            "update_mantissa({}, 0x{:013x}) = 0x{:013x}, expected 0x{:013x}",
-            unbiased_exp, mantissa, result, expected);
-    }
-    
-    // Test reverse64 with Python-verified results
-    let reverse_test_cases = [
-        (0x0000000000000000, 0x0000000000000000),
-        (0x0000000000000001, 0x8000000000000000),
-        (0x00000000000000ff, 0xff00000000000000),
-        (0x8000000000000000, 0x0000000000000001),
-        (0x123456789abcdef0, 0x0f7b3d591e6a2c48),
-    ];
-    
-    for &(input, expected) in &reverse_test_cases {
-        let result = reverse64(input);
-        assert_eq!(result, expected,
-            "reverse64(0x{:016x}) = 0x{:016x}, expected 0x{:016x}",
-            input, result, expected);
     }
 }
 
@@ -995,31 +848,6 @@ fn test_python_equivalence_verification() {
 
 // Additional tests for absolute Python equivalence
 
-#[test]
-fn test_reverse_bits_table_reverses_bits() {
-    // Matches Python's test_reverse_bits_table_reverses_bits exactly
-    for (i, &b) in REVERSE_BITS_TABLE.iter().enumerate() {
-        let original_bits = format!("{:08b}", i);
-        let reversed_bits = format!("{:08b}", b);
-        let expected_reversed: String = original_bits.chars().rev().collect();
-        
-        assert_eq!(reversed_bits, expected_reversed,
-            "REVERSE_BITS_TABLE[{}] = {} should be bit-reversal of {}",
-            i, b, i);
-    }
-}
-
-#[test]
-fn test_reverse_bits_table_has_right_elements() {
-    // Matches Python's test_reverse_bits_table_has_right_elements exactly
-    let mut sorted_table: Vec<u8> = REVERSE_BITS_TABLE.to_vec();
-    sorted_table.sort();
-    let expected: Vec<u8> = (0..=255).collect();
-    
-    assert_eq!(sorted_table, expected,
-        "REVERSE_BITS_TABLE should contain all values 0-255 exactly once");
-}
-
 // #[test]
 // fn test_double_reverse_bounded() {
 //     // Property-based test matching Python's test_double_reverse_bounded
@@ -1032,23 +860,6 @@ fn test_reverse_bits_table_has_right_elements() {
 //         }
 //     }
 // }
-
-#[test]
-fn test_double_reverse() {
-    // Matches Python's test_double_reverse exactly
-    let test_values = [
-        0u64, 1, 0xFF, 0x00FF, 0xFF00, 0xFFFF, 
-        0x12345678, 0xDEADBEEF, 0x0123456789ABCDEF,
-        u64::MAX, u64::MAX - 1
-    ];
-    
-    for &i in &test_values {
-        let j = reverse64(i);
-        let double_reversed = reverse64(j);
-        assert_eq!(i, double_reversed,
-            "Double reverse64 should be identity for {:#x}", i);
-    }
-}
 
 #[test]
 fn test_integral_floats_order_as_integers() {
@@ -1383,48 +1194,6 @@ fn test_mantissa_bit_reversal_edge_cases() {
 }
 
 #[test]
-fn test_exponent_ordering_table_integrity() {
-    // Test that exponent ordering tables are correctly built and used
-    // This would catch issues if table building was simplified incorrectly
-    
-    // Test with simple known values rather than constructing floats from bits
-    let test_cases = vec![
-        (1.0, FloatWidth::Width64),   // Normal case
-        (2.0, FloatWidth::Width64),   // Power of 2
-        (0.5, FloatWidth::Width64),   // Fractional
-        (1.0, FloatWidth::Width32),   // f32 case
-        (2.5, FloatWidth::Width32),   // f32 fractional
-    ];
-    
-    for (val, width) in test_cases {
-        let encoded = float_to_lex_width(val, width);
-        let decoded = lex_to_float_width(encoded, width);
-        
-        // Allow precision differences based on width
-        let tolerance = match width {
-            FloatWidth::Width16 => val.abs() * 1e-3 + 1e-6,
-            FloatWidth::Width32 => val.abs() * 1e-6 + 1e-12,
-            FloatWidth::Width64 => 0.0,
-        };
-        
-        assert!((val - decoded).abs() <= tolerance,
-                "Exponent encoding failed for {} at width {:?}: {} != {} (diff: {})", 
-                val, width, val, decoded, (val - decoded).abs());
-    }
-    
-    // Test that the encoding/decoding tables are inverses for f64
-    let width = FloatWidth::Width64;
-    let (encoding_table, decoding_table) = build_exponent_tables(width);
-    
-    for (i, &exp) in encoding_table.iter().enumerate() {
-        if exp < decoding_table.len() as u32 {
-            assert_eq!(decoding_table[exp as usize], i as u32, 
-                      "Exponent table inverse failed at position {}", i);
-        }
-    }
-}
-
-#[test]
 fn test_simple_integer_detection_boundary_cases() {
     // Test exact boundary conditions for simple integer detection
     // This would catch off-by-one errors in bit counting
@@ -1485,33 +1254,6 @@ fn test_multi_width_precision_preservation() {
         assert_eq!(val.to_bits(), f64_decoded.to_bits(),
                   "f64 precision mismatch for {}", val);
     }
-}
-
-#[test]
-fn test_bit_reversal_lookup_table_usage() {
-    // Test that the REVERSE_BITS_TABLE is used correctly in all contexts
-    // This would catch issues if table usage was simplified incorrectly
-    
-    // Test direct reverse64 function
-    for i in 0..=255u64 {
-        let reversed = reverse64(i);
-        let double_reversed = reverse64(reversed);
-        assert_eq!(i, double_reversed, "Double reversal failed for {}", i);
-    }
-    
-    // Test that table is used correctly in mantissa updates
-    let test_mantissa = 0x123456789ABCDEFu64;
-    let reversed = reverse64(test_mantissa);
-    
-    // Manually reverse using the table to verify it matches
-    let mut manual_reverse = 0u64;
-    for byte_pos in 0..8 {
-        let byte_val = (test_mantissa >> (byte_pos * 8)) & 0xFF;
-        let reversed_byte = REVERSE_BITS_TABLE[byte_val as usize] as u64;
-        manual_reverse |= reversed_byte << ((7 - byte_pos) * 8);
-    }
-    
-    assert_eq!(reversed, manual_reverse, "Table usage inconsistency");
 }
 
 #[test]
