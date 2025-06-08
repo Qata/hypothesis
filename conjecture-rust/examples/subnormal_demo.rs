@@ -5,7 +5,6 @@ use conjecture::data::DataSource;
 use conjecture::floats::{
     draw_float_width_with_subnormals, 
     FloatWidth,
-    environment_supports_subnormals,
     subnormal_support_warning,
     is_subnormal_width,
     next_up_normal_width,

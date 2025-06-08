@@ -173,7 +173,7 @@ fn test_enhanced_float_generation_with_intelligent_defaults() {
         let mut source = DataSource::from_vec(test_data.clone());
         
         // Test unbounded generation - should allow NaN and infinity by default
-        let gen = floats(None, None, None, None, None, width, false, false);
+        let gen = floats(None, None, None, None, None, None, width, false, false);
         for _ in 0..10 {
             if let Ok(_val) = gen(&mut source) {
                 // Should succeed with default settings
@@ -182,7 +182,7 @@ fn test_enhanced_float_generation_with_intelligent_defaults() {
         
         // Test bounded generation - should disable NaN and infinity by default
         source = DataSource::from_vec(test_data.clone());
-        let gen = floats(Some(0.0), Some(1.0), None, None, None, width, false, false);
+        let gen = floats(Some(0.0), Some(1.0), None, None, None, None, width, false, false);
         for _ in 0..10 {
             if let Ok(val) = gen(&mut source) {
                 assert!(val >= 0.0 && val <= 1.0);
@@ -204,7 +204,7 @@ fn test_open_intervals_with_exclude_parameters() {
         
         // Test exclude_min
         let result = draw_float_enhanced(
-            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, width, true, false
+            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, true, false
         );
         if let Ok(val) = result {
             assert!(val > 0.0 && val <= 1.0); // Should exclude 0.0
@@ -213,7 +213,7 @@ fn test_open_intervals_with_exclude_parameters() {
         // Test exclude_max
         source = DataSource::from_vec(test_data.clone());
         let result = draw_float_enhanced(
-            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, width, false, true
+            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, false, true
         );
         if let Ok(val) = result {
             assert!(val >= 0.0 && val < 1.0); // Should exclude 1.0
@@ -222,7 +222,7 @@ fn test_open_intervals_with_exclude_parameters() {
         // Test exclude both
         source = DataSource::from_vec(test_data.clone());
         let result = draw_float_enhanced(
-            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, width, true, true
+            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, true, true
         );
         if let Ok(val) = result {
             assert!(val > 0.0 && val < 1.0); // Should exclude both endpoints
@@ -239,18 +239,18 @@ fn test_parameter_validation_with_helpful_errors() {
     
     // Test invalid bound relationship
     let result = draw_float_enhanced(
-        &mut source, Some(1.0), Some(0.0), None, None, None, FloatWidth::Width64, false, false
+        &mut source, Some(1.0), Some(0.0), None, None, None, None, FloatWidth::Width64, false, false
     );
     assert!(result.is_err()); // min > max should fail
     
     // Test excluding None bounds
     let result = draw_float_enhanced(
-        &mut source, None, Some(1.0), None, None, None, FloatWidth::Width64, true, false
+        &mut source, None, Some(1.0), None, None, None, None, FloatWidth::Width64, true, false
     );
     assert!(result.is_err()); // Can't exclude None min_value
     
     let result = draw_float_enhanced(
-        &mut source, Some(0.0), None, None, None, None, FloatWidth::Width64, false, true
+        &mut source, Some(0.0), None, None, None, None, None, FloatWidth::Width64, false, true
     );
     assert!(result.is_err()); // Can't exclude None max_value
 }
@@ -311,7 +311,7 @@ fn test_floats_strategy_function() {
         
         // Test the convenience floats() function
         let strategy = floats(
-            Some(0.0), Some(1.0), Some(false), Some(false), None, width, false, false
+            Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, false, false
         );
         
         for _ in 0..10 {
@@ -1875,4 +1875,219 @@ fn test_float_range_properties() {
                    start, lex_start, end, lex_end);
         }
     }
+}
+
+// Tests for new Python Hypothesis parity features
+
+#[test]
+fn test_global_float_constants_completeness() {
+    // Test that we have all the expected mathematical constants from Python
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&0.5));
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&1.1));
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&(1.0/3.0)));
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&10e6));
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&10e-6));
+    
+    // Test width-specific constants
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&1.175494351e-38)); // f32 smallest normal
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&2.2250738585072014e-308)); // f64 smallest normal
+    
+    // Test that we have negative versions (should be added by ConstantPool::new)
+    let pool = ConstantPool::new();
+    assert!(pool.global_constants.len() > 50); // Should have 50+ constants total with negatives
+    
+    // Test zero is present
+    assert!(GLOBAL_FLOAT_CONSTANTS.contains(&0.0));
+}
+
+#[test]
+fn test_signaling_nan_generation() {
+    let snan = signaling_nan();
+    let neg_snan = negative_signaling_nan();
+    
+    assert!(snan.is_nan());
+    assert!(neg_snan.is_nan());
+    assert_ne!(snan.to_bits(), neg_snan.to_bits());
+    assert_eq!(snan.to_bits(), SIGNALING_NAN_BITS);
+    assert_eq!(neg_snan.to_bits(), SIGNALING_NAN_BITS | (1u64 << 63));
+}
+
+#[test]
+fn test_constant_pool_filtering() {
+    let mut pool = ConstantPool::new();
+    
+    // Test basic constraint filtering
+    let valid_constants = pool.get_valid_constants(
+        Some(0.0), Some(10.0), false, false, true, 0.0, FloatWidth::Width64
+    );
+    
+    // Should only contain constants in [0.0, 10.0] range
+    for &constant in valid_constants {
+        assert!(constant >= 0.0 && constant <= 10.0, "Constant {} out of range", constant);
+        assert!(!constant.is_nan(), "NaN should be filtered out");
+        assert!(!constant.is_infinite(), "Infinity should be filtered out");
+    }
+}
+
+#[test]
+fn test_constant_pool_nan_filtering() {
+    let mut pool = ConstantPool::new();
+    
+    // Test with NaN allowed
+    let valid_with_nan = pool.get_valid_constants(
+        None, None, true, true, true, 0.0, FloatWidth::Width64
+    );
+    let has_nan = valid_with_nan.iter().any(|&x| x.is_nan());
+    assert!(has_nan, "Should include NaN when allowed");
+    
+    // Test with NaN disallowed
+    let valid_no_nan = pool.get_valid_constants(
+        None, None, false, true, true, 0.0, FloatWidth::Width64
+    );
+    let has_nan = valid_no_nan.iter().any(|&x| x.is_nan());
+    assert!(!has_nan, "Should not include NaN when disallowed");
+}
+
+#[test]
+fn test_is_constant_valid() {
+    // Test basic range validation
+    assert!(is_constant_valid(5.0, Some(0.0), Some(10.0), false, false, true, 0.0, FloatWidth::Width64));
+    assert!(!is_constant_valid(15.0, Some(0.0), Some(10.0), false, false, true, 0.0, FloatWidth::Width64));
+    
+    // Test NaN validation
+    assert!(is_constant_valid(f64::NAN, None, None, true, false, true, 0.0, FloatWidth::Width64));
+    assert!(!is_constant_valid(f64::NAN, None, None, false, false, true, 0.0, FloatWidth::Width64));
+    
+    // Test infinity validation
+    assert!(is_constant_valid(f64::INFINITY, None, None, false, true, true, 0.0, FloatWidth::Width64));
+    assert!(!is_constant_valid(f64::INFINITY, None, None, false, false, true, 0.0, FloatWidth::Width64));
+    
+    // Test smallest_nonzero_magnitude validation
+    assert!(!is_constant_valid(1e-10, None, None, false, false, true, 1e-5, FloatWidth::Width64));
+    assert!(is_constant_valid(1e-3, None, None, false, false, true, 1e-5, FloatWidth::Width64));
+}
+
+#[test]
+fn test_weird_floats_generation() {
+    let weird = generate_weird_floats(
+        Some(-10.0), Some(10.0), false, false, true, 0.0, FloatWidth::Width64
+    );
+    
+    // Should include boundary values when they meet constraints
+    assert!(weird.contains(&-10.0), "Should include min_value");
+    assert!(weird.contains(&10.0), "Should include max_value");
+    assert!(weird.contains(&0.0), "Should include zero");
+    assert!(weird.contains(&-0.0), "Should include negative zero");
+    
+    // Should not include NaN or infinity when disallowed
+    assert!(!weird.iter().any(|&x| x.is_nan()), "Should not include NaN");
+    assert!(!weird.iter().any(|&x| x.is_infinite()), "Should not include infinity");
+}
+
+#[test]
+fn test_weird_floats_with_dynamic_bounds() {
+    let weird = generate_weird_floats(
+        Some(1.5), Some(2.5), false, false, true, 0.0, FloatWidth::Width64
+    );
+    
+    // Should include min_value + 1 and max_value - 1 when possible
+    assert!(weird.contains(&1.5), "Should include min_value");
+    assert!(weird.contains(&2.5), "Should include max_value");
+    
+    // Should include next_up(min_value) and next_down(max_value)
+    let next_up_min = next_float_width(1.5, FloatWidth::Width64);
+    let next_down_max = prev_float_width(2.5, FloatWidth::Width64);
+    
+    if next_up_min <= 2.5 {
+        assert!(weird.contains(&next_up_min), "Should include next_up(min_value)");
+    }
+    if next_down_max >= 1.5 {
+        assert!(weird.contains(&next_down_max), "Should include next_down(max_value)");
+    }
+}
+
+#[test]
+fn test_float_clamper_basic() {
+    let clamper = make_float_clamper(0.0, 10.0, false, 0.0, FloatWidth::Width64);
+    
+    // Test values within range
+    assert_eq!(clamper(5.0), 5.0);
+    assert_eq!(clamper(0.0), 0.0);
+    assert_eq!(clamper(10.0), 10.0);
+    
+    // Test values outside range get clamped
+    let clamped_low = clamper(-5.0);
+    let clamped_high = clamper(15.0);
+    assert!(clamped_low >= 0.0 && clamped_low <= 10.0);
+    assert!(clamped_high >= 0.0 && clamped_high <= 10.0);
+}
+
+#[test]
+fn test_float_clamper_smallest_nonzero_magnitude() {
+    let clamper = make_float_clamper(-10.0, 10.0, false, 1.0, FloatWidth::Width64);
+    
+    // Test small values get handled appropriately
+    let result1 = clamper(0.5);
+    let result2 = clamper(-0.5);
+    
+    // Should either be zero or meet the smallest_nonzero_magnitude constraint
+    assert!(result1 == 0.0 || result1.abs() >= 1.0);
+    assert!(result2 == 0.0 || result2.abs() >= 1.0);
+    
+    // Test zero stays zero
+    assert_eq!(clamper(0.0), 0.0);
+    
+    // Test values above threshold are preserved (if in range)
+    assert_eq!(clamper(2.0), 2.0);
+    assert_eq!(clamper(-2.0), -2.0);
+}
+
+#[test]
+fn test_bounds_adjustment_for_exclusions() {
+    // Test excluding minimum
+    let (adj_min, adj_max) = adjust_bounds_for_exclusions(
+        Some(1.0), Some(10.0), true, false, FloatWidth::Width64
+    ).unwrap();
+    
+    assert!(adj_min.unwrap() > 1.0);
+    assert_eq!(adj_max.unwrap(), 10.0);
+    
+    // Test excluding maximum
+    let (adj_min, adj_max) = adjust_bounds_for_exclusions(
+        Some(1.0), Some(10.0), false, true, FloatWidth::Width64
+    ).unwrap();
+    
+    assert_eq!(adj_min.unwrap(), 1.0);
+    assert!(adj_max.unwrap() < 10.0);
+    
+    // Test excluding both
+    let (adj_min, adj_max) = adjust_bounds_for_exclusions(
+        Some(1.0), Some(10.0), true, true, FloatWidth::Width64
+    ).unwrap();
+    
+    assert!(adj_min.unwrap() > 1.0);
+    assert!(adj_max.unwrap() < 10.0);
+}
+
+#[test]
+fn test_auto_detection_functions() {
+    // Test NaN auto-detection
+    assert!(should_allow_nan_auto(None, None));
+    assert!(!should_allow_nan_auto(Some(0.0), None));
+    assert!(!should_allow_nan_auto(None, Some(10.0)));
+    assert!(!should_allow_nan_auto(Some(0.0), Some(10.0)));
+    
+    // Test infinity auto-detection
+    assert!(should_allow_infinity_auto(None, None));
+    assert!(should_allow_infinity_auto(Some(0.0), None));
+    assert!(should_allow_infinity_auto(None, Some(10.0)));
+    assert!(!should_allow_infinity_auto(Some(0.0), Some(10.0)));
+    
+    // Test subnormal auto-detection
+    let width = FloatWidth::Width64;
+    let smallest_normal = width.smallest_normal();
+    
+    assert!(!should_allow_subnormals_auto(None, None, width));
+    assert!(should_allow_subnormals_auto(Some(smallest_normal / 2.0), None, width));
+    assert!(should_allow_subnormals_auto(None, Some(smallest_normal / 2.0), width));
 }

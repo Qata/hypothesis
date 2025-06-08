@@ -34,7 +34,7 @@ fn main() {
         let mut source = DataSource::from_vec(test_data.clone());
         
         match draw_float_enhanced(
-            &mut source, min, max, Some(false), Some(false), None, 
+            &mut source, min, max, Some(false), Some(false), None, None,
             FloatWidth::Width64, exc_min, exc_max
         ) {
             Ok(val) => {
@@ -61,7 +61,7 @@ fn main() {
         
         // Using None for all special value parameters - should auto-detect!
         match draw_float_enhanced(
-            &mut source, min, max, None, None, None, 
+            &mut source, min, max, None, None, None, None,
             FloatWidth::Width64, false, false
         ) {
             Ok(val) => {
@@ -89,7 +89,7 @@ fn main() {
     
     for (desc, min, max, exc_min, exc_max) in test_cases {
         match draw_float_enhanced(
-            &mut source, min, max, Some(false), Some(false), None,
+            &mut source, min, max, Some(false), Some(false), None, None,
             FloatWidth::Width64, exc_min, exc_max
         ) {
             Ok(_) => println!("   {} → Unexpected success!", desc),
@@ -107,7 +107,7 @@ fn main() {
         
         // Create a strategy just like Python: floats(min_value=0, max_value=1, exclude_max=True)
         let strategy = floats(
-            Some(0.0), Some(1.0), None, None, None, width, false, true
+            Some(0.0), Some(1.0), None, None, None, None, width, false, true
         );
         
         if let Ok(val) = strategy(&mut source) {
@@ -130,7 +130,7 @@ fn main() {
         // Test subnormal auto-detection
         match draw_float_enhanced(
             &mut source, Some(tiny_value), Some(smallest_normal), 
-            None, None, None, width, false, false
+            None, None, None, None, width, false, false
         ) {
             Ok(val) => {
                 let is_subnormal = is_subnormal_width(val, width);
@@ -161,7 +161,7 @@ fn main() {
     for (desc, min, max, nan, inf, sub, width, exc_min, exc_max) in examples {
         let mut source = DataSource::from_vec(test_data.clone());
         
-        match draw_float_enhanced(&mut source, min, max, nan, inf, sub, width, exc_min, exc_max) {
+        match draw_float_enhanced(&mut source, min, max, nan, inf, sub, None, width, exc_min, exc_max) {
             Ok(val) => {
                 let classification = if val.is_nan() { 
                     "NaN".to_string() 
