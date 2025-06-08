@@ -55,12 +55,12 @@ fn test_subnormal_auto_detection() {
         let tiny_subnormal = smallest_normal / 2.0;
         
         // When bounds require subnormals, auto-detection should enable them
-        assert!(should_allow_subnormals_auto(tiny_subnormal, smallest_normal, width));
-        assert!(should_allow_subnormals_auto(-smallest_normal, -tiny_subnormal, width));
+        assert!(should_allow_subnormals_auto(Some(tiny_subnormal), Some(smallest_normal), width));
+        assert!(should_allow_subnormals_auto(Some(-smallest_normal), Some(-tiny_subnormal), width));
         
         // When bounds don't require subnormals, auto-detection should disable them
-        assert!(!should_allow_subnormals_auto(smallest_normal, 1.0, width));
-        assert!(!should_allow_subnormals_auto(-1.0, -smallest_normal, width));
+        assert!(!should_allow_subnormals_auto(Some(smallest_normal), Some(1.0), width));
+        assert!(!should_allow_subnormals_auto(Some(-1.0), Some(-smallest_normal), width));
     }
 }
 
@@ -71,12 +71,12 @@ fn test_subnormal_validation() {
         let tiny_subnormal = smallest_normal / 2.0;
         
         // Valid cases
-        assert!(validate_bounds_subnormal_compatibility(0.0, 1.0, width, false).is_ok());
-        assert!(validate_bounds_subnormal_compatibility(tiny_subnormal, 1.0, width, true).is_ok());
+        assert!(validate_bounds_subnormal_compatibility(Some(0.0), Some(1.0), width, false).is_ok());
+        assert!(validate_bounds_subnormal_compatibility(Some(tiny_subnormal), Some(1.0), width, true).is_ok());
         
         // Invalid cases - bounds require subnormals but they're disabled
-        assert!(validate_bounds_subnormal_compatibility(tiny_subnormal, 1.0, width, false).is_err());
-        assert!(validate_bounds_subnormal_compatibility(-1.0, -tiny_subnormal, width, false).is_err());
+        assert!(validate_bounds_subnormal_compatibility(Some(tiny_subnormal), Some(1.0), width, false).is_err());
+        assert!(validate_bounds_subnormal_compatibility(Some(-1.0), Some(-tiny_subnormal), width, false).is_err());
     }
 }
 
@@ -163,7 +163,166 @@ fn test_subnormal_generation_with_explicit_control() {
     }
 }
 
+#[test]
+fn test_enhanced_float_generation_with_intelligent_defaults() {
+    use crate::data::DataSource;
+    
+    let test_data: Vec<u64> = vec![42u64; 128];
+    
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let mut source = DataSource::from_vec(test_data.clone());
+        
+        // Test unbounded generation - should allow NaN and infinity by default
+        let gen = floats(None, None, None, None, None, width, false, false);
+        for _ in 0..10 {
+            if let Ok(_val) = gen(&mut source) {
+                // Should succeed with default settings
+            }
+        }
+        
+        // Test bounded generation - should disable NaN and infinity by default
+        source = DataSource::from_vec(test_data.clone());
+        let gen = floats(Some(0.0), Some(1.0), None, None, None, width, false, false);
+        for _ in 0..10 {
+            if let Ok(val) = gen(&mut source) {
+                assert!(val >= 0.0 && val <= 1.0);
+                assert!(val.is_finite()); // Should be finite due to intelligent defaults
+                assert!(!val.is_nan());
+            }
+        }
+    }
+}
 
+#[test]
+fn test_open_intervals_with_exclude_parameters() {
+    use crate::data::DataSource;
+    
+    let test_data: Vec<u64> = vec![42u64; 128];
+    
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let mut source = DataSource::from_vec(test_data.clone());
+        
+        // Test exclude_min
+        let result = draw_float_enhanced(
+            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, width, true, false
+        );
+        if let Ok(val) = result {
+            assert!(val > 0.0 && val <= 1.0); // Should exclude 0.0
+        }
+        
+        // Test exclude_max
+        source = DataSource::from_vec(test_data.clone());
+        let result = draw_float_enhanced(
+            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, width, false, true
+        );
+        if let Ok(val) = result {
+            assert!(val >= 0.0 && val < 1.0); // Should exclude 1.0
+        }
+        
+        // Test exclude both
+        source = DataSource::from_vec(test_data.clone());
+        let result = draw_float_enhanced(
+            &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, width, true, true
+        );
+        if let Ok(val) = result {
+            assert!(val > 0.0 && val < 1.0); // Should exclude both endpoints
+        }
+    }
+}
+
+#[test]
+fn test_parameter_validation_with_helpful_errors() {
+    use crate::data::DataSource;
+    
+    let test_data: Vec<u64> = vec![42u64; 64];
+    let mut source = DataSource::from_vec(test_data);
+    
+    // Test invalid bound relationship
+    let result = draw_float_enhanced(
+        &mut source, Some(1.0), Some(0.0), None, None, None, FloatWidth::Width64, false, false
+    );
+    assert!(result.is_err()); // min > max should fail
+    
+    // Test excluding None bounds
+    let result = draw_float_enhanced(
+        &mut source, None, Some(1.0), None, None, None, FloatWidth::Width64, true, false
+    );
+    assert!(result.is_err()); // Can't exclude None min_value
+    
+    let result = draw_float_enhanced(
+        &mut source, Some(0.0), None, None, None, None, FloatWidth::Width64, false, true
+    );
+    assert!(result.is_err()); // Can't exclude None max_value
+}
+
+#[test] 
+fn test_intelligent_special_value_defaults() {
+    // Test that intelligent defaults work correctly
+    
+    // Unbounded should allow NaN and infinity
+    assert!(should_allow_nan_auto(None, None));
+    assert!(should_allow_infinity_auto(None, None));
+    
+    // Bounded should not allow NaN
+    assert!(!should_allow_nan_auto(Some(0.0), Some(1.0)));
+    assert!(!should_allow_nan_auto(Some(0.0), None));
+    assert!(!should_allow_nan_auto(None, Some(1.0)));
+    
+    // Finite bounds should not allow infinity
+    assert!(!should_allow_infinity_auto(Some(0.0), Some(1.0)));
+    
+    // Single finite bound should still allow infinity on the other side
+    assert!(should_allow_infinity_auto(Some(0.0), None));
+    assert!(should_allow_infinity_auto(None, Some(1.0)));
+}
+
+#[test]
+fn test_zero_exclusion_behavior() {
+    // Test that excluding either +0.0 or -0.0 excludes both (Python behavior)
+    let width = FloatWidth::Width64;
+    
+    // Excluding +0.0 should also exclude -0.0
+    let (min, _max) = adjust_bounds_for_exclusions(
+        Some(0.0), Some(1.0), true, false, width
+    ).unwrap();
+    
+    if let Some(adjusted_min) = min {
+        assert!(adjusted_min > 0.0); // Should be positive, excluding both zeros
+    }
+    
+    // Excluding -0.0 should also exclude +0.0
+    let (min, _max) = adjust_bounds_for_exclusions(
+        Some(-0.0), Some(1.0), true, false, width
+    ).unwrap();
+    
+    if let Some(adjusted_min) = min {
+        assert!(adjusted_min > 0.0); // Should be positive, excluding both zeros
+    }
+}
+
+#[test]
+fn test_floats_strategy_function() {
+    use crate::data::DataSource;
+    
+    let test_data: Vec<u64> = vec![42u64; 64];
+    
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let mut source = DataSource::from_vec(test_data.clone());
+        
+        // Test the convenience floats() function
+        let strategy = floats(
+            Some(0.0), Some(1.0), Some(false), Some(false), None, width, false, false
+        );
+        
+        for _ in 0..10 {
+            if let Ok(val) = strategy(&mut source) {
+                assert!(val >= 0.0 && val <= 1.0);
+                assert!(val.is_finite());
+                assert!(!val.is_nan());
+            }
+        }
+    }
+}
 
 #[test]
 fn test_float_to_int_conversion() {

@@ -61,35 +61,122 @@ fn special_floats_for_width(width: FloatWidth) -> &'static [f64] {
     }
 }
 
-// Auto-detect whether subnormals should be allowed based on bounds.
-// This matches Python Hypothesis behavior: if the bounds require subnormals
-// to represent any values in the range, then subnormals are automatically enabled.
-fn should_allow_subnormals_auto(min_value: f64, max_value: f64, width: FloatWidth) -> bool {
-    let smallest_normal = width.smallest_normal();
+// Adjust bounds for open intervals by finding the next/previous representable float.
+// This implements the exclude_min/exclude_max functionality from Python Hypothesis.
+fn adjust_bounds_for_exclusions(
+    min_value: Option<f64>, 
+    max_value: Option<f64>, 
+    exclude_min: bool, 
+    exclude_max: bool, 
+    width: FloatWidth
+) -> Result<(Option<f64>, Option<f64>), &'static str> {
+    let mut adjusted_min = min_value;
+    let mut adjusted_max = max_value;
     
-    // If range includes values smaller than smallest normal, we need subnormals
-    if min_value > 0.0 && min_value < smallest_normal {
-        return true;
+    // Validate that we can't exclude None bounds
+    if exclude_min && min_value.is_none() {
+        return Err("Cannot exclude minimum when min_value is None");
     }
-    if max_value < 0.0 && max_value > -smallest_normal {
-        return true;
+    if exclude_max && max_value.is_none() {
+        return Err("Cannot exclude maximum when max_value is None");
     }
-    // If range spans zero and includes small values, we might need subnormals
-    if min_value <= 0.0 && max_value >= 0.0 {
-        if (min_value < 0.0 && min_value > -smallest_normal) || 
-           (max_value > 0.0 && max_value < smallest_normal) {
-            return true;
+    
+    // Adjust minimum bound if excluded
+    if exclude_min {
+        if let Some(min) = min_value {
+            // Special handling for zeros - excluding either zero excludes both
+            if min == 0.0 || min == -0.0 {
+                adjusted_min = Some(next_float_width(0.0, width)); // Smallest positive subnormal
+            } else {
+                adjusted_min = Some(next_float_width(min, width));
+            }
         }
     }
     
-    false
+    // Adjust maximum bound if excluded  
+    if exclude_max {
+        if let Some(max) = max_value {
+            // Special handling for zeros - excluding either zero excludes both
+            if max == 0.0 || max == -0.0 {
+                adjusted_max = Some(prev_float_width(0.0, width)); // Largest negative subnormal
+            } else {
+                adjusted_max = Some(prev_float_width(max, width));
+            }
+        }
+    }
+    
+    // Validate that bounds are still valid after adjustment
+    if let (Some(min), Some(max)) = (adjusted_min, adjusted_max) {
+        if min > max {
+            return Err("Excluding endpoints resulted in empty interval");
+        }
+    }
+    
+    Ok((adjusted_min, adjusted_max))
+}
+
+// Auto-detect whether NaN should be allowed based on bounds.
+// Python Hypothesis logic: allow NaN only when both min_value and max_value are None.
+fn should_allow_nan_auto(min_value: Option<f64>, max_value: Option<f64>) -> bool {
+    min_value.is_none() && max_value.is_none()
+}
+
+// Auto-detect whether infinity should be allowed based on bounds.
+// Python Hypothesis logic: allow infinity unless both bounds are finite and would exclude it.
+fn should_allow_infinity_auto(min_value: Option<f64>, max_value: Option<f64>) -> bool {
+    match (min_value, max_value) {
+        (None, None) => true, // No bounds, allow infinity
+        (Some(_min), None) => true, // Only lower bound, infinity could be above it
+        (None, Some(_max)) => true, // Only upper bound, infinity could be below it
+        (Some(min), Some(max)) => {
+            // Both bounds present - don't allow infinity if both bounds are finite
+            // If either bound is infinite, then infinity is in range
+            !min.is_finite() || !max.is_finite()
+        }
+    }
+}
+
+// Auto-detect whether subnormals should be allowed based on bounds.
+// This matches Python Hypothesis behavior: if the bounds require subnormals
+// to represent any values in the range, then subnormals are automatically enabled.
+fn should_allow_subnormals_auto(min_value: Option<f64>, max_value: Option<f64>, width: FloatWidth) -> bool {
+    let smallest_normal = width.smallest_normal();
+    
+    match (min_value, max_value) {
+        (None, None) => false, // No bounds, default to no subnormals
+        (Some(min), None) => {
+            // Only lower bound - need subnormals if bound is in subnormal range
+            (min > 0.0 && min < smallest_normal) || (min < 0.0 && min > -smallest_normal)
+        },
+        (None, Some(max)) => {
+            // Only upper bound - need subnormals if bound is in subnormal range  
+            (max > 0.0 && max < smallest_normal) || (max < 0.0 && max > -smallest_normal)
+        },
+        (Some(min), Some(max)) => {
+            // Both bounds present - check if range includes subnormal values
+            if min > 0.0 && min < smallest_normal {
+                return true;
+            }
+            if max < 0.0 && max > -smallest_normal {
+                return true;
+            }
+            // If range spans zero and includes small values, we might need subnormals
+            if min <= 0.0 && max >= 0.0 {
+                if (min < 0.0 && min > -smallest_normal) || 
+                   (max > 0.0 && max < smallest_normal) {
+                    return true;
+                }
+            }
+            false
+        }
+    }
 }
 
 // Validate that the bounds are compatible with subnormal settings.
 // Returns an error if subnormals are disabled but required for the bounds.
 fn validate_bounds_subnormal_compatibility(
-    min_value: f64, 
-    max_value: f64, 
+    min_value: Option<f64>, 
+    max_value: Option<f64>, 
     width: FloatWidth, 
     allow_subnormal: bool
 ) -> Result<(), &'static str> {
@@ -97,20 +184,59 @@ fn validate_bounds_subnormal_compatibility(
         return Ok(()); // Always valid if subnormals are allowed
     }
     
-    let smallest_normal = width.smallest_normal();
+    // If subnormals would be auto-detected as needed, but user explicitly disabled them
+    if should_allow_subnormals_auto(min_value, max_value, width) {
+        return Err("Bounds require subnormal numbers, but allow_subnormal=false");
+    }
     
-    // Check if bounds require subnormals but they're disabled
-    if min_value > 0.0 && min_value < smallest_normal {
-        return Err("min_value requires subnormal numbers, but allow_subnormal=false");
+    Ok(())
+}
+
+// Comprehensive parameter validation with helpful error messages.
+fn validate_float_generation_params(
+    min_value: Option<f64>,
+    max_value: Option<f64>, 
+    allow_nan: Option<bool>,
+    allow_infinity: Option<bool>,
+    allow_subnormal: Option<bool>,
+    exclude_min: bool,
+    exclude_max: bool,
+    width: FloatWidth,
+) -> Result<(), &'static str> {
+    // Validate basic bound relationship
+    if let (Some(min), Some(max)) = (min_value, max_value) {
+        if min > max {
+            return Err("min_value cannot be greater than max_value");
+        }
     }
-    if max_value < 0.0 && max_value > -smallest_normal {
-        return Err("max_value requires subnormal numbers, but allow_subnormal=false");
+    
+    // Validate exclude parameters
+    if exclude_min && min_value.is_none() {
+        return Err("Cannot exclude minimum when min_value is None - use allow_infinity=false for finite floats");
     }
-    if min_value < 0.0 && min_value > -smallest_normal && max_value >= 0.0 {
-        return Err("min_value requires subnormal numbers, but allow_subnormal=false");
+    if exclude_max && max_value.is_none() {
+        return Err("Cannot exclude maximum when max_value is None - use allow_infinity=false for finite floats");
     }
-    if max_value > 0.0 && max_value < smallest_normal && min_value <= 0.0 {
-        return Err("max_value requires subnormal numbers, but allow_subnormal=false");
+    
+    // Validate allow_nan with bounds
+    if let Some(true) = allow_nan {
+        if min_value.is_some() || max_value.is_some() {
+            return Err("Cannot allow NaN when min_value or max_value is specified");
+        }
+    }
+    
+    // Validate allow_infinity with finite bounds
+    if let Some(true) = allow_infinity {
+        if let (Some(min), Some(max)) = (min_value, max_value) {
+            if min.is_finite() && max.is_finite() {
+                return Err("Cannot allow infinity when both bounds are finite");
+            }
+        }
+    }
+    
+    // Validate subnormal compatibility
+    if let Some(explicit_subnormal) = allow_subnormal {
+        validate_bounds_subnormal_compatibility(min_value, max_value, width, explicit_subnormal)?;
     }
     
     Ok(())
@@ -202,14 +328,14 @@ pub fn draw_float_width_with_subnormals(
     let subnormal_allowed = match allow_subnormal {
         Some(explicit) => {
             // Validate explicit setting against bounds
-            if let Err(_msg) = validate_bounds_subnormal_compatibility(min_value, max_value, width, explicit) {
+            if let Err(_msg) = validate_bounds_subnormal_compatibility(Some(min_value), Some(max_value), width, explicit) {
                 return Err(FailedDraw);
             }
             explicit
         },
         None => {
             // Auto-detect based on bounds (Python Hypothesis behavior)
-            should_allow_subnormals_auto(min_value, max_value, width)
+            should_allow_subnormals_auto(Some(min_value), Some(max_value), width)
         }
     };
     
@@ -329,6 +455,190 @@ pub fn draw_float_with_subnormals(
     allow_subnormal: Option<bool>,
 ) -> Draw<f64> {
     draw_float_width_with_subnormals(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity, allow_subnormal)
+}
+
+// Enhanced float generation with full Python Hypothesis API compatibility.
+// This function supports all the features of Python's floats() strategy:
+// - Optional bounds with None support
+// - Open intervals with exclude_min/exclude_max
+// - Intelligent defaults for special values
+// - Comprehensive validation with helpful error messages
+pub fn draw_float_enhanced(
+    source: &mut DataSource,
+    min_value: Option<f64>,
+    max_value: Option<f64>,
+    allow_nan: Option<bool>,
+    allow_infinity: Option<bool>,
+    allow_subnormal: Option<bool>,
+    width: FloatWidth,
+    exclude_min: bool,
+    exclude_max: bool,
+) -> Draw<f64> {
+    // Validate all parameters
+    if let Err(_msg) = validate_float_generation_params(
+        min_value, max_value, allow_nan, allow_infinity, allow_subnormal, 
+        exclude_min, exclude_max, width
+    ) {
+        return Err(FailedDraw);
+    }
+    
+    // Adjust bounds for open intervals
+    let (adjusted_min, adjusted_max) = match adjust_bounds_for_exclusions(
+        min_value, max_value, exclude_min, exclude_max, width
+    ) {
+        Ok(bounds) => bounds,
+        Err(_msg) => return Err(FailedDraw),
+    };
+    
+    // Determine intelligent defaults for special values
+    let nan_allowed = allow_nan.unwrap_or_else(|| should_allow_nan_auto(adjusted_min, adjusted_max));
+    let infinity_allowed = allow_infinity.unwrap_or_else(|| should_allow_infinity_auto(adjusted_min, adjusted_max));
+    let subnormal_allowed = allow_subnormal.unwrap_or_else(|| should_allow_subnormals_auto(adjusted_min, adjusted_max, width));
+    
+    // Convert to concrete bounds for the existing implementation
+    let concrete_min = adjusted_min.unwrap_or(f64::NEG_INFINITY);
+    let concrete_max = adjusted_max.unwrap_or(f64::INFINITY);
+    
+    // Call the existing implementation with resolved parameters
+    draw_float_width_with_subnormals_impl(
+        source, width, concrete_min, concrete_max, 
+        nan_allowed, infinity_allowed, Some(subnormal_allowed)
+    )
+}
+
+// Internal implementation that works with concrete bounds.
+// This is the core generation logic separated from parameter processing.
+fn draw_float_width_with_subnormals_impl(
+    source: &mut DataSource,
+    width: FloatWidth,
+    min_value: f64,
+    max_value: f64,
+    allow_nan: bool,
+    allow_infinity: bool,
+    allow_subnormal: Option<bool>,
+) -> Draw<f64> {
+    // Determine subnormal policy
+    let subnormal_allowed = match allow_subnormal {
+        Some(explicit) => explicit,
+        None => {
+            // Auto-detect based on bounds (Python Hypothesis behavior)
+            should_allow_subnormals_auto(Some(min_value), Some(max_value), width)
+        }
+    };
+    
+    let special_floats = special_floats_for_width(width);
+    
+    // 5% chance of returning special values
+    if source.bits(6)? == 0 {
+        // Try to return a special value that fits constraints
+        for &special in special_floats {
+            if (!special.is_nan() || allow_nan)
+                && (!special.is_infinite() || allow_infinity)
+                && (!is_subnormal_width(special, width) || subnormal_allowed)
+                && special >= min_value
+                && special <= max_value
+            {
+                if source.bits(1)? == 0 {
+                    return Ok(special);
+                }
+            }
+        }
+    }
+    
+    // Generate using lexicographic encoding
+    let raw_bits = source.bits(width.bits() as u64)?;
+    let mut result = lex_to_float_width(raw_bits, width);
+    
+    // Apply random sign
+    if source.bits(1)? == 1 {
+        result = -result;
+    }
+    
+    // Handle NaN
+    if result.is_nan() && !allow_nan {
+        // Fallback to generating a finite value
+        let fallback_bits = source.bits(width.mantissa_bits() as u64 + 1)?;
+        result = (fallback_bits as f64) / (1u64 << (width.mantissa_bits() + 1)) as f64;
+        result = min_value + result * (max_value - min_value);
+        return Ok(result);
+    }
+    
+    // Handle infinity
+    if result.is_infinite() && !allow_infinity {
+        // Clamp to finite bounds for the width
+        result = if result.is_sign_positive() {
+            match width {
+                FloatWidth::Width16 => 65504.0,    // f16::MAX
+                FloatWidth::Width32 => 3.4028235e38, // f32::MAX  
+                FloatWidth::Width64 => f64::MAX,
+            }
+        } else {
+            match width {
+                FloatWidth::Width16 => -65504.0,   // f16::MIN
+                FloatWidth::Width32 => -3.4028235e38, // f32::MIN
+                FloatWidth::Width64 => f64::MIN,
+            }
+        };
+    }
+    
+    // Handle subnormal exclusion
+    if is_subnormal_width(result, width) && !subnormal_allowed {
+        // Replace subnormal with nearest normal number
+        if result > 0.0 {
+            result = width.smallest_normal();
+        } else {
+            result = -width.smallest_normal();
+        }
+    }
+    
+    // Clamp to bounds
+    if result < min_value {
+        result = min_value;
+    } else if result > max_value {
+        result = max_value;
+    }
+    
+    // Final subnormal check after clamping
+    if is_subnormal_width(result, width) && !subnormal_allowed {
+        // If clamping produced a subnormal, find nearest normal in bounds
+        if result > 0.0 {
+            let next_normal = next_up_normal_width(result, width);
+            if next_normal <= max_value {
+                result = next_normal;
+            } else {
+                result = next_down_normal_width(max_value, width);
+            }
+        } else {
+            let next_normal = next_down_normal_width(result, width);
+            if next_normal >= min_value {
+                result = next_normal;
+            } else {
+                result = next_up_normal_width(min_value, width);
+            }
+        }
+    }
+    
+    Ok(result)
+}
+
+// Convenience function matching Python Hypothesis floats() signature exactly.
+// This provides the most user-friendly API with intelligent defaults.
+pub fn floats(
+    min_value: Option<f64>,
+    max_value: Option<f64>,
+    allow_nan: Option<bool>,
+    allow_infinity: Option<bool>,
+    allow_subnormal: Option<bool>,
+    width: FloatWidth,
+    exclude_min: bool,
+    exclude_max: bool,
+) -> impl Fn(&mut DataSource) -> Draw<f64> {
+    move |source: &mut DataSource| {
+        draw_float_enhanced(
+            source, min_value, max_value, allow_nan, allow_infinity, 
+            allow_subnormal, width, exclude_min, exclude_max
+        )
+    }
 }
 
 // Backward compatibility functions for normal-only helpers
