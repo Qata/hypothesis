@@ -72,4 +72,14 @@ impl FloatWidth {
     pub fn mantissa_mask(self) -> u64 {
         (1u64 << self.mantissa_bits()) - 1
     }
+    
+    /// Get the smallest positive normal number for this width.
+    /// This is 2^(-bias) for each width.
+    pub fn smallest_normal(self) -> f64 {
+        match self {
+            FloatWidth::Width16 => 6.103515625e-5,  // 2^-14
+            FloatWidth::Width32 => 1.1754943508222875e-38,  // 2^-126  
+            FloatWidth::Width64 => 2.2250738585072014e-308, // 2^-1022
+        }
+    }
 }

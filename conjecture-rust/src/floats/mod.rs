@@ -11,6 +11,8 @@ pub use encoding::{
     lex_to_float, float_to_lex
 };
 
+// Note: Functions defined in this module are automatically exported with pub
+
 use crate::data::{DataSource, FailedDraw};
 use half::f16;
 
@@ -59,9 +61,120 @@ fn special_floats_for_width(width: FloatWidth) -> &'static [f64] {
     }
 }
 
+// Auto-detect whether subnormals should be allowed based on bounds.
+// This matches Python Hypothesis behavior: if the bounds require subnormals
+// to represent any values in the range, then subnormals are automatically enabled.
+fn should_allow_subnormals_auto(min_value: f64, max_value: f64, width: FloatWidth) -> bool {
+    let smallest_normal = width.smallest_normal();
+    
+    // If range includes values smaller than smallest normal, we need subnormals
+    if min_value > 0.0 && min_value < smallest_normal {
+        return true;
+    }
+    if max_value < 0.0 && max_value > -smallest_normal {
+        return true;
+    }
+    // If range spans zero and includes small values, we might need subnormals
+    if min_value <= 0.0 && max_value >= 0.0 {
+        if (min_value < 0.0 && min_value > -smallest_normal) || 
+           (max_value > 0.0 && max_value < smallest_normal) {
+            return true;
+        }
+    }
+    
+    false
+}
+
+// Validate that the bounds are compatible with subnormal settings.
+// Returns an error if subnormals are disabled but required for the bounds.
+fn validate_bounds_subnormal_compatibility(
+    min_value: f64, 
+    max_value: f64, 
+    width: FloatWidth, 
+    allow_subnormal: bool
+) -> Result<(), &'static str> {
+    if allow_subnormal {
+        return Ok(()); // Always valid if subnormals are allowed
+    }
+    
+    let smallest_normal = width.smallest_normal();
+    
+    // Check if bounds require subnormals but they're disabled
+    if min_value > 0.0 && min_value < smallest_normal {
+        return Err("min_value requires subnormal numbers, but allow_subnormal=false");
+    }
+    if max_value < 0.0 && max_value > -smallest_normal {
+        return Err("max_value requires subnormal numbers, but allow_subnormal=false");
+    }
+    if min_value < 0.0 && min_value > -smallest_normal && max_value >= 0.0 {
+        return Err("min_value requires subnormal numbers, but allow_subnormal=false");
+    }
+    if max_value > 0.0 && max_value < smallest_normal && min_value <= 0.0 {
+        return Err("max_value requires subnormal numbers, but allow_subnormal=false");
+    }
+    
+    Ok(())
+}
+
+// Get the next normal float after a value, skipping subnormals.
+// This finds the smallest normal number greater than the given value.
+pub fn next_up_normal_width(value: f64, width: FloatWidth) -> f64 {
+    if value.is_nan() {
+        return value;
+    }
+    
+    let smallest_normal = width.smallest_normal();
+    
+    // If we're below the smallest positive normal, jump to it
+    if value < smallest_normal {
+        return smallest_normal;
+    }
+    
+    // If we're negative and above the negative smallest normal, jump to positive smallest normal
+    if value >= -smallest_normal && value < 0.0 {
+        return smallest_normal;
+    }
+    
+    // Otherwise find the next representable normal number
+    let mut candidate = next_float_width(value, width);
+    while candidate.is_finite() && candidate > value && is_subnormal_width(candidate, width) {
+        candidate = next_float_width(candidate, width);
+    }
+    
+    candidate
+}
+
+// Get the previous normal float before a value, skipping subnormals.
+// This finds the largest normal number less than the given value.
+pub fn next_down_normal_width(value: f64, width: FloatWidth) -> f64 {
+    if value.is_nan() {
+        return value;
+    }
+    
+    let smallest_normal = width.smallest_normal();
+    
+    // If we're above the negative smallest normal, jump to it
+    if value > -smallest_normal {
+        return -smallest_normal;
+    }
+    
+    // If we're positive and below the positive smallest normal, jump to negative smallest normal
+    if value <= smallest_normal && value > 0.0 {
+        return -smallest_normal;
+    }
+    
+    // Otherwise find the previous representable normal number
+    let mut candidate = prev_float_width(value, width);
+    while candidate.is_finite() && candidate < value && is_subnormal_width(candidate, width) {
+        candidate = prev_float_width(candidate, width);
+    }
+    
+    candidate
+}
+
 // Generate a random float using lexicographic encoding with width support.
 // This function provides the main entry point for width-aware float generation
-// with full control over bounds and special value handling.
+// with full control over bounds, special values, and subnormal handling.
 pub fn draw_float_width(
     source: &mut DataSource,
     width: FloatWidth,
@@ -70,6 +183,36 @@ pub fn draw_float_width(
     allow_nan: bool,
     allow_infinity: bool,
 ) -> Draw<f64> {
+    draw_float_width_with_subnormals(source, width, min_value, max_value, allow_nan, allow_infinity, None)
+}
+
+// Generate a random float with explicit subnormal control.
+// When allow_subnormal is None, auto-detection logic is used (matching Python).
+// When allow_subnormal is Some(bool), it provides explicit control.
+pub fn draw_float_width_with_subnormals(
+    source: &mut DataSource,
+    width: FloatWidth,
+    min_value: f64,
+    max_value: f64,
+    allow_nan: bool,
+    allow_infinity: bool,
+    allow_subnormal: Option<bool>,
+) -> Draw<f64> {
+    // Determine subnormal policy
+    let subnormal_allowed = match allow_subnormal {
+        Some(explicit) => {
+            // Validate explicit setting against bounds
+            if let Err(_msg) = validate_bounds_subnormal_compatibility(min_value, max_value, width, explicit) {
+                return Err(FailedDraw);
+            }
+            explicit
+        },
+        None => {
+            // Auto-detect based on bounds (Python Hypothesis behavior)
+            should_allow_subnormals_auto(min_value, max_value, width)
+        }
+    };
+    
     let special_floats = special_floats_for_width(width);
     
     // 5% chance of returning special values
@@ -78,6 +221,7 @@ pub fn draw_float_width(
         for &special in special_floats {
             if (!special.is_nan() || allow_nan)
                 && (!special.is_infinite() || allow_infinity)
+                && (!is_subnormal_width(special, width) || subnormal_allowed)
                 && special >= min_value
                 && special <= max_value
             {
@@ -124,11 +268,41 @@ pub fn draw_float_width(
         };
     }
     
+    // Handle subnormal exclusion
+    if is_subnormal_width(result, width) && !subnormal_allowed {
+        // Replace subnormal with nearest normal number
+        if result > 0.0 {
+            result = width.smallest_normal();
+        } else {
+            result = -width.smallest_normal();
+        }
+    }
+    
     // Clamp to bounds
     if result < min_value {
         result = min_value;
     } else if result > max_value {
         result = max_value;
+    }
+    
+    // Final subnormal check after clamping
+    if is_subnormal_width(result, width) && !subnormal_allowed {
+        // If clamping produced a subnormal, find nearest normal in bounds
+        if result > 0.0 {
+            let next_normal = next_up_normal_width(result, width);
+            if next_normal <= max_value {
+                result = next_normal;
+            } else {
+                result = next_down_normal_width(max_value, width);
+            }
+        } else {
+            let next_normal = next_down_normal_width(result, width);
+            if next_normal >= min_value {
+                result = next_normal;
+            } else {
+                result = next_up_normal_width(min_value, width);
+            }
+        }
     }
     
     Ok(result)
@@ -143,6 +317,65 @@ pub fn draw_float(
     allow_infinity: bool,
 ) -> Draw<f64> {
     draw_float_width(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity)
+}
+
+// Backward compatibility function for f64 generation with subnormal control
+pub fn draw_float_with_subnormals(
+    source: &mut DataSource,
+    min_value: f64,
+    max_value: f64,
+    allow_nan: bool,
+    allow_infinity: bool,
+    allow_subnormal: Option<bool>,
+) -> Draw<f64> {
+    draw_float_width_with_subnormals(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity, allow_subnormal)
+}
+
+// Backward compatibility functions for normal-only helpers
+pub fn next_up_normal(value: f64) -> f64 {
+    next_up_normal_width(value, FloatWidth::Width64)
+}
+
+pub fn next_down_normal(value: f64) -> f64 {
+    next_down_normal_width(value, FloatWidth::Width64)
+}
+
+// Flush-to-Zero (FTZ) detection utilities.
+// These functions help detect broken subnormal support in the runtime environment.
+
+// Check if the current environment supports subnormal numbers properly.
+// Returns false if subnormals are flushed to zero (FTZ mode enabled).
+pub fn environment_supports_subnormals() -> bool {
+    // Test with the smallest positive subnormal for f64
+    let tiny_subnormal = min_positive_subnormal_width(FloatWidth::Width64);
+    
+    // If FTZ is enabled, arithmetic with subnormals will produce zero
+    let result = tiny_subnormal * 0.5;
+    
+    // In proper IEEE 754, this should produce an even smaller subnormal
+    // In FTZ mode, this will be flushed to zero
+    result != 0.0 && result < tiny_subnormal
+}
+
+// Detect if subnormals are flushed to zero for a specific width.
+pub fn detect_ftz_for_width(width: FloatWidth) -> bool {
+    let tiny_subnormal = min_positive_subnormal_width(width);
+    
+    // Perform operation that should produce a smaller subnormal
+    let result = tiny_subnormal * 0.5;
+    
+    // If result is zero, FTZ is likely enabled
+    result == 0.0
+}
+
+// Get a warning message if subnormals are not properly supported.
+pub fn subnormal_support_warning() -> Option<&'static str> {
+    if !environment_supports_subnormals() {
+        Some("Warning: Subnormal numbers appear to be flushed to zero in this environment. \
+              This may affect the accuracy of float generation when allow_subnormal=true.")
+    } else {
+        None
+    }
 }
 
 // Bit-level reinterpretation utilities for float/integer conversion.

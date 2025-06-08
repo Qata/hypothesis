@@ -48,6 +48,121 @@ fn test_width_aware_generation() {
     }
 }
 
+#[test]
+fn test_subnormal_auto_detection() {
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let smallest_normal = width.smallest_normal();
+        let tiny_subnormal = smallest_normal / 2.0;
+        
+        // When bounds require subnormals, auto-detection should enable them
+        assert!(should_allow_subnormals_auto(tiny_subnormal, smallest_normal, width));
+        assert!(should_allow_subnormals_auto(-smallest_normal, -tiny_subnormal, width));
+        
+        // When bounds don't require subnormals, auto-detection should disable them
+        assert!(!should_allow_subnormals_auto(smallest_normal, 1.0, width));
+        assert!(!should_allow_subnormals_auto(-1.0, -smallest_normal, width));
+    }
+}
+
+#[test]
+fn test_subnormal_validation() {
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let smallest_normal = width.smallest_normal();
+        let tiny_subnormal = smallest_normal / 2.0;
+        
+        // Valid cases
+        assert!(validate_bounds_subnormal_compatibility(0.0, 1.0, width, false).is_ok());
+        assert!(validate_bounds_subnormal_compatibility(tiny_subnormal, 1.0, width, true).is_ok());
+        
+        // Invalid cases - bounds require subnormals but they're disabled
+        assert!(validate_bounds_subnormal_compatibility(tiny_subnormal, 1.0, width, false).is_err());
+        assert!(validate_bounds_subnormal_compatibility(-1.0, -tiny_subnormal, width, false).is_err());
+    }
+}
+
+#[test]
+fn test_next_normal_functions() {
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let smallest_normal = width.smallest_normal();
+        let tiny_subnormal = smallest_normal / 2.0;
+        
+        // Test next_up_normal_width
+        let next_up = next_up_normal_width(tiny_subnormal, width);
+        assert_eq!(next_up, smallest_normal);
+        
+        let next_up_neg = next_up_normal_width(-tiny_subnormal, width);
+        assert_eq!(next_up_neg, smallest_normal);
+        
+        // Test next_down_normal_width
+        let next_down = next_down_normal_width(tiny_subnormal, width);
+        assert_eq!(next_down, -smallest_normal);
+        
+        let next_down_neg = next_down_normal_width(-tiny_subnormal, width);
+        assert_eq!(next_down_neg, -smallest_normal);
+    }
+}
+
+#[test]
+fn test_smallest_normal_constants() {
+    // Test that smallest normal constants are correct
+    assert_eq!(FloatWidth::Width16.smallest_normal(), 6.103515625e-5);
+    assert_eq!(FloatWidth::Width32.smallest_normal(), 1.1754943508222875e-38);
+    assert_eq!(FloatWidth::Width64.smallest_normal(), 2.2250738585072014e-308);
+    
+    // Test that these are actually the smallest normal numbers
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let smallest_normal = width.smallest_normal();
+        assert!(!is_subnormal_width(smallest_normal, width));
+        
+        // The previous float should be subnormal or zero
+        let prev = prev_float_width(smallest_normal, width);
+        assert!(prev == 0.0 || is_subnormal_width(prev, width));
+    }
+}
+
+#[test]
+fn test_ftz_detection() {
+    // Basic FTZ detection test - this may vary by platform
+    let _supports_subnormals = environment_supports_subnormals();
+    
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let _ftz_detected = detect_ftz_for_width(width);
+        // We can't assert specific values since this depends on the runtime environment
+        // but we can test that the functions don't panic
+    }
+}
+
+#[test]
+fn test_subnormal_generation_with_explicit_control() {
+    use crate::data::DataSource;
+    
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let test_data: Vec<u64> = vec![42u64; 128];
+        let mut source = DataSource::from_vec(test_data);
+        
+        let smallest_normal = width.smallest_normal();
+        let tiny_range_min = smallest_normal / 4.0;
+        let tiny_range_max = smallest_normal / 2.0;
+        
+        // Test with subnormals explicitly enabled
+        for _ in 0..10 {
+            let result = draw_float_width_with_subnormals(
+                &mut source, width, tiny_range_min, tiny_range_max, false, false, Some(true)
+            );
+            if let Ok(val) = result {
+                assert!(val >= tiny_range_min && val <= tiny_range_max);
+                // We might get subnormals in this range
+            }
+        }
+        
+        // Test with subnormals explicitly disabled (should error for incompatible bounds)
+        let result = draw_float_width_with_subnormals(
+            &mut source, width, tiny_range_min, tiny_range_max, false, false, Some(false)
+        );
+        assert!(result.is_err()); // Should fail validation
+    }
+}
+
 
 
 #[test]
