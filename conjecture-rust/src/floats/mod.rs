@@ -3,7 +3,7 @@
 // (16, 32, and 64-bit) and lexicographic ordering for excellent shrinking properties.
 
 mod constants;
-mod encoding;
+pub mod encoding;
 
 pub use constants::{FloatWidth, REVERSE_BITS_TABLE, SIMPLE_THRESHOLD_BITS};
 pub use encoding::{
@@ -268,30 +268,71 @@ fn clamp_float(min_val: f64, value: f64, max_val: f64) -> f64 {
     }
 }
 
-// Generate multiple NaN varieties with different bit patterns (Python parity)
-fn generate_nan_varieties(width: FloatWidth) -> Vec<f64> {
+// Generate multiple NaN varieties with different bit patterns (enhanced Python parity)
+pub fn generate_nan_varieties(width: FloatWidth) -> Vec<f64> {
     let mut nans = vec![f64::NAN, -f64::NAN];
     
-    // Add some different NaN bit patterns (simplified version of Python's approach)
-    let base_nan_bits = float_to_int(f64::NAN, width);
+    // Enhanced NaN generation to match Python's comprehensive approach
     let mantissa_mask = width.mantissa_mask();
+    let exponent_mask = ((1u64 << width.exponent_bits()) - 1) << width.mantissa_bits();
+    let sign_bit = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
     
-    // Generate a few different mantissa patterns for NaN
-    for i in [1u64, mantissa_mask / 2, mantissa_mask - 1] {
-        if i != 0 && i < mantissa_mask {
-            let sign_bit = if width.bits() == 64 { 1u64 << 63 } else { 1u64 << (width.bits() - 1) };
+    // Generate various mantissa patterns like Python does
+    let mantissa_patterns = [
+        1u64,                          // Smallest signaling NaN
+        mantissa_mask / 4,             // Quarter mantissa
+        mantissa_mask / 2,             // Half mantissa
+        (3 * mantissa_mask) / 4,       // Three-quarter mantissa
+        mantissa_mask - 1,             // Largest signaling NaN
+        mantissa_mask,                 // Quiet NaN boundary
+        (1u64 << (width.mantissa_bits() - 1)), // MSB of mantissa set (quiet NaN)
+        0x123456789abcdefu64 & mantissa_mask,   // Pseudo-random pattern
+        0xfedcba9876543210u64 & mantissa_mask,   // Another pattern
+        0x5555555555555555u64 & mantissa_mask,   // Alternating bits
+        0xaaaaaaaaaaaaaaaau64 & mantissa_mask,   // Inverted alternating bits
+    ];
+    
+    for &mantissa in &mantissa_patterns {
+        if mantissa != 0 && mantissa <= mantissa_mask {
+            // Create NaN with all exponent bits set and specific mantissa
+            let nan_bits = exponent_mask | mantissa;
             
-            // Positive NaN with different mantissa
-            let pos_nan_bits = (base_nan_bits & !mantissa_mask) | i;
-            nans.push(int_to_float(pos_nan_bits, width));
+            // Positive NaN
+            nans.push(int_to_float(nan_bits, width));
             
-            // Negative NaN with different mantissa  
-            let neg_nan_bits = pos_nan_bits | sign_bit;
-            nans.push(int_to_float(neg_nan_bits, width));
+            // Negative NaN
+            nans.push(int_to_float(nan_bits | sign_bit, width));
         }
     }
     
-    nans
+    // Add special NaN varieties from the global constants
+    nans.push(signaling_nan());
+    nans.push(negative_signaling_nan());
+    
+    // Generate some random-ish NaN patterns (Python does this)
+    for shift in [1, 7, 13, 19, 31] {
+        if shift < width.mantissa_bits() {
+            let pattern = (0x123456789abcdefu64 >> shift) & mantissa_mask;
+            if pattern != 0 {
+                let nan_bits = exponent_mask | pattern;
+                nans.push(int_to_float(nan_bits, width));
+                nans.push(int_to_float(nan_bits | sign_bit, width));
+            }
+        }
+    }
+    
+    // Remove duplicates while preserving bit patterns
+    let mut unique_nans = Vec::new();
+    let mut seen_bits = std::collections::HashSet::new();
+    
+    for nan in nans {
+        let bits = float_to_int(nan, width);
+        if seen_bits.insert(bits) {
+            unique_nans.push(nan);
+        }
+    }
+    
+    unique_nans
 }
 
 fn special_floats_for_width(width: FloatWidth) -> Vec<f64> {
@@ -858,7 +899,7 @@ pub fn draw_float_width_with_subnormals(
 // - Intelligent defaults for special values
 // - smallest_nonzero_magnitude parameter for fine-grained control
 // - Comprehensive validation with helpful error messages
-/// Draw a float with support for local constants from AST parsing (e.g., Swift FFI)
+/// Draw a float with support for local constants from AST parsing
 pub fn draw_float_with_local_constants(
     source: &mut DataSource,
     min_value: Option<f64>,
@@ -1134,7 +1175,7 @@ pub fn floats(
     }
 }
 
-/// Generate floats with local constants from AST parsing (e.g., Swift FFI)
+/// Generate floats with local constants from AST parsing
 pub fn floats_with_local_constants(
     min_value: Option<f64>,
     max_value: Option<f64>,
@@ -1154,7 +1195,6 @@ pub fn floats_with_local_constants(
         )
     }
 }
-
 
 // Flush-to-Zero (FTZ) detection utilities.
 // These functions help detect broken subnormal support in the runtime environment.

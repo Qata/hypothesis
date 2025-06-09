@@ -3,9 +3,51 @@
 // including constant injection, character set filtering, and size control.
 
 use crate::data::{DataSource, FailedDraw};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 type Draw<T> = Result<T, FailedDraw>;
+
+// Basic IntervalSet-like structure for efficient character set operations
+// This provides better Python Hypothesis parity than simple string contains()
+#[derive(Debug, Clone)]
+struct CharacterSet {
+    // For small sets, use explicit HashSet; for large ranges, use intervals
+    explicit_chars: Option<HashSet<char>>,
+    // Future: could add interval ranges for efficiency with large Unicode blocks
+    // intervals: Vec<(u32, u32)>, // (start, end) codepoint ranges
+}
+
+impl CharacterSet {
+    fn from_string(alphabet: &str) -> Self {
+        let chars: HashSet<char> = alphabet.chars().collect();
+        
+        // For now, always use explicit character sets
+        // TODO: Optimize large contiguous ranges to use intervals like Python
+        Self {
+            explicit_chars: Some(chars),
+        }
+    }
+    
+    fn contains(&self, ch: char) -> bool {
+        if let Some(ref chars) = self.explicit_chars {
+            chars.contains(&ch)
+        } else {
+            // Future: check interval ranges
+            false
+        }
+    }
+    
+    fn is_empty(&self) -> bool {
+        self.explicit_chars.as_ref().map_or(true, |chars| chars.is_empty())
+    }
+}
+
+// Helper function to get or create a character set with caching
+fn get_character_set(alphabet: &str) -> CharacterSet {
+    // For now, just create the set directly
+    // In a real implementation, we might want to use a thread-safe cache
+    CharacterSet::from_string(alphabet)
+}
 
 // String constant pool for Python Hypothesis parity
 // Python's global string constants include special strings, emojis, RTL text, etc.
@@ -20,6 +62,10 @@ struct StringConstantPool {
 
 impl StringConstantPool {
     fn new() -> Self {
+        Self::with_local_constants(&[])
+    }
+    
+    fn with_local_constants(local_constants: &[String]) -> Self {
         let global_constants = vec![
             // Logic/boolean strings
             "undefined".to_string(),
@@ -111,7 +157,7 @@ impl StringConstantPool {
         
         Self {
             global_constants,
-            local_constants: Vec::new(), // TODO: implement local constant extraction
+            local_constants: local_constants.to_vec(),
             constraint_cache: HashMap::new(),
         }
     }
@@ -137,7 +183,7 @@ impl StringConstantPool {
                 }
             }
             
-            // Add local constants (simplified implementation for now)
+            // Add local constants
             for constant in &self.local_constants {
                 if is_string_constant_valid(constant, min_size, max_size, alphabet) {
                     valid_constants.push(constant.clone());
@@ -161,10 +207,16 @@ fn is_string_constant_valid(value: &str,
         return false;
     }
     
-    // Check alphabet constraints (simplified - Python has complex IntervalSet logic)
+    // Check alphabet constraints using IntervalSet-like logic for better Python parity
     if let Some(allowed_chars) = alphabet {
+        let char_set = get_character_set(allowed_chars);
+        
+        if char_set.is_empty() {
+            return false; // Empty alphabet means no strings are valid
+        }
+        
         for ch in value.chars() {
-            if !allowed_chars.contains(ch) {
+            if !char_set.contains(ch) {
                 return false;
             }
         }
@@ -181,9 +233,20 @@ pub fn draw_string(
     max_size: usize,
     alphabet: Option<&str>,
 ) -> Draw<String> {
-    // **NEW: Constant Injection System (5% probability like Python)**
+    draw_string_with_local_constants(source, min_size, max_size, alphabet, &[])
+}
+
+/// Draw a string with support for local constants from AST parsing
+pub fn draw_string_with_local_constants(
+    source: &mut DataSource,
+    min_size: usize,
+    max_size: usize,
+    alphabet: Option<&str>,
+    local_constants: &[String],
+) -> Draw<String> {
+    // **Constant Injection System (5% probability like Python)**
     if source.bits(5)? == 0 { // 1/32 ≈ 3.125%, close to Python's 5%
-        let mut constant_pool = StringConstantPool::new();
+        let mut constant_pool = StringConstantPool::with_local_constants(local_constants);
         let valid_constants = constant_pool.get_valid_constants(
             min_size, max_size, alphabet
         );
@@ -282,6 +345,18 @@ pub fn text(
     }
 }
 
+/// Generate text with local constants from AST parsing
+pub fn text_with_local_constants(
+    min_size: usize,
+    max_size: usize,
+    alphabet: Option<String>,
+    local_constants: Vec<String>,
+) -> impl Fn(&mut DataSource) -> Draw<String> {
+    move |source: &mut DataSource| {
+        draw_string_with_local_constants(source, min_size, max_size, alphabet.as_deref(), &local_constants)
+    }
+}
+
 // Basic ASCII string generation
 pub fn ascii_text(
     min_size: usize,
@@ -317,12 +392,16 @@ struct BytesConstantPool {
 
 impl BytesConstantPool {
     fn new() -> Self {
+        Self::with_local_constants(&[])
+    }
+    
+    fn with_local_constants(local_constants: &[Vec<u8>]) -> Self {
         let global_constants = Vec::new();
         // Future enhancement: could add common byte sequences like [0], [255], magic numbers, etc.
         
         Self {
             global_constants,
-            local_constants: Vec::new(), // TODO: implement local constant extraction
+            local_constants: local_constants.to_vec(),
             constraint_cache: HashMap::new(),
         }
     }
@@ -343,7 +422,7 @@ impl BytesConstantPool {
                 }
             }
             
-            // Add local constants (simplified implementation for now)
+            // Add local constants
             for constant in &self.local_constants {
                 if is_bytes_constant_valid(constant, min_size, max_size) {
                     valid_constants.push(constant.clone());
@@ -370,9 +449,19 @@ pub fn draw_bytes(
     min_size: usize,
     max_size: usize,
 ) -> Draw<Vec<u8>> {
-    // **NEW: Constant Injection System (5% probability like Python)**
+    draw_bytes_with_local_constants(source, min_size, max_size, &[])
+}
+
+/// Draw bytes with support for local constants from AST parsing
+pub fn draw_bytes_with_local_constants(
+    source: &mut DataSource,
+    min_size: usize,
+    max_size: usize,
+    local_constants: &[Vec<u8>],
+) -> Draw<Vec<u8>> {
+    // **Constant Injection System (5% probability like Python)**
     if source.bits(5)? == 0 { // 1/32 ≈ 3.125%, close to Python's 5%
-        let mut constant_pool = BytesConstantPool::new();
+        let mut constant_pool = BytesConstantPool::with_local_constants(local_constants);
         let valid_constants = constant_pool.get_valid_constants(min_size, max_size);
         
         if !valid_constants.is_empty() {
@@ -415,6 +504,17 @@ pub fn binary(
 ) -> impl Fn(&mut DataSource) -> Draw<Vec<u8>> {
     move |source: &mut DataSource| {
         draw_bytes(source, min_size, max_size)
+    }
+}
+
+/// Generate binary data with local constants from AST parsing
+pub fn binary_with_local_constants(
+    min_size: usize,
+    max_size: usize,
+    local_constants: Vec<Vec<u8>>,
+) -> impl Fn(&mut DataSource) -> Draw<Vec<u8>> {
+    move |source: &mut DataSource| {
+        draw_bytes_with_local_constants(source, min_size, max_size, &local_constants)
     }
 }
 

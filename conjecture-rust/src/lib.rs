@@ -8,3 +8,6 @@ pub mod floats;
 pub mod intminimize;
 pub mod ints;
 pub mod strings;
+
+#[cfg(test)]
+mod python_parity_tests;

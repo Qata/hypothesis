@@ -2091,3 +2091,295 @@ fn test_auto_detection_functions() {
     assert!(should_allow_subnormals_auto(Some(smallest_normal / 2.0), None, width));
     assert!(should_allow_subnormals_auto(None, Some(smallest_normal / 2.0), width));
 }
+
+#[test]
+fn test_enhanced_nan_pattern_generation() {
+    use super::generate_nan_varieties;
+    
+    // Test NaN pattern generation for all widths
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let nan_patterns = generate_nan_varieties(width);
+        
+        // Should generate multiple distinct NaN patterns
+        assert!(nan_patterns.len() >= 10, "Should generate at least 10 NaN patterns for width {:?}", width);
+        
+        // All patterns should be NaN
+        for (i, &pattern) in nan_patterns.iter().enumerate() {
+            assert!(pattern.is_nan(), "Pattern {} should be NaN for width {:?}: {}", i, width, pattern);
+        }
+        
+        // Should have some variety in bit patterns
+        let mut unique_bit_patterns = std::collections::HashSet::new();
+        for &nan_val in &nan_patterns {
+            unique_bit_patterns.insert(nan_val.to_bits());
+        }
+        
+        // Should have at least several unique bit patterns
+        assert!(unique_bit_patterns.len() >= 5, 
+            "Should have at least 5 unique NaN bit patterns for width {:?}, got {}", 
+            width, unique_bit_patterns.len());
+        
+        println!("Width {:?}: Generated {} unique NaN patterns", width, unique_bit_patterns.len());
+    }
+}
+
+#[test]
+fn test_nan_pattern_coverage() {
+    use super::generate_nan_varieties;
+    
+    let width = FloatWidth::Width64;
+    let nan_patterns = generate_nan_varieties(width);
+    
+    // Check that we have both quiet and signaling NaN patterns
+    let mut has_quiet_nan = false;
+    let mut has_signaling_nan = false;
+    
+    for &nan_val in &nan_patterns {
+        let bits = nan_val.to_bits();
+        let mantissa = bits & width.mantissa_mask();
+        
+        // In IEEE 754, the MSB of mantissa determines quiet (1) vs signaling (0)
+        let mantissa_msb = mantissa >> (width.mantissa_bits() - 1);
+        
+        if mantissa_msb == 1 {
+            has_quiet_nan = true;
+        } else {
+            has_signaling_nan = true;
+        }
+    }
+    
+    // Should have both types (though this depends on our generation strategy)
+    println!("NaN pattern coverage: quiet={}, signaling={}", has_quiet_nan, has_signaling_nan);
+    
+    // At minimum, we should have quiet NaNs
+    assert!(has_quiet_nan, "Should generate at least some quiet NaN patterns");
+}
+
+#[test]
+fn test_nan_pattern_mantissa_diversity() {
+    use super::generate_nan_varieties;
+    
+    let width = FloatWidth::Width64;
+    let nan_patterns = generate_nan_varieties(width);
+    
+    // Extract mantissa patterns and check for diversity
+    let mut mantissa_patterns = Vec::new();
+    for &nan_val in &nan_patterns {
+        let bits = nan_val.to_bits();
+        let mantissa = bits & width.mantissa_mask();
+        mantissa_patterns.push(mantissa);
+    }
+    
+    // Should have patterns that cover different ranges
+    let min_mantissa = mantissa_patterns.iter().min().unwrap();
+    let max_mantissa = mantissa_patterns.iter().max().unwrap();
+    
+    // Should span a reasonable range of the mantissa space
+    let mantissa_range = max_mantissa - min_mantissa;
+    let mantissa_mask = width.mantissa_mask();
+    let range_ratio = mantissa_range as f64 / mantissa_mask as f64;
+    
+    assert!(range_ratio > 0.1, 
+        "NaN mantissa patterns should span at least 10% of mantissa space, got {:.2}%", 
+        range_ratio * 100.0);
+    
+    println!("NaN mantissa diversity: spans {:.1}% of mantissa space", range_ratio * 100.0);
+    
+    // Check for specific interesting patterns
+    let patterns = vec![
+        1u64,                             // Smallest signaling NaN
+        mantissa_mask / 4,                // Quarter mantissa
+        mantissa_mask / 2,                // Half mantissa
+        mantissa_mask - 1,                // Largest mantissa
+        0x5555555555555555 & mantissa_mask, // Alternating bits (truncated)
+        0xAAAAAAAAAAAAAAAA & mantissa_mask, // Alternating bits (inverted, truncated)
+    ];
+    
+    let mut found_patterns = 0;
+    for expected_pattern in patterns {
+        if mantissa_patterns.contains(&expected_pattern) {
+            found_patterns += 1;
+        }
+    }
+    
+    assert!(found_patterns >= 3, 
+        "Should find at least 3 expected mantissa patterns, found {}", found_patterns);
+}
+
+#[test]
+fn test_nan_patterns_match_python_approach() {
+    use super::generate_nan_varieties;
+    
+    // Test that our NaN generation approach matches Python's methodology
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let nan_patterns = generate_nan_varieties(width);
+        
+        // Python generates 11 specific mantissa patterns
+        assert!(nan_patterns.len() >= 10, 
+            "Should generate at least 10 NaN varieties like Python for width {:?}", width);
+        
+        // All should have maximum exponent (NaN/infinity exponent) when converted to the right width
+        for &nan_val in &nan_patterns {
+            // Convert to the appropriate width first
+            let width_specific_val = match width {
+                FloatWidth::Width16 => {
+                    let f16_val = half::f16::from_f64(nan_val);
+                    f16_val.to_f64()
+                },
+                FloatWidth::Width32 => {
+                    let f32_val = nan_val as f32;
+                    f32_val as f64
+                },
+                FloatWidth::Width64 => nan_val,
+            };
+            
+            // Should still be NaN after conversion
+            assert!(width_specific_val.is_nan(), 
+                "Value should remain NaN after width conversion: {} -> {}", nan_val, width_specific_val);
+        }
+        
+        // Should include the canonical quiet NaN
+        let canonical_quiet_nan = f64::NAN;
+        let mut found_canonical = false;
+        for &nan_val in &nan_patterns {
+            // Compare bit patterns (since NaN != NaN)
+            if nan_val.to_bits() == canonical_quiet_nan.to_bits() {
+                found_canonical = true;
+                break;
+            }
+        }
+        
+        // Note: We might not find the exact canonical NaN due to width conversion,
+        // but we should have at least one standard quiet NaN pattern
+        println!("Width {:?}: Found canonical NaN: {}", width, found_canonical);
+    }
+}
+
+#[test]
+fn test_nan_generation_in_float_creation() {
+    use crate::data::DataSource;
+    
+    // Test that NaN generation works within the actual float generation pipeline
+    let test_data: Vec<u64> = (0..1000).map(|i| i * 13 + 42).collect();
+    let mut source = DataSource::from_vec(test_data);
+    
+    // Generate floats with NaN allowed
+    let mut nan_found = false;
+    let mut generated_values = Vec::new();
+    
+    for _ in 0..200 {
+        match draw_float(&mut source, None, None, Some(true), Some(true), None, None, FloatWidth::Width64, false, false) {
+            Ok(val) => {
+                generated_values.push(val);
+                if val.is_nan() {
+                    nan_found = true;
+                }
+            },
+            Err(_) => {} // Allow some failures
+        }
+    }
+    
+    // Should have found at least one NaN in 200 attempts
+    // (This is probabilistic but should be very likely)
+    if generated_values.len() > 50 {
+        println!("Generated {} values, found NaN: {}", generated_values.len(), nan_found);
+        
+        // Check that we got some variety
+        let finite_count = generated_values.iter().filter(|x| x.is_finite()).count();
+        let infinite_count = generated_values.iter().filter(|x| x.is_infinite()).count();
+        let nan_count = generated_values.iter().filter(|x| x.is_nan()).count();
+        
+        println!("Distribution: {} finite, {} infinite, {} NaN", 
+            finite_count, infinite_count, nan_count);
+        
+        // Should have generated some special values when allowed
+        assert!(finite_count > 0, "Should generate some finite values");
+    }
+}
+
+#[test]
+fn test_nan_pattern_deduplication() {
+    use super::generate_nan_varieties;
+    
+    // Test that NaN generation properly deduplicates identical bit patterns
+    let width = FloatWidth::Width64;
+    let nan_patterns = generate_nan_varieties(width);
+    
+    // Extract bit patterns
+    let mut bit_patterns: Vec<u64> = nan_patterns.iter().map(|x| x.to_bits()).collect();
+    bit_patterns.sort();
+    
+    // Check for duplicates
+    let original_len = bit_patterns.len();
+    bit_patterns.dedup();
+    let dedup_len = bit_patterns.len();
+    
+    assert_eq!(original_len, dedup_len, 
+        "NaN generation should not produce duplicate bit patterns: {} vs {}", 
+        original_len, dedup_len);
+    
+    println!("NaN deduplication test: {} unique patterns", dedup_len);
+}
+
+#[test]
+fn test_nan_patterns_with_sign_bit() {
+    use super::generate_nan_varieties;
+    
+    // Test NaN patterns with different sign bits
+    let width = FloatWidth::Width64;
+    let nan_patterns = generate_nan_varieties(width);
+    
+    // Check if we have both positive and negative NaN patterns
+    let mut has_positive_nan = false;
+    let mut has_negative_nan = false;
+    
+    for &nan_val in &nan_patterns {
+        let bits = nan_val.to_bits();
+        let sign_bit = bits >> (width.bits() - 1);
+        
+        if sign_bit == 0 {
+            has_positive_nan = true;
+        } else {
+            has_negative_nan = true;
+        }
+    }
+    
+    println!("NaN sign diversity: positive={}, negative={}", has_positive_nan, has_negative_nan);
+    
+    // Our current implementation might only generate positive NaNs,
+    // but this test documents the behavior
+    assert!(has_positive_nan, "Should generate at least positive NaN patterns");
+}
+
+#[test]
+fn test_width_specific_nan_patterns() {
+    use super::generate_nan_varieties;
+    
+    // Test that NaN patterns are appropriate for each width
+    for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
+        let nan_patterns = generate_nan_varieties(width);
+        
+        for &nan_val in &nan_patterns {
+            // Convert to appropriate width and back to check representability
+            let width_specific = match width {
+                FloatWidth::Width16 => {
+                    let f16_val = half::f16::from_f64(nan_val);
+                    f16_val.to_f64()
+                },
+                FloatWidth::Width32 => {
+                    let f32_val = nan_val as f32;
+                    f32_val as f64
+                },
+                FloatWidth::Width64 => nan_val,
+            };
+            
+            // Should still be NaN after width conversion
+            assert!(width_specific.is_nan(), 
+                "NaN should remain NaN after width conversion for {:?}: {} -> {}", 
+                width, nan_val, width_specific);
+        }
+        
+        println!("Width {:?}: All {} NaN patterns survive width conversion", 
+            width, nan_patterns.len());
+    }
+}

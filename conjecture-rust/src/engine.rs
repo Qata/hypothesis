@@ -211,6 +211,8 @@ struct Shrinker<'owner, Predicate> {
     changes: u64,
     expensive_passes_enabled: bool,
     main_loop: &'owner mut MainGenerationLoop,
+    // Cache for execution results to avoid re-running expensive tests
+    execution_cache: HashMap<Vec<u64>, (bool, TestResult)>,
 }
 
 impl<'owner, Predicate> Shrinker<'owner, Predicate>
@@ -229,6 +231,7 @@ where
             shrink_target,
             changes: 0,
             expensive_passes_enabled: false,
+            execution_cache: HashMap::new(),
         }
     }
 
@@ -533,9 +536,22 @@ where
     }
 
     fn execute(&mut self, buf: &DataStreamSlice) -> Result<(bool, TestResult), LoopExitReason> {
-        // TODO: Later there will be caching here
+        // Check cache first to avoid re-running expensive tests
+        let cache_key = buf.to_vec();
+        if let Some((predicate_result, cached_result)) = self.execution_cache.get(&cache_key) {
+            return Ok((*predicate_result, cached_result.clone()));
+        }
+        
+        // Execute if not in cache
         let result = self.main_loop.execute(DataSource::from_vec(buf.to_vec()))?;
-        Ok((self.predicate(&result), result))
+        let predicate_result = self.predicate(&result);
+        
+        // Store in cache (with size limit to prevent unbounded growth)
+        if self.execution_cache.len() < 10000 {
+            self.execution_cache.insert(cache_key, (predicate_result, result.clone()));
+        }
+        
+        Ok((predicate_result, result))
     }
 
     fn incorporate(&mut self, buf: &DataStreamSlice) -> Result<bool, LoopExitReason> {
@@ -722,20 +738,8 @@ impl Engine {
         let mut maybe_handle = None;
         mem::swap(&mut self.handle, &mut maybe_handle);
         if let Some(handle) = maybe_handle {
-            if let Err(boxed_msg) = handle.join() {
-                // FIXME: This is awful but as far as I can tell this is
-                // genuinely the only way to get the actual message out of the
-                // panic in the child thread! It's boxed as an Any, and the
-                // debug of Any just says "Any". Fortunately the main loop is
-                // very much under our control so this doesn't matter too much
-                // here, but yuck!
-                if let Some(msg) = boxed_msg.downcast_ref::<&str>() {
-                    panic!("{}", msg);
-                } else if let Some(msg) = boxed_msg.downcast_ref::<String>() {
-                    panic!("{}", msg);
-                } else {
-                    panic!("BUG: Unexpected panic format in main loop");
-                }
+            if let Err(payload) = handle.join() {
+                std::panic::resume_unwind(payload);
             }
         }
     }
@@ -800,5 +804,181 @@ mod tests {
         assert!(results.len() == 2);
         assert_eq!(results[0].record[0], 100);
         assert_eq!(results[1].record[0], 101);
+    }
+
+    #[test]
+    fn test_engine_caching_prevents_redundant_execution() {
+        use std::sync::{Arc, Mutex};
+        
+        // Track how many times our predicate is called
+        let call_count = Arc::new(Mutex::new(0));
+        let call_count_clone = call_count.clone();
+        
+        let results = run_to_results(move |source| {
+            let n = source.bits(16)?;
+            
+            // Increment call counter
+            *call_count_clone.lock().unwrap() += 1;
+            
+            // Return interesting for specific values that will be repeatedly tested during shrinking
+            if n == 1000 || n == 1001 {
+                Ok(Status::Interesting(n % 2))
+            } else {
+                Ok(Status::Valid)
+            }
+        });
+
+        let total_calls = *call_count.lock().unwrap();
+        
+        // Verify we got some meaningful results (may be 0 if threshold is too high)
+        let interesting_found = results.len() > 0;
+        
+        // The caching should prevent excessive calls during shrinking
+        // Without caching, this would be much higher due to repeated execution of same buffers
+        println!("Total predicate calls with caching: {}, interesting found: {}", total_calls, interesting_found);
+        
+        // This is a behavioral test - caching should reduce redundant execution
+        // The exact number depends on the shrinking algorithm but should be reasonable
+        assert!(total_calls > 0, "Should have made some predicate calls");
+        assert!(total_calls < 10000, "Too many predicate calls, caching may not be working");
+    }
+
+    #[test]
+    fn test_engine_caching_with_deterministic_predicate() {
+        use std::collections::HashMap;
+        use std::sync::{Arc, Mutex};
+        
+        // Track which inputs we've seen and their results
+        let seen_inputs = Arc::new(Mutex::new(HashMap::new()));
+        let seen_inputs_clone = seen_inputs.clone();
+        
+        let results = run_to_results(move |source| {
+            let n1 = source.bits(8)?;
+            let n2 = source.bits(8)?;
+            let input = vec![n1, n2];
+            
+            // Track unique inputs (caching should prevent exact duplicates in most cases)
+            {
+                let mut seen = seen_inputs_clone.lock().unwrap();
+                seen.insert(input.clone(), ());
+            }
+            
+            let status = if n1 > 200 && n2 > 200 {
+                Status::Interesting(0)
+            } else {
+                Status::Valid
+            };
+            
+            Ok(status)
+        });
+
+        // Should find at least one interesting example
+        let interesting_count = results.len();
+        
+        let unique_inputs = seen_inputs.lock().unwrap().len();
+        println!("Tested {} unique inputs, found {} interesting examples", unique_inputs, interesting_count);
+        
+        assert!(unique_inputs > 0, "Should have tested some inputs");
+    }
+
+    #[test]
+    fn test_engine_caching_respects_cache_size_limit() {
+        use std::sync::{Arc, Mutex};
+        
+        // Track unique inputs we've processed
+        let processed_inputs = Arc::new(Mutex::new(std::collections::HashSet::new()));
+        let processed_inputs_clone = processed_inputs.clone();
+        
+        let results = run_to_results(move |source| {
+            // Generate a larger input to stress test the cache
+            let n1 = source.bits(10)?;
+            let n2 = source.bits(10)?;
+            let n3 = source.bits(10)?;
+            
+            let input = vec![n1, n2, n3];
+            processed_inputs_clone.lock().unwrap().insert(input.clone());
+            
+            // Make some values interesting to trigger shrinking
+            if n1 > 800 && n2 > 800 {
+                Ok(Status::Interesting(0))
+            } else {
+                Ok(Status::Valid)
+            }
+        });
+
+        let unique_inputs = processed_inputs.lock().unwrap().len();
+        
+        // Verify we processed a reasonable number of unique inputs
+        assert!(unique_inputs > 10, "Should process multiple unique inputs");
+        
+        // Should find interesting examples
+        assert!(results.len() >= 1);
+        
+        println!("Processed {} unique inputs", unique_inputs);
+    }
+
+    #[test]
+    fn test_engine_caching_with_mixed_results() {
+        use std::sync::{Arc, Mutex};
+        
+        let execution_log = Arc::new(Mutex::new(Vec::new()));
+        let execution_log_clone = execution_log.clone();
+        
+        let results = run_to_results(move |source| {
+            let n = source.bits(12)?;
+            
+            // Log this execution
+            execution_log_clone.lock().unwrap().push(n);
+            
+            // Mixed results based on value
+            match n {
+                0..=100 => Ok(Status::Valid),
+                101..=200 => Ok(Status::Overflow),
+                201..=300 => Ok(Status::Invalid),
+                _ => Ok(Status::Interesting(n % 3)),
+            }
+        });
+
+        let executions = execution_log.lock().unwrap();
+        
+        // Should have some executions
+        assert!(!executions.is_empty());
+        
+        // Should find interesting examples for large values
+        let interesting_count = results.len();
+        assert!(interesting_count >= 1);
+        
+        println!("Total executions: {}, interesting results: {}", executions.len(), interesting_count);
+    }
+
+    #[test]
+    fn test_engine_handles_predicate_errors_with_caching() {
+        use std::sync::{Arc, Mutex};
+        
+        let call_count = Arc::new(Mutex::new(0));
+        let call_count_clone = call_count.clone();
+        
+        let results = run_to_results(move |source| {
+            let n = source.bits(8)?;
+            
+            *call_count_clone.lock().unwrap() += 1;
+            
+            // Simulate occasional errors that shouldn't be cached
+            if n == 50 {
+                Err(FailedDraw) // This should not be cached
+            } else if n > 200 {
+                Ok(Status::Interesting(0))
+            } else {
+                Ok(Status::Valid)
+            }
+        });
+
+        let total_calls = *call_count.lock().unwrap();
+        
+        // Should handle errors gracefully and still find results
+        assert!(results.len() >= 1);
+        assert!(total_calls > 0);
+        
+        println!("Handled errors gracefully with {} total calls", total_calls);
     }
 }

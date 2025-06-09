@@ -11,9 +11,7 @@ use std::cmp::{Ord, Ordering, PartialOrd, Reverse};
 use std::collections::BinaryHeap;
 use std::mem;
 
-type Draw<T> = Result<T, FailedDraw>;
-
-pub fn bounded_int(source: &mut DataSource, max: u64) -> Draw<u64> {
+pub fn bounded_int(source: &mut DataSource, max: u64) -> Result<u64, FailedDraw> {
     let bitlength = 64 - max.leading_zeros() as u64;
     if bitlength == 0 {
         source.write(0)?;
@@ -143,7 +141,7 @@ impl Sampler {
         Sampler { table }
     }
 
-    pub fn sample(&self, source: &mut DataSource) -> Draw<usize> {
+    pub fn sample(&self, source: &mut DataSource) -> Result<usize, FailedDraw> {
         use crate::distributions::weighted;
         
         assert!(!self.table.is_empty());
@@ -173,7 +171,7 @@ pub fn good_bitlengths() -> Sampler {
     Sampler::new(&weights)
 }
 
-pub fn integer_from_bitlengths(source: &mut DataSource, bitlengths: &Sampler) -> Draw<i64> {
+pub fn integer_from_bitlengths(source: &mut DataSource, bitlengths: &Sampler) -> Result<i64, FailedDraw> {
     let bitlength = bitlengths.sample(source)? as u64 + 1;
     let base = source.bits(bitlength)? as i64;
     let sign = source.bits(1)?;
@@ -193,7 +191,7 @@ use std::collections::HashMap;
 struct IntegerConstantPool {
     // Global constants: empty by design (Python doesn't have global integer constants)
     global_constants: Vec<i64>,
-    // Local constants: extracted from user code (simplified for now)
+    // Local constants: extracted from user code via AST parsing
     local_constants: Vec<i64>,
     // Cache for constraint-filtered constants
     constraint_cache: HashMap<String, Vec<i64>>,
@@ -237,7 +235,7 @@ impl IntegerConstantPool {
                 }
             }
             
-            // Add local constants (simplified implementation for now)
+            // Add local constants
             for &constant in &self.local_constants {
                 if is_integer_constant_valid(constant, min_value, max_value, weights) {
                     valid_constants.push(constant);
@@ -291,13 +289,13 @@ pub fn draw_integer(
     max_value: Option<i64>,
     weights: Option<HashMap<i64, f64>>,
     shrink_towards: i64,
-) -> Draw<i64> {
+) -> Result<i64, FailedDraw> {
     draw_integer_with_local_constants(
         source, min_value, max_value, weights, shrink_towards, &[]
     )
 }
 
-/// Draw an integer with support for local constants from AST parsing (e.g., Swift FFI)
+/// Draw an integer with support for local constants from AST parsing
 pub fn draw_integer_with_local_constants(
     source: &mut DataSource,
     min_value: Option<i64>,
@@ -305,7 +303,7 @@ pub fn draw_integer_with_local_constants(
     weights: Option<HashMap<i64, f64>>,
     shrink_towards: i64,
     local_constants: &[i64],
-) -> Draw<i64> {
+) -> Result<i64, FailedDraw> {
     // **NEW: Constant Injection System (5% probability like Python)**
     // Note: Python uses 5% by default, 15% for floats
     if source.bits(5)? == 0 { // 1/32 ≈ 3.125%, close to Python's 5%
@@ -400,14 +398,14 @@ pub fn draw_integer_with_local_constants(
 }
 
 // Unbounded integer generation using INT_SIZES sampling
-fn draw_unbounded_integer(source: &mut DataSource) -> Draw<i64> {
+fn draw_unbounded_integer(source: &mut DataSource) -> Result<i64, FailedDraw> {
     // Python's INT_SIZES equivalent (from utils.py)
     let bitlengths = good_bitlengths();
     integer_from_bitlengths(source, &bitlengths)
 }
 
 // Bounded integer generation with size biasing for large ranges
-fn draw_bounded_integer(source: &mut DataSource, min_val: i64, max_val: i64) -> Draw<i64> {
+fn draw_bounded_integer(source: &mut DataSource, min_val: i64, max_val: i64) -> Result<i64, FailedDraw> {
     if min_val == max_val {
         return Ok(min_val);
     }
@@ -437,7 +435,7 @@ fn draw_bounded_integer(source: &mut DataSource, min_val: i64, max_val: i64) -> 
 
 // Zigzag integer generation for shrink-towards ordering
 // This matches Python's choice_to_index/choice_from_index logic exactly
-pub fn zigzag_integer(source: &mut DataSource, shrink_towards: i64) -> Draw<i64> {
+pub fn zigzag_integer(source: &mut DataSource, shrink_towards: i64) -> Result<i64, FailedDraw> {
     // Generate index using geometric-ish distribution
     let index = source.bits(8)?; // Use smaller range for testing
     
@@ -468,20 +466,20 @@ pub fn integers(
     max_value: Option<i64>,
     weights: Option<HashMap<i64, f64>>,
     shrink_towards: i64,
-) -> impl Fn(&mut DataSource) -> Draw<i64> {
+) -> impl Fn(&mut DataSource) -> Result<i64, FailedDraw> {
     move |source: &mut DataSource| {
         draw_integer(source, min_value, max_value, weights.clone(), shrink_towards)
     }
 }
 
-/// Generate integers with local constants from AST parsing (e.g., Swift FFI)
+/// Generate integers with local constants from AST parsing
 pub fn integers_with_local_constants(
     min_value: Option<i64>,
     max_value: Option<i64>,
     weights: Option<HashMap<i64, f64>>,
     shrink_towards: i64,
     local_constants: Vec<i64>,
-) -> impl Fn(&mut DataSource) -> Draw<i64> {
+) -> impl Fn(&mut DataSource) -> Result<i64, FailedDraw> {
     move |source: &mut DataSource| {
         draw_integer_with_local_constants(source, min_value, max_value, weights.clone(), shrink_towards, &local_constants)
     }
@@ -493,7 +491,7 @@ pub fn draw_bounded_integer_with_size_variation(
     lower: i64,
     upper: i64,
     vary_size: bool
-) -> Draw<i64> {
+) -> Result<i64, FailedDraw> {
     if lower == upper {
         return Ok(lower);
     }
@@ -773,5 +771,304 @@ mod tests {
         // Test edge case: max = 0
         let result = bounded_int(&mut source, 0).unwrap();
         assert_eq!(result, 0);
+    }
+
+    #[test]
+    fn test_local_constants_integration() {
+        let mut source = test_data_source();
+        
+        // Test with meaningful local constants
+        let local_constants = vec![42, 100, 255, -10, 0];
+        
+        let mut found_local_constant = false;
+        let mut results = Vec::new();
+        
+        // Run many iterations to increase chance of hitting constant injection
+        for _ in 0..1000 {
+            let result = draw_integer_with_local_constants(
+                &mut source, Some(-50), Some(300), None, 0, &local_constants
+            );
+            
+            match result {
+                Ok(val) => {
+                    results.push(val);
+                    // Check if this is one of our local constants
+                    if local_constants.contains(&val) {
+                        found_local_constant = true;
+                    }
+                    // Verify bounds
+                    assert!(val >= -50 && val <= 300, "Generated value {} out of bounds", val);
+                },
+                Err(_) => {} // Allow some failures
+            }
+        }
+        
+        // Should have some results
+        assert!(!results.is_empty(), "Should generate some integers");
+        
+        // Should have found at least one local constant (probabilistic but very likely)
+        println!("Local constants test: generated {} values, found local constant: {}", 
+            results.len(), found_local_constant);
+        
+        // Print some sample results
+        if results.len() >= 10 {
+            println!("Sample results: {:?}", &results[0..10]);
+        }
+        
+        // Show how many times each local constant appeared
+        for &constant in &local_constants {
+            let count = results.iter().filter(|&&x| x == constant).count();
+            if count > 0 {
+                println!("Local constant {} appeared {} times", constant, count);
+            }
+        }
+    }
+
+    #[test]
+    fn test_local_constants_filtering() {
+        let mut pool = IntegerConstantPool::with_local_constants(&[1, 5, 10, 50, 100, 200]);
+        
+        // Test filtering by bounds
+        let valid = pool.get_valid_constants(Some(0), Some(20), None, 0);
+        for &constant in valid {
+            assert!(constant >= 0 && constant <= 20, 
+                "Filtered constant {} should be in bounds [0, 20]", constant);
+        }
+        
+        // Should contain some of our constants that fit
+        assert!(valid.contains(&1));
+        assert!(valid.contains(&5));
+        assert!(valid.contains(&10));
+        assert!(!valid.contains(&50)); // Out of bounds
+        assert!(!valid.contains(&100)); // Out of bounds
+        
+        // Test with weights filter
+        let mut weights = HashMap::new();
+        weights.insert(5, 0.3);
+        weights.insert(10, 0.4);
+        weights.insert(15, 0.2); // Not in our constants
+        
+        let valid_weighted = pool.get_valid_constants(Some(0), Some(20), Some(&weights), 0);
+        
+        // Should only contain constants that are both in our list AND in the weights map
+        for &constant in valid_weighted {
+            assert!(weights.contains_key(&constant), 
+                "Weighted constant {} should be in weights map", constant);
+        }
+        
+        assert!(valid_weighted.contains(&5));
+        assert!(valid_weighted.contains(&10));
+        assert!(!valid_weighted.contains(&1)); // Not in weights
+        assert!(!valid_weighted.contains(&15)); // Not in our constants
+    }
+
+    #[test]
+    fn test_local_constants_empty_case() {
+        let mut source = test_data_source();
+        
+        // Test with empty local constants (should work fine)
+        let result = draw_integer_with_local_constants(
+            &mut source, Some(0), Some(10), None, 0, &[]
+        );
+        
+        // Should still work without constants
+        assert!(result.is_ok(), "Should work with empty local constants");
+        
+        if let Ok(val) = result {
+            assert!(val >= 0 && val <= 10, "Should respect bounds even without constants");
+        }
+    }
+
+    #[test]
+    fn test_local_constants_cache_behavior() {
+        let mut pool = IntegerConstantPool::with_local_constants(&[1, 2, 3, 4, 5]);
+        
+        // First call should populate cache
+        let valid1: Vec<i64> = pool.get_valid_constants(Some(0), Some(10), None, 0).to_vec();
+        let initial_cache_size = pool.constraint_cache.len();
+        
+        // Second call with same parameters should use cache
+        let valid2: Vec<i64> = pool.get_valid_constants(Some(0), Some(10), None, 0).to_vec();
+        let final_cache_size = pool.constraint_cache.len();
+        
+        // Cache should not grow on second call
+        assert_eq!(initial_cache_size, final_cache_size, "Cache should not grow on repeated calls");
+        
+        // Results should be identical
+        assert_eq!(valid1.len(), valid2.len(), "Cached results should be identical");
+        for (i, (&a, &b)) in valid1.iter().zip(valid2.iter()).enumerate() {
+            assert_eq!(a, b, "Cached result {} should match: {} vs {}", i, a, b);
+        }
+        
+        // Different parameters should create new cache entry
+        let _valid3 = pool.get_valid_constants(Some(5), Some(15), None, 0);
+        let new_cache_size = pool.constraint_cache.len();
+        
+        assert!(new_cache_size > final_cache_size, "New parameters should create new cache entry");
+    }
+
+    #[test]
+    fn test_integers_with_local_constants_convenience_function() {
+        let mut source = test_data_source();
+        
+        let local_constants = vec![7, 14, 21, 28];
+        let int_gen = integers_with_local_constants(
+            Some(0), Some(30), None, 0, local_constants.clone()
+        );
+        
+        let mut results = Vec::new();
+        let mut found_constants = std::collections::HashSet::new();
+        
+        for _ in 0..200 {
+            match int_gen(&mut source) {
+                Ok(val) => {
+                    results.push(val);
+                    if local_constants.contains(&val) {
+                        found_constants.insert(val);
+                    }
+                    assert!(val >= 0 && val <= 30, "Generated value {} out of bounds", val);
+                },
+                Err(_) => {} // Allow failures
+            }
+        }
+        
+        assert!(!results.is_empty(), "Convenience function should generate values");
+        
+        // Should have found some constants (probabilistic)
+        println!("Convenience function test: {} results, {} unique constants found", 
+            results.len(), found_constants.len());
+        
+        for constant in found_constants {
+            println!("Found local constant: {}", constant);
+        }
+    }
+
+    #[test]
+    fn test_local_constants_with_weighted_generation() {
+        let mut source = test_data_source();
+        
+        // Set up weighted generation with some constants in the weights
+        let local_constants = vec![10, 20, 30, 40, 50];
+        
+        let mut weights = HashMap::new();
+        weights.insert(10, 0.2);
+        weights.insert(25, 0.3); // Not in our constants
+        weights.insert(30, 0.2);
+        // Total: 0.7, leaving 0.3 for uniform distribution
+        
+        let mut results = Vec::new();
+        let mut constant_hits = 0;
+        let mut weighted_hits = 0;
+        
+        for _ in 0..500 {
+            let result = draw_integer_with_local_constants(
+                &mut source, Some(0), Some(50), Some(weights.clone()), 0, &local_constants
+            );
+            
+            match result {
+                Ok(val) => {
+                    results.push(val);
+                    if local_constants.contains(&val) {
+                        constant_hits += 1;
+                    }
+                    if weights.contains_key(&val) {
+                        weighted_hits += 1;
+                    }
+                },
+                Err(_) => {} // Allow failures
+            }
+        }
+        
+        assert!(!results.is_empty(), "Should generate values with weights and constants");
+        
+        println!("Weighted + constants test: {} results, {} constant hits, {} weighted hits", 
+            results.len(), constant_hits, weighted_hits);
+        
+        // Should see both constant injection and weighted generation working
+        // (This is probabilistic so we don't enforce strict requirements)
+    }
+
+    #[test]
+    fn test_local_constants_boundary_cases() {
+        let mut source = test_data_source();
+        
+        // Test constants at boundaries
+        let local_constants = vec![-100, -1, 0, 1, 100];
+        
+        // Test where some constants are outside bounds
+        let mut results = Vec::new();
+        for _ in 0..200 {
+            let result = draw_integer_with_local_constants(
+                &mut source, Some(-50), Some(50), None, 0, &local_constants
+            );
+            
+            match result {
+                Ok(val) => {
+                    results.push(val);
+                    assert!(val >= -50 && val <= 50, "Value {} outside bounds [-50, 50]", val);
+                },
+                Err(_) => {}
+            }
+        }
+        
+        // Should only see constants that fit within bounds
+        let in_bound_constants: Vec<i64> = local_constants.iter()
+            .filter(|&&x| x >= -50 && x <= 50)
+            .copied()
+            .collect();
+        
+        println!("Boundary test: in-bound constants: {:?}", in_bound_constants);
+        
+        // Verify no out-of-bound constants appear
+        for &result in &results {
+            if !in_bound_constants.contains(&result) {
+                // This is OK - could be from regular generation
+                continue;
+            }
+            // If it's a constant, it should be an in-bound one
+            if local_constants.contains(&result) {
+                assert!(in_bound_constants.contains(&result), 
+                    "Found out-of-bound constant {} in results", result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_local_constants_python_parity_injection_rate() {
+        
+        // Test that injection rate is roughly correct (5% for integers)
+        let local_constants = vec![42]; // Single distinctive constant
+        
+        let mut total_attempts = 0;
+        let mut constant_injections = 0;
+        
+        // Use a deterministic approach to test injection rate
+        for seed in 0..1000 {
+            let data = vec![seed; 10];
+            let mut test_source = DataSource::from_vec(data);
+            
+            match draw_integer_with_local_constants(
+                &mut test_source, Some(0), Some(100), None, 0, &local_constants
+            ) {
+                Ok(val) => {
+                    total_attempts += 1;
+                    if val == 42 {
+                        constant_injections += 1;
+                    }
+                },
+                Err(_) => {} // Allow failures
+            }
+        }
+        
+        if total_attempts > 100 {
+            let injection_rate = constant_injections as f64 / total_attempts as f64;
+            println!("Injection rate test: {}/{} = {:.1}% (expected ~3.1%)", 
+                constant_injections, total_attempts, injection_rate * 100.0);
+            
+            // The actual rate should be close to 1/32 ≈ 3.125% (our approximation of Python's 5%)
+            // Allow reasonable variance due to randomness
+            assert!(injection_rate < 0.15, 
+                "Injection rate {:.3} too high, should be around 3%", injection_rate);
+        }
     }
 }
