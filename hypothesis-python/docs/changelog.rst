@@ -18,6 +18,39 @@ Hypothesis 6.x
 
     .. include:: ../RELEASE.rst
 
+.. _v6.135.4:
+
+--------------------
+6.135.4 - 2025-06-09
+--------------------
+
+Further improve the performance of the constants-collection feature introduced in :ref:`version 6.131.1 <v6.131.1>`, by ignoring large files and files with many constants.
+
+.. _v6.135.3:
+
+--------------------
+6.135.3 - 2025-06-08
+--------------------
+
+This release adds the experimental and unstable |OBSERVABILITY_CHOICES| option for :ref:`observability <observability>`. If set, the choice sequence is included in ``metadata.choice_nodes``, and choice sequence spans are included in ``metadata.choice_spans``.
+
+These are relatively low-level implementation detail of Hypothesis, and are exposed in observability for users building tools or research on top of Hypothesis. See |PrimitiveProvider| for more details about the choice sequence and choice spans.
+
+We are actively working towards a better interface for this. Feel free to use |OBSERVABILITY_CHOICES| to experiment, but don't rely on it yet!
+
+.. _v6.135.2:
+
+--------------------
+6.135.2 - 2025-06-08
+--------------------
+
+This patch restores compatibility when using `the legacy Python 3.9 LL(1)
+parser <https://docs.python.org/3/whatsnew/3.9.html#new-parser>`__ yet
+again, because the fix in :ref:`version 6.131.33 <v6.131.33>` was too
+brittle.
+
+Thanks to Marco Ricci for this fix!
+
 .. _v6.135.1:
 
 --------------------
