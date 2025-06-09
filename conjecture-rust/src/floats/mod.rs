@@ -80,14 +80,14 @@ fn negative_signaling_nan() -> f64 {
 struct ConstantPool {
     // Global constants: always available mathematical values
     global_constants: Vec<f64>,
-    // Local constants: would be extracted from user code (simplified for now)
+    // Local constants: extracted from user code via AST parsing (e.g., from Swift FFI)
     local_constants: Vec<f64>,
     // Cache for constraint-filtered constants
     constraint_cache: HashMap<String, Vec<f64>>,
 }
 
 impl ConstantPool {
-    fn new() -> Self {
+    fn with_local_constants(local_constants: &[f64]) -> Self {
         let mut global_constants = Vec::new();
         
         // Add all positive constants from GLOBAL_FLOAT_CONSTANTS
@@ -116,7 +116,7 @@ impl ConstantPool {
         
         Self {
             global_constants,
-            local_constants: Vec::new(), // TODO: implement local constant extraction
+            local_constants: local_constants.to_vec(),
             constraint_cache: HashMap::new(),
         }
     }
@@ -129,14 +129,25 @@ impl ConstantPool {
                           allow_subnormal: bool,
                           smallest_nonzero_magnitude: f64,
                           width: FloatWidth) -> &[f64] {
-        // Create cache key based on constraints
-        let cache_key = format!("{}:{:?}:{:?}:{}:{}:{}:{}:{}", 
+        // Create cache key based on constraints and local constants
+        let local_constants_hash = {
+            use std::collections::hash_map::DefaultHasher;
+            use std::hash::{Hash, Hasher};
+            let mut hasher = DefaultHasher::new();
+            self.local_constants.len().hash(&mut hasher);
+            for &constant in &self.local_constants {
+                constant.to_bits().hash(&mut hasher);
+            }
+            hasher.finish()
+        };
+        let cache_key = format!("{}:{:?}:{:?}:{}:{}:{}:{}:{:x}", 
             width.bits(), min_value, max_value, allow_nan, allow_infinity, 
-            allow_subnormal, smallest_nonzero_magnitude, "global");
+            allow_subnormal, smallest_nonzero_magnitude, local_constants_hash);
         
         if !self.constraint_cache.contains_key(&cache_key) {
             let mut valid_constants = Vec::new();
             
+            // Add valid global constants
             for &constant in &self.global_constants {
                 if is_constant_valid(constant, min_value, max_value, allow_nan, 
                                    allow_infinity, allow_subnormal, 
@@ -145,7 +156,14 @@ impl ConstantPool {
                 }
             }
             
-            // TODO: Add local constants here
+            // Add valid local constants (extracted from user code via AST parsing)
+            for &constant in &self.local_constants {
+                if is_constant_valid(constant, min_value, max_value, allow_nan, 
+                                   allow_infinity, allow_subnormal, 
+                                   smallest_nonzero_magnitude, width) {
+                    valid_constants.push(constant);
+                }
+            }
             
             self.constraint_cache.insert(cache_key.clone(), valid_constants);
         }
@@ -841,7 +859,7 @@ pub fn draw_float_width_with_subnormals(
 }
 
 // Backward compatibility function for f64 generation
-pub fn draw_float(
+pub fn draw_float_simple(
     source: &mut DataSource,
     min_value: f64,
     max_value: f64,
@@ -870,7 +888,8 @@ pub fn draw_float_with_subnormals(
 // - Intelligent defaults for special values
 // - smallest_nonzero_magnitude parameter for fine-grained control
 // - Comprehensive validation with helpful error messages
-pub fn draw_float_enhanced(
+/// Draw a float with support for local constants from AST parsing (e.g., Swift FFI)
+pub fn draw_float_with_local_constants(
     source: &mut DataSource,
     min_value: Option<f64>,
     max_value: Option<f64>,
@@ -881,6 +900,46 @@ pub fn draw_float_enhanced(
     width: FloatWidth,
     exclude_min: bool,
     exclude_max: bool,
+    local_constants: &[f64],
+) -> Draw<f64> {
+    // Store local constants in a thread-local or pass them through the call chain
+    // For now, we'll implement this by modifying the constant pool creation directly
+    _draw_float_impl(
+        source, min_value, max_value, allow_nan, allow_infinity, 
+        allow_subnormal, smallest_nonzero_magnitude, width, exclude_min, exclude_max, local_constants
+    )
+}
+
+pub fn draw_float(
+    source: &mut DataSource,
+    min_value: Option<f64>,
+    max_value: Option<f64>,
+    allow_nan: Option<bool>,
+    allow_infinity: Option<bool>,
+    allow_subnormal: Option<bool>,
+    smallest_nonzero_magnitude: Option<f64>,
+    width: FloatWidth,
+    exclude_min: bool,
+    exclude_max: bool,
+) -> Draw<f64> {
+    draw_float_with_local_constants(
+        source, min_value, max_value, allow_nan, allow_infinity, 
+        allow_subnormal, smallest_nonzero_magnitude, width, exclude_min, exclude_max, &[]
+    )
+}
+
+fn _draw_float_impl(
+    source: &mut DataSource,
+    min_value: Option<f64>,
+    max_value: Option<f64>,
+    allow_nan: Option<bool>,
+    allow_infinity: Option<bool>,
+    allow_subnormal: Option<bool>,
+    smallest_nonzero_magnitude: Option<f64>,
+    width: FloatWidth,
+    exclude_min: bool,
+    exclude_max: bool,
+    local_consts: &[f64],
 ) -> Draw<f64> {
     // Validate all parameters and get exact representations
     let (validated_min, validated_max) = match validate_float_generation_params(
@@ -912,6 +971,21 @@ pub fn draw_float_enhanced(
     } else {
         width.smallest_normal()
     };
+    
+    // **NEW: Constant Injection System (15% probability like Python)**
+    // This is the most impactful missing feature from Python Hypothesis
+    if source.bits(7)? < 19 { // 19/128 ≈ 15% probability (Python uses p=0.15)
+        let mut constant_pool = ConstantPool::with_local_constants(local_consts);
+        let valid_constants = constant_pool.get_valid_constants(
+            adjusted_min, adjusted_max, nan_allowed, infinity_allowed,
+            subnormal_allowed, effective_smallest_nonzero, width
+        );
+        
+        if !valid_constants.is_empty() {
+            let index = source.bits(16)? as usize % valid_constants.len();
+            return Ok(valid_constants[index]);
+        }
+    }
     
     // Generate sophisticated special values (Python parity)
     let mut special_candidates = special_floats_for_width(width);
@@ -978,20 +1052,6 @@ fn draw_float_width_with_subnormals_impl(
         width.smallest_normal()
     };
     
-    // **NEW: Constant Injection System (15% probability like Python)**
-    // This is the most impactful missing feature from Python Hypothesis
-    if source.bits(7)? < 19 { // 19/128 ≈ 15% probability (Python uses p=0.15)
-        let mut constant_pool = ConstantPool::new();
-        let valid_constants = constant_pool.get_valid_constants(
-            Some(min_value), Some(max_value), allow_nan, allow_infinity,
-            subnormal_allowed, effective_smallest_nonzero, width
-        );
-        
-        if !valid_constants.is_empty() {
-            let index = source.bits(16)? as usize % valid_constants.len();
-            return Ok(valid_constants[index]);
-        }
-    }
     
     // **NEW: "Weird Floats" Generation (5% probability like Python)**
     // This provides boundary-focused generation beyond constants
@@ -1097,9 +1157,30 @@ pub fn floats(
     exclude_max: bool,
 ) -> impl Fn(&mut DataSource) -> Draw<f64> {
     move |source: &mut DataSource| {
-        draw_float_enhanced(
+        draw_float(
             source, min_value, max_value, allow_nan, allow_infinity, 
             allow_subnormal, smallest_nonzero_magnitude, width, exclude_min, exclude_max
+        )
+    }
+}
+
+/// Generate floats with local constants from AST parsing (e.g., Swift FFI)
+pub fn floats_with_local_constants(
+    min_value: Option<f64>,
+    max_value: Option<f64>,
+    allow_nan: Option<bool>,
+    allow_infinity: Option<bool>,
+    allow_subnormal: Option<bool>,
+    smallest_nonzero_magnitude: Option<f64>,
+    width: FloatWidth,
+    exclude_min: bool,
+    exclude_max: bool,
+    local_constants: Vec<f64>,
+) -> impl Fn(&mut DataSource) -> Draw<f64> {
+    move |source: &mut DataSource| {
+        draw_float_with_local_constants(
+            source, min_value, max_value, allow_nan, allow_infinity, 
+            allow_subnormal, smallest_nonzero_magnitude, width, exclude_min, exclude_max, &local_constants
         )
     }
 }

@@ -203,7 +203,7 @@ fn test_open_intervals_with_exclude_parameters() {
         let mut source = DataSource::from_vec(test_data.clone());
         
         // Test exclude_min
-        let result = draw_float_enhanced(
+        let result = draw_float(
             &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, true, false
         );
         if let Ok(val) = result {
@@ -212,7 +212,7 @@ fn test_open_intervals_with_exclude_parameters() {
         
         // Test exclude_max
         source = DataSource::from_vec(test_data.clone());
-        let result = draw_float_enhanced(
+        let result = draw_float(
             &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, false, true
         );
         if let Ok(val) = result {
@@ -221,7 +221,7 @@ fn test_open_intervals_with_exclude_parameters() {
         
         // Test exclude both
         source = DataSource::from_vec(test_data.clone());
-        let result = draw_float_enhanced(
+        let result = draw_float(
             &mut source, Some(0.0), Some(1.0), Some(false), Some(false), None, None, width, true, true
         );
         if let Ok(val) = result {
@@ -238,18 +238,18 @@ fn test_parameter_validation_with_helpful_errors() {
     let mut source = DataSource::from_vec(test_data);
     
     // Test invalid bound relationship
-    let result = draw_float_enhanced(
+    let result = draw_float(
         &mut source, Some(1.0), Some(0.0), None, None, None, None, FloatWidth::Width64, false, false
     );
     assert!(result.is_err()); // min > max should fail
     
     // Test excluding None bounds
-    let result = draw_float_enhanced(
+    let result = draw_float(
         &mut source, None, Some(1.0), None, None, None, None, FloatWidth::Width64, true, false
     );
     assert!(result.is_err()); // Can't exclude None min_value
     
-    let result = draw_float_enhanced(
+    let result = draw_float(
         &mut source, Some(0.0), None, None, None, None, None, FloatWidth::Width64, false, true
     );
     assert!(result.is_err()); // Can't exclude None max_value
@@ -1893,7 +1893,7 @@ fn test_global_float_constants_completeness() {
     assert!(GLOBAL_FLOAT_CONSTANTS.contains(&2.2250738585072014e-308)); // f64 smallest normal
     
     // Test that we have negative versions (should be added by ConstantPool::new)
-    let pool = ConstantPool::new();
+    let pool = ConstantPool::with_local_constants(&[]);
     assert!(pool.global_constants.len() > 50); // Should have 50+ constants total with negatives
     
     // Test zero is present
@@ -1914,7 +1914,7 @@ fn test_signaling_nan_generation() {
 
 #[test]
 fn test_constant_pool_filtering() {
-    let mut pool = ConstantPool::new();
+    let mut pool = ConstantPool::with_local_constants(&[]);
     
     // Test basic constraint filtering
     let valid_constants = pool.get_valid_constants(
@@ -1931,7 +1931,7 @@ fn test_constant_pool_filtering() {
 
 #[test]
 fn test_constant_pool_nan_filtering() {
-    let mut pool = ConstantPool::new();
+    let mut pool = ConstantPool::with_local_constants(&[]);
     
     // Test with NaN allowed
     let valid_with_nan = pool.get_valid_constants(

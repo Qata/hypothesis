@@ -175,7 +175,7 @@ fn is_string_constant_valid(value: &str,
 
 // Enhanced string generation with Python Hypothesis API compatibility
 // This function supports constant injection (5% probability like Python)
-pub fn draw_string_enhanced(
+pub fn draw_string(
     source: &mut DataSource,
     min_size: usize,
     max_size: usize,
@@ -199,7 +199,7 @@ pub fn draw_string_enhanced(
 }
 
 // Basic string generation (Python's fallback when not using constants)
-pub fn draw_string_basic(
+fn draw_string_basic(
     source: &mut DataSource,
     min_size: usize,
     max_size: usize,
@@ -278,7 +278,7 @@ pub fn text(
     alphabet: Option<String>,
 ) -> impl Fn(&mut DataSource) -> Draw<String> {
     move |source: &mut DataSource| {
-        draw_string_enhanced(source, min_size, max_size, alphabet.as_deref())
+        draw_string(source, min_size, max_size, alphabet.as_deref())
     }
 }
 
@@ -289,7 +289,7 @@ pub fn ascii_text(
 ) -> impl Fn(&mut DataSource) -> Draw<String> {
     move |source: &mut DataSource| {
         let ascii_chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?";
-        draw_string_enhanced(source, min_size, max_size, Some(ascii_chars))
+        draw_string(source, min_size, max_size, Some(ascii_chars))
     }
 }
 
@@ -300,7 +300,7 @@ pub fn printable_text(
 ) -> impl Fn(&mut DataSource) -> Draw<String> {
     move |source: &mut DataSource| {
         let printable_chars = " !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\\\]^_`abcdefghijklmnopqrstuvwxyz{|}~";
-        draw_string_enhanced(source, min_size, max_size, Some(printable_chars))
+        draw_string(source, min_size, max_size, Some(printable_chars))
     }
 }
 
@@ -365,7 +365,7 @@ fn is_bytes_constant_valid(value: &[u8], min_size: usize, max_size: usize) -> bo
 
 // Enhanced bytes generation with Python Hypothesis API compatibility
 // This function supports constant injection (5% probability like Python)
-pub fn draw_bytes_enhanced(
+pub fn draw_bytes(
     source: &mut DataSource,
     min_size: usize,
     max_size: usize,
@@ -386,7 +386,7 @@ pub fn draw_bytes_enhanced(
 }
 
 // Basic bytes generation (Python's fallback when not using constants)
-pub fn draw_bytes_basic(
+fn draw_bytes_basic(
     source: &mut DataSource,
     min_size: usize,
     max_size: usize,
@@ -414,7 +414,7 @@ pub fn binary(
     max_size: usize,
 ) -> impl Fn(&mut DataSource) -> Draw<Vec<u8>> {
     move |source: &mut DataSource| {
-        draw_bytes_enhanced(source, min_size, max_size)
+        draw_bytes(source, min_size, max_size)
     }
 }
 
@@ -424,7 +424,7 @@ pub fn random_bytes(
     max_size: usize,
 ) -> impl Fn(&mut DataSource) -> Draw<Vec<u8>> {
     move |source: &mut DataSource| {
-        draw_bytes_basic(source, min_size, max_size)
+        draw_bytes(source, min_size, max_size)
     }
 }
 
@@ -447,14 +447,10 @@ pub fn draw_boolean(source: &mut DataSource, p: f64) -> Draw<bool> {
 }
 
 /// Generate a boolean with 50% probability (Python's booleans() strategy)
-pub fn draw_boolean_default(source: &mut DataSource) -> Draw<bool> {
-    draw_boolean(source, 0.5)
-}
-
 /// Convenience function matching Python Hypothesis booleans() signature
 pub fn booleans() -> impl Fn(&mut DataSource) -> Draw<bool> {
     |source: &mut DataSource| {
-        draw_boolean_default(source)
+        draw_boolean(source, 0.5)
     }
 }
 
@@ -526,7 +522,7 @@ mod tests {
     }
     
     #[test]
-    fn test_draw_string_enhanced_with_constants() {
+    fn test_draw_string_with_constants() {
         let mut source = test_data_source();
         
         // Test that enhanced generation sometimes returns constants
@@ -534,7 +530,7 @@ mod tests {
         let mut results = Vec::new();
         
         for _ in 0..100 {
-            let result = draw_string_enhanced(&mut source, 1, 20, None);
+            let result = draw_string(&mut source, 1, 20, None);
             match result {
                 Ok(s) => {
                     results.push(s.clone());
@@ -702,14 +698,14 @@ mod tests {
     }
     
     #[test]
-    fn test_draw_bytes_enhanced_with_constants() {
+    fn test_draw_bytes_with_constants() {
         let mut source = test_data_source();
         
         // Test that enhanced generation works (even with empty constants)
         let mut results = Vec::new();
         
         for _ in 0..50 {
-            let result = draw_bytes_enhanced(&mut source, 1, 10);
+            let result = draw_bytes(&mut source, 1, 10);
             match result {
                 Ok(bytes) => {
                     assert!(bytes.len() >= 1 && bytes.len() <= 10);
@@ -751,7 +747,7 @@ mod tests {
             assert!(result.len() >= 5 && result.len() <= 10);
             
             // Check that we get diverse byte values
-            let unique_values: std::collections::HashSet<u8> = result.iter().cloned().collect();
+            let _unique_values: std::collections::HashSet<u8> = result.iter().cloned().collect();
             // With random generation, we should often get some variety
             // (though this is probabilistic so we don't make it too strict)
         }
@@ -784,7 +780,7 @@ mod tests {
     }
     
     #[test]
-    fn test_draw_boolean_default() {
+    fn test_draw_boolean() {
         let mut source = test_data_source();
         
         // Test 50/50 boolean generation
@@ -792,7 +788,7 @@ mod tests {
         let mut false_count = 0;
         
         for _ in 0..100 {
-            match draw_boolean_default(&mut source) {
+            match draw_boolean(&mut source, 0.5) {
                 Ok(true) => true_count += 1,
                 Ok(false) => false_count += 1,
                 Err(_) => {} // Allow some failures
@@ -816,7 +812,7 @@ mod tests {
             let mut test_source = DataSource::from_vec(data);
             
             for _ in 0..20 {
-                match draw_boolean_default(&mut test_source) {
+                match draw_boolean(&mut test_source, 0.5) {
                     Ok(true) => found_true = true,
                     Ok(false) => found_false = true,
                     Err(_) => {} // Allow some failures

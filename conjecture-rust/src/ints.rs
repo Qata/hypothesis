@@ -200,7 +200,7 @@ struct IntegerConstantPool {
 }
 
 impl IntegerConstantPool {
-    fn new() -> Self {
+    fn with_local_constants(local_constants: &[i64]) -> Self {
         let global_constants = Vec::new();
         
         // Python doesn't have global integer constants, but we could add some useful ones
@@ -209,7 +209,7 @@ impl IntegerConstantPool {
         
         Self {
             global_constants,
-            local_constants: Vec::new(), // TODO: implement local constant extraction
+            local_constants: local_constants.to_vec(),
             constraint_cache: HashMap::new(),
         }
     }
@@ -285,17 +285,31 @@ fn is_integer_constant_valid(value: i64,
 // - Weighted integer generation
 // - Constant injection (5% probability like Python)
 // - Sophisticated bound handling (unbounded, semi-bounded, bounded)
-pub fn draw_integer_enhanced(
+pub fn draw_integer(
     source: &mut DataSource,
     min_value: Option<i64>,
     max_value: Option<i64>,
     weights: Option<HashMap<i64, f64>>,
     shrink_towards: i64,
 ) -> Draw<i64> {
+    draw_integer_with_local_constants(
+        source, min_value, max_value, weights, shrink_towards, &[]
+    )
+}
+
+/// Draw an integer with support for local constants from AST parsing (e.g., Swift FFI)
+pub fn draw_integer_with_local_constants(
+    source: &mut DataSource,
+    min_value: Option<i64>,
+    max_value: Option<i64>,
+    weights: Option<HashMap<i64, f64>>,
+    shrink_towards: i64,
+    local_constants: &[i64],
+) -> Draw<i64> {
     // **NEW: Constant Injection System (5% probability like Python)**
     // Note: Python uses 5% by default, 15% for floats
     if source.bits(5)? == 0 { // 1/32 ≈ 3.125%, close to Python's 5%
-        let mut constant_pool = IntegerConstantPool::new();
+        let mut constant_pool = IntegerConstantPool::with_local_constants(local_constants);
         let valid_constants = constant_pool.get_valid_constants(
             min_value, max_value, weights.as_ref(), shrink_towards
         );
@@ -341,7 +355,7 @@ pub fn draw_integer_enhanced(
         
         if idx == 0 {
             // Draw from uniform distribution over the range
-            return draw_bounded_integer_python_style(source, min_val, max_val);
+            return draw_bounded_integer(source, min_val, max_val);
         } else {
             // Return the specific weighted value
             return Ok(weight_keys[idx - 1]);
@@ -352,48 +366,48 @@ pub fn draw_integer_enhanced(
     match (min_value, max_value) {
         (None, None) => {
             // Unbounded case
-            draw_unbounded_integer_python_style(source)
+            draw_unbounded_integer(source)
         },
         (Some(min), None) => {
             // Semi-bounded below - try a few times then fall back to simple generation
             for _attempt in 0..10 {
-                let probe = center + draw_unbounded_integer_python_style(source)?;
+                let probe = center + draw_unbounded_integer(source)?;
                 if probe >= min {
                     return Ok(probe);
                 }
             }
             // Fallback: generate directly above minimum
-            let offset = draw_unbounded_integer_python_style(source)?.abs();
+            let offset = draw_unbounded_integer(source)?.abs();
             Ok(min + offset)
         },
         (None, Some(max)) => {
             // Semi-bounded above - try a few times then fall back to simple generation
             for _attempt in 0..10 {
-                let probe = center + draw_unbounded_integer_python_style(source)?;
+                let probe = center + draw_unbounded_integer(source)?;
                 if probe <= max {
                     return Ok(probe);
                 }
             }
             // Fallback: generate directly below maximum
-            let offset = draw_unbounded_integer_python_style(source)?.abs();
+            let offset = draw_unbounded_integer(source)?.abs();
             Ok(max - offset)
         },
         (Some(min), Some(max)) => {
             // Bounded case
-            draw_bounded_integer_python_style(source, min, max)
+            draw_bounded_integer(source, min, max)
         }
     }
 }
 
-// Python-style unbounded integer generation using INT_SIZES sampling
-fn draw_unbounded_integer_python_style(source: &mut DataSource) -> Draw<i64> {
+// Unbounded integer generation using INT_SIZES sampling
+fn draw_unbounded_integer(source: &mut DataSource) -> Draw<i64> {
     // Python's INT_SIZES equivalent (from utils.py)
     let bitlengths = good_bitlengths();
     integer_from_bitlengths(source, &bitlengths)
 }
 
-// Python-style bounded integer generation with size biasing for large ranges
-fn draw_bounded_integer_python_style(source: &mut DataSource, min_val: i64, max_val: i64) -> Draw<i64> {
+// Bounded integer generation with size biasing for large ranges
+fn draw_bounded_integer(source: &mut DataSource, min_val: i64, max_val: i64) -> Draw<i64> {
     if min_val == max_val {
         return Ok(min_val);
     }
@@ -456,7 +470,20 @@ pub fn integers(
     shrink_towards: i64,
 ) -> impl Fn(&mut DataSource) -> Draw<i64> {
     move |source: &mut DataSource| {
-        draw_integer_enhanced(source, min_value, max_value, weights.clone(), shrink_towards)
+        draw_integer(source, min_value, max_value, weights.clone(), shrink_towards)
+    }
+}
+
+/// Generate integers with local constants from AST parsing (e.g., Swift FFI)
+pub fn integers_with_local_constants(
+    min_value: Option<i64>,
+    max_value: Option<i64>,
+    weights: Option<HashMap<i64, f64>>,
+    shrink_towards: i64,
+    local_constants: Vec<i64>,
+) -> impl Fn(&mut DataSource) -> Draw<i64> {
+    move |source: &mut DataSource| {
+        draw_integer_with_local_constants(source, min_value, max_value, weights.clone(), shrink_towards, &local_constants)
     }
 }
 
@@ -501,7 +528,7 @@ mod tests {
     
     #[test]
     fn test_integer_constant_pool_empty_by_default() {
-        let mut pool = IntegerConstantPool::new();
+        let mut pool = IntegerConstantPool::with_local_constants(&[]);
         
         // Test that global constants are empty (Python parity)
         assert!(pool.global_constants.is_empty());
@@ -540,34 +567,34 @@ mod tests {
     }
     
     #[test]
-    fn test_draw_bounded_integer_python_style() {
+    fn test_draw_bounded_integer() {
         let mut source = test_data_source();
         
         // Test basic bounded generation
         for _ in 0..100 {
-            let result = draw_bounded_integer_python_style(&mut source, 0, 10).unwrap();
+            let result = draw_bounded_integer(&mut source, 0, 10).unwrap();
             assert!(result >= 0 && result <= 10);
         }
         
         // Test single value case
-        let result = draw_bounded_integer_python_style(&mut source, 5, 5).unwrap();
+        let result = draw_bounded_integer(&mut source, 5, 5).unwrap();
         assert_eq!(result, 5);
         
         // Test large range (should trigger size biasing)
         for _ in 0..50 {
-            let result = draw_bounded_integer_python_style(&mut source, 0, 1 << 30).unwrap();
+            let result = draw_bounded_integer(&mut source, 0, 1 << 30).unwrap();
             assert!(result >= 0 && result <= (1 << 30));
         }
     }
     
     #[test]
-    fn test_draw_unbounded_integer_python_style() {
+    fn test_draw_unbounded_integer() {
         let mut source = test_data_source();
         
         // Test that unbounded generation produces various sizes
         let mut values = Vec::new();
         for _ in 0..100 {
-            let result = draw_unbounded_integer_python_style(&mut source);
+            let result = draw_unbounded_integer(&mut source);
             match result {
                 Ok(val) => values.push(val),
                 Err(_) => {} // Allow some failures
@@ -582,12 +609,12 @@ mod tests {
     }
     
     #[test]
-    fn test_draw_integer_enhanced_bounds() {
+    fn test_draw_integer_bounds() {
         let mut source = test_data_source();
         
         // Test bounded case
         for _ in 0..10 {
-            let result = draw_integer_enhanced(&mut source, Some(5), Some(15), None, 0);
+            let result = draw_integer(&mut source, Some(5), Some(15), None, 0);
             match result {
                 Ok(val) => assert!(val >= 5 && val <= 15, "Bounded result {} not in [5, 15]", val),
                 Err(_) => {} // Allow failures for testing
@@ -596,7 +623,7 @@ mod tests {
         
         // Test semi-bounded below (simplified)
         for _ in 0..5 {
-            let result = draw_integer_enhanced(&mut source, Some(10), None, None, 0);
+            let result = draw_integer(&mut source, Some(10), None, None, 0);
             match result {
                 Ok(val) => assert!(val >= 10, "Semi-bounded below result {} not >= 10", val),
                 Err(_) => {} // Allow failures for testing
@@ -605,13 +632,13 @@ mod tests {
         
         // Test unbounded (should always work)
         for _ in 0..10 {
-            let result = draw_integer_enhanced(&mut source, None, None, None, 0);
+            let result = draw_integer(&mut source, None, None, None, 0);
             assert!(result.is_ok(), "Unbounded generation should not fail");
         }
     }
     
     #[test]
-    fn test_draw_integer_enhanced_weights() {
+    fn test_draw_integer_weights() {
         let mut source = test_data_source();
         
         let mut weights = HashMap::new();
@@ -621,7 +648,7 @@ mod tests {
         
         let mut results = Vec::new();
         for _ in 0..50 {
-            let result = draw_integer_enhanced(
+            let result = draw_integer(
                 &mut source, Some(0), Some(10), Some(weights.clone()), 0
             );
             match result {

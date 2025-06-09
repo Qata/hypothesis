@@ -3,7 +3,7 @@
 
 use conjecture::data::DataSource;
 use conjecture::floats::{
-    draw_float_enhanced, floats, 
+    draw_float, floats, 
     FloatWidth,
     subnormal_support_warning,
     is_subnormal_width
@@ -33,7 +33,7 @@ fn main() {
     ] {
         let mut source = DataSource::from_vec(test_data.clone());
         
-        match draw_float_enhanced(
+        match draw_float(
             &mut source, min, max, Some(false), Some(false), None, None,
             FloatWidth::Width64, exc_min, exc_max
         ) {
@@ -60,7 +60,7 @@ fn main() {
         let mut source = DataSource::from_vec(test_data.clone());
         
         // Using None for all special value parameters - should auto-detect!
-        match draw_float_enhanced(
+        match draw_float(
             &mut source, min, max, None, None, None, None,
             FloatWidth::Width64, false, false
         ) {
@@ -88,7 +88,7 @@ fn main() {
     ];
     
     for (desc, min, max, exc_min, exc_max) in test_cases {
-        match draw_float_enhanced(
+        match draw_float(
             &mut source, min, max, Some(false), Some(false), None, None,
             FloatWidth::Width64, exc_min, exc_max
         ) {
@@ -128,7 +128,7 @@ fn main() {
         let tiny_value = smallest_normal / 2.0; // A subnormal value
         
         // Test subnormal auto-detection
-        match draw_float_enhanced(
+        match draw_float(
             &mut source, Some(tiny_value), Some(smallest_normal), 
             None, None, None, None, width, false, false
         ) {
@@ -161,7 +161,7 @@ fn main() {
     for (desc, min, max, nan, inf, sub, width, exc_min, exc_max) in examples {
         let mut source = DataSource::from_vec(test_data.clone());
         
-        match draw_float_enhanced(&mut source, min, max, nan, inf, sub, None, width, exc_min, exc_max) {
+        match draw_float(&mut source, min, max, nan, inf, sub, None, width, exc_min, exc_max) {
             Ok(val) => {
                 let classification = if val.is_nan() { 
                     "NaN".to_string() 
