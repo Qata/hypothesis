@@ -7,8 +7,7 @@ mod encoding;
 
 pub use constants::{FloatWidth, REVERSE_BITS_TABLE, SIMPLE_THRESHOLD_BITS};
 pub use encoding::{
-    is_simple_width, lex_to_float_width, float_to_lex_width, 
-    lex_to_float, float_to_lex
+    is_simple_width, lex_to_float, float_to_lex
 };
 
 // Note: Functions defined in this module are automatically exported with pub
@@ -417,14 +416,6 @@ fn generate_weird_floats(
     weird_floats
 }
 
-// Legacy function - kept for backward compatibility but now uses weird floats internally
-fn generate_boundary_values(
-    min_value: Option<f64>, 
-    max_value: Option<f64>, 
-    width: FloatWidth
-) -> Vec<f64> {
-    generate_weird_floats(min_value, max_value, true, true, true, 0.0, width)
-}
 
 // Adjust bounds for open intervals by finding the next/previous representable float.
 // This implements the exclude_min/exclude_max functionality from Python Hypothesis.
@@ -784,7 +775,7 @@ pub fn draw_float_width_with_subnormals(
     
     // Generate using lexicographic encoding
     let raw_bits = source.bits(width.bits() as u64)?;
-    let mut result = lex_to_float_width(raw_bits, width);
+    let mut result = lex_to_float(raw_bits, width);
     
     // Apply random sign
     if source.bits(1)? == 1 {
@@ -858,28 +849,7 @@ pub fn draw_float_width_with_subnormals(
     Ok(result)
 }
 
-// Backward compatibility function for f64 generation
-pub fn draw_float_simple(
-    source: &mut DataSource,
-    min_value: f64,
-    max_value: f64,
-    allow_nan: bool,
-    allow_infinity: bool,
-) -> Draw<f64> {
-    draw_float_width(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity)
-}
 
-// Backward compatibility function for f64 generation with subnormal control
-pub fn draw_float_with_subnormals(
-    source: &mut DataSource,
-    min_value: f64,
-    max_value: f64,
-    allow_nan: bool,
-    allow_infinity: bool,
-    allow_subnormal: Option<bool>,
-) -> Draw<f64> {
-    draw_float_width_with_subnormals(source, FloatWidth::Width64, min_value, max_value, allow_nan, allow_infinity, allow_subnormal)
-}
 
 // Enhanced float generation with full Python Hypothesis API compatibility.
 // This function supports all the features of Python's floats() strategy:
@@ -989,7 +959,7 @@ fn _draw_float_impl(
     
     // Generate sophisticated special values (Python parity)
     let mut special_candidates = special_floats_for_width(width);
-    special_candidates.extend(generate_boundary_values(adjusted_min, adjusted_max, width));
+    special_candidates.extend(generate_weird_floats(adjusted_min, adjusted_max, true, true, true, 0.0, width));
     
     // Filter special values that meet constraints
     let valid_specials: Vec<f64> = special_candidates
@@ -1088,7 +1058,7 @@ fn draw_float_width_with_subnormals_impl(
     
     // Generate using lexicographic encoding
     let raw_bits = source.bits(width.bits() as u64)?;
-    let mut result = lex_to_float_width(raw_bits, width);
+    let mut result = lex_to_float(raw_bits, width);
     
     // Apply random sign
     if source.bits(1)? == 1 {
@@ -1185,14 +1155,6 @@ pub fn floats_with_local_constants(
     }
 }
 
-// Backward compatibility functions for normal-only helpers
-pub fn next_up_normal(value: f64) -> f64 {
-    next_up_normal_width(value, FloatWidth::Width64)
-}
-
-pub fn next_down_normal(value: f64) -> f64 {
-    next_down_normal_width(value, FloatWidth::Width64)
-}
 
 // Flush-to-Zero (FTZ) detection utilities.
 // These functions help detect broken subnormal support in the runtime environment.
@@ -1344,15 +1306,11 @@ pub fn reinterpret_bits(value: f64, from_width: FloatWidth, to_width: FloatWidth
 }
 
 // Generate a float from raw parts with width support.
-pub fn draw_float_from_parts_width(source: &mut DataSource, width: FloatWidth) -> Draw<f64> {
+pub fn draw_float_from_parts(source: &mut DataSource, width: FloatWidth) -> Draw<f64> {
     let raw_bits = source.bits(width.bits() as u64)?;
-    Ok(lex_to_float_width(raw_bits, width))
+    Ok(lex_to_float(raw_bits, width))
 }
 
-// Backward compatibility function
-pub fn draw_float_from_parts(source: &mut DataSource) -> Draw<f64> {
-    draw_float_from_parts_width(source, FloatWidth::Width64)
-}
 
 // Successor/predecessor and subnormal handling utilities.
 // These functions provide precise control over float ordering and
@@ -1488,18 +1446,6 @@ pub fn min_positive_normal_width(width: FloatWidth) -> f64 {
     int_to_float(min_normal_exp, width)
 }
 
-// Backward compatibility functions for f64
-pub fn next_float(value: f64) -> f64 {
-    next_float_width(value, FloatWidth::Width64)
-}
-
-pub fn prev_float(value: f64) -> f64 {
-    prev_float_width(value, FloatWidth::Width64)
-}
-
-pub fn is_subnormal(value: f64) -> bool {
-    is_subnormal_width(value, FloatWidth::Width64)
-}
 
 // Float counting and cardinality utilities.
 // These functions provide precise counting of representable floats
@@ -1697,21 +1643,9 @@ pub fn index_of_float_in_range_width(value: f64, min: f64, max: f64, width: Floa
     }
 }
 
-// Backward compatibility functions for f64
-pub fn count_floats_in_range(min: f64, max: f64) -> Option<u64> {
-    count_floats_in_range_width(min, max, FloatWidth::Width64)
-}
-
-pub fn nth_float_in_range(min: f64, max: f64, n: u64) -> Option<f64> {
-    nth_float_in_range_width(min, max, n, FloatWidth::Width64)
-}
-
-pub fn index_of_float_in_range(value: f64, min: f64, max: f64) -> Option<u64> {
-    index_of_float_in_range_width(value, min, max, FloatWidth::Width64)
-}
 
 // Draw a float with uniform distribution in range with width support.
-pub fn draw_float_uniform_width(
+pub fn draw_float_uniform(
     source: &mut DataSource, 
     width: FloatWidth,
     min_value: f64, 
@@ -1729,10 +1663,6 @@ pub fn draw_float_uniform_width(
     Ok(result.max(min_value).min(max_value))
 }
 
-// Backward compatibility function
-pub fn draw_float_uniform(source: &mut DataSource, min_value: f64, max_value: f64) -> Draw<f64> {
-    draw_float_uniform_width(source, FloatWidth::Width64, min_value, max_value)
-}
 
 
 #[cfg(test)]

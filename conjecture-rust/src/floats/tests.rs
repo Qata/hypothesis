@@ -10,8 +10,8 @@ fn test_multi_width_roundtrip() {
     for width in [FloatWidth::Width16, FloatWidth::Width32, FloatWidth::Width64] {
         for &val in &test_values {
             if val >= 0.0 && val.is_finite() {
-                let encoded = float_to_lex_width(val, width);
-                let decoded = lex_to_float_width(encoded, width);
+                let encoded = float_to_lex(val, width);
+                let decoded = lex_to_float(encoded, width);
                 
                 // Allow for precision loss in smaller widths
                 let tolerance = match width {
@@ -736,8 +736,8 @@ fn test_lexicographic_ordering_properties() {
                 let val2 = simple_ints[j];
                 
                 if val1 >= 0.0 && val2 >= 0.0 && is_simple_width(val1, width) && is_simple_width(val2, width) {
-                    let lex1 = float_to_lex_width(val1, width);
-                    let lex2 = float_to_lex_width(val2, width);
+                    let lex1 = float_to_lex(val1, width);
+                    let lex2 = float_to_lex(val2, width);
                     
                     // Simple integers should maintain ordering
                     assert!(lex1 <= lex2, 
@@ -748,8 +748,8 @@ fn test_lexicographic_ordering_properties() {
         }
         
         // Test that zero has the smallest encoding among positive values
-        let zero_lex = float_to_lex_width(0.0, width);
-        let one_lex = float_to_lex_width(1.0, width);
+        let zero_lex = float_to_lex(0.0, width);
+        let one_lex = float_to_lex(1.0, width);
         
         if is_simple_width(0.0, width) && is_simple_width(1.0, width) {
             assert!(zero_lex <= one_lex, 
@@ -779,9 +779,9 @@ fn test_round_trip_encoding_consistency() {
                 };
                 
                 if val <= max_val {
-                    let encoded = float_to_lex_width(val, width);
-                    let decoded = lex_to_float_width(encoded, width);
-                    let re_encoded = float_to_lex_width(decoded, width);
+                    let encoded = float_to_lex(val, width);
+                    let decoded = lex_to_float(encoded, width);
+                    let re_encoded = float_to_lex(decoded, width);
                     
                     assert_eq!(encoded, re_encoded,
                         "Round-trip encoding failed for width {:?}: {} -> {} -> {} -> {}",
@@ -910,8 +910,8 @@ fn test_comprehensive_roundtrip_against_python_examples() {
     
     for &f in &test_cases {
         if f >= 0.0 {  // Our implementation handles positive values in this test
-            let i = float_to_lex_width(f, width);
-            let g = lex_to_float_width(i, width);
+            let i = float_to_lex(f, width);
+            let g = lex_to_float(i, width);
             
             // Convert both to raw bits for exact comparison
             let f_bits = f.to_bits();
@@ -963,8 +963,8 @@ fn test_integer_like_floats() {
         
         for &int_val in &integer_floats {
             // Test that integer values roundtrip with acceptable precision
-            let encoded = float_to_lex_width(int_val, width);
-            let decoded = lex_to_float_width(encoded, width);
+            let encoded = float_to_lex(int_val, width);
+            let decoded = lex_to_float(encoded, width);
             
             // Allow for precision loss in smaller widths
             let tolerance = match width {
@@ -1008,8 +1008,8 @@ fn test_boundary_value_generation() {
         
         // Test that these values survive encoding/decoding
         for &val in &[min_normal, max_subnormal, min_subnormal] {
-            let encoded = float_to_lex_width(val, width);
-            let decoded = lex_to_float_width(encoded, width);
+            let encoded = float_to_lex(val, width);
+            let decoded = lex_to_float(encoded, width);
             assert_eq!(val, decoded, 
                 "Boundary value should roundtrip exactly for width {:?}: {} -> {} -> {}",
                 width, val, encoded, decoded);
@@ -1045,7 +1045,7 @@ fn test_python_equivalence_verification() {
     // Test that simple integers use direct encoding (tag bit 0)
     for simple_int in [0.0, 1.0, 2.0, 10.0, 100.0, 1000.0] {
         if is_simple_width(simple_int, FloatWidth::Width64) {
-            let encoded = float_to_lex_width(simple_int, FloatWidth::Width64);
+            let encoded = float_to_lex(simple_int, FloatWidth::Width64);
             // Tag bit should be 0 for simple integers
             assert_eq!(encoded >> 63, 0, "Simple integer {} should have tag bit 0", simple_int);
             // Value should be directly encoded in lower 56 bits
@@ -1058,7 +1058,7 @@ fn test_python_equivalence_verification() {
     // Test that complex floats use encoded format (tag bit 1)
     for complex_float in [0.5, std::f64::consts::PI, 1e10, f64::INFINITY] {
         if !is_simple_width(complex_float, FloatWidth::Width64) {
-            let encoded = float_to_lex_width(complex_float, FloatWidth::Width64);
+            let encoded = float_to_lex(complex_float, FloatWidth::Width64);
             // Tag bit should be 1 for complex floats
             assert_eq!(encoded >> 63, 1, "Complex float {} should have tag bit 1", complex_float);
         }
@@ -1070,8 +1070,8 @@ fn test_python_equivalence_verification() {
     let complex_small = 0.1;   // Small complex float
     
     if is_simple_width(simple_large, FloatWidth::Width64) && !is_simple_width(complex_small, FloatWidth::Width64) {
-        let encoded_simple = float_to_lex_width(simple_large, FloatWidth::Width64);
-        let encoded_complex = float_to_lex_width(complex_small, FloatWidth::Width64);
+        let encoded_simple = float_to_lex(simple_large, FloatWidth::Width64);
+        let encoded_complex = float_to_lex(complex_small, FloatWidth::Width64);
         
         // Simple integers should have smaller encodings due to tag bit 0 vs 1
         assert!(encoded_simple < encoded_complex,
@@ -1084,8 +1084,8 @@ fn test_python_equivalence_verification() {
     for base in [1.0, 2.0, 10.0, 100.0] {
         let fractional = base + 0.5;
         if is_simple_width(base, FloatWidth::Width64) {
-            let base_encoded = float_to_lex_width(base, FloatWidth::Width64);
-            let fractional_encoded = float_to_lex_width(fractional, FloatWidth::Width64);
+            let base_encoded = float_to_lex(base, FloatWidth::Width64);
+            let fractional_encoded = float_to_lex(fractional, FloatWidth::Width64);
             
             assert!(base_encoded < fractional_encoded,
                 "Integer {} should be lexicographically better than fractional {}", base, fractional);
@@ -1098,9 +1098,9 @@ fn test_python_equivalence_verification() {
     let quarter = 0.25;  // 1/4
     let three_quarters = 0.75; // 3/4
     
-    let half_encoded = float_to_lex_width(half, FloatWidth::Width64);
-    let quarter_encoded = float_to_lex_width(quarter, FloatWidth::Width64);
-    let three_quarters_encoded = float_to_lex_width(three_quarters, FloatWidth::Width64);
+    let half_encoded = float_to_lex(half, FloatWidth::Width64);
+    let quarter_encoded = float_to_lex(quarter, FloatWidth::Width64);
+    let three_quarters_encoded = float_to_lex(three_quarters, FloatWidth::Width64);
     
     // All fractional values should use complex encoding (tag bit 1)
     assert_eq!(quarter_encoded >> 63, 1, "0.25 should use complex encoding");
@@ -1113,9 +1113,9 @@ fn test_python_equivalence_verification() {
     assert_ne!(quarter_encoded, three_quarters_encoded, "Different values should have different encodings");
     
     // Test round-trip consistency for fractional values
-    assert_eq!(lex_to_float_width(half_encoded, FloatWidth::Width64), half);
-    assert_eq!(lex_to_float_width(quarter_encoded, FloatWidth::Width64), quarter);
-    assert_eq!(lex_to_float_width(three_quarters_encoded, FloatWidth::Width64), three_quarters);
+    assert_eq!(lex_to_float(half_encoded, FloatWidth::Width64), half);
+    assert_eq!(lex_to_float(quarter_encoded, FloatWidth::Width64), quarter);
+    assert_eq!(lex_to_float(three_quarters_encoded, FloatWidth::Width64), three_quarters);
     
     println!("✓ Python equivalence verification passed - our encoding matches Python Hypothesis behavior");
 }
@@ -1144,8 +1144,8 @@ fn test_integral_floats_order_as_integers() {
         for &y in &integral_floats {
             if x != y {
                 let (smaller, larger) = if x < y { (x, y) } else { (y, x) };
-                let smaller_lex = float_to_lex_width(smaller, FloatWidth::Width64);
-                let larger_lex = float_to_lex_width(larger, FloatWidth::Width64);
+                let smaller_lex = float_to_lex(smaller, FloatWidth::Width64);
+                let larger_lex = float_to_lex(larger, FloatWidth::Width64);
                 
                 assert!(smaller_lex < larger_lex,
                     "Integral float {} should have smaller lex encoding than {}: {} vs {}",
@@ -1159,11 +1159,11 @@ fn test_integral_floats_order_as_integers() {
 fn test_fractional_floats_are_worse_than_one() {
     // Matches Python's test_fractional_floats_are_worse_than_one
     let fractional_values = [0.1, 0.25, 0.5, 0.75, 0.9, 0.999];
-    let one_lex = float_to_lex_width(1.0, FloatWidth::Width64);
+    let one_lex = float_to_lex(1.0, FloatWidth::Width64);
     
     for &f in &fractional_values {
         if f > 0.0 && f < 1.0 {
-            let f_lex = float_to_lex_width(f, FloatWidth::Width64);
+            let f_lex = float_to_lex(f, FloatWidth::Width64);
             assert!(f_lex > one_lex,
                 "Fractional float {} should have worse (larger) lex encoding than 1.0: {} vs {}",
                 f, f_lex, one_lex);
@@ -1183,8 +1183,8 @@ fn test_floats_order_worse_than_their_integral_part() {
             let integral_part = base;
             
             if is_simple_width(integral_part, FloatWidth::Width64) {
-                let integral_lex = float_to_lex_width(integral_part, FloatWidth::Width64);
-                let mixed_lex = float_to_lex_width(mixed_float, FloatWidth::Width64);
+                let integral_lex = float_to_lex(integral_part, FloatWidth::Width64);
+                let mixed_lex = float_to_lex(mixed_float, FloatWidth::Width64);
                 
                 assert!(integral_lex < mixed_lex,
                     "Integer {} should have better lex encoding than fractional {}: {} vs {}",
@@ -1217,8 +1217,8 @@ fn test_canonical_nan_behavior() {
         assert!(nan.is_nan(), "All variants should be NaN: {}", nan);
         
         // Test that our encoding/decoding preserves NaN-ness
-        let encoded = float_to_lex_width(nan.abs(), FloatWidth::Width64);
-        let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+        let encoded = float_to_lex(nan.abs(), FloatWidth::Width64);
+        let decoded = lex_to_float(encoded, FloatWidth::Width64);
         assert!(decoded.is_nan(), "Encoded/decoded value should remain NaN");
     }
 }
@@ -1230,8 +1230,8 @@ fn test_interesting_floats_coverage() {
     
     for &interesting in &interesting_floats {
         if interesting.is_finite() && interesting >= 0.0 {
-            let encoded = float_to_lex_width(interesting, FloatWidth::Width64);
-            let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+            let encoded = float_to_lex(interesting, FloatWidth::Width64);
+            let decoded = lex_to_float(encoded, FloatWidth::Width64);
             
             if interesting.is_nan() {
                 assert!(decoded.is_nan(), "NaN should remain NaN");
@@ -1252,8 +1252,8 @@ fn test_final_python_parity_verification() {
     ];
     
     for &val in &python_test_cases {
-        let encoded = float_to_lex_width(val, FloatWidth::Width64);
-        let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+        let encoded = float_to_lex(val, FloatWidth::Width64);
+        let decoded = lex_to_float(encoded, FloatWidth::Width64);
         
         // Verify bit-level roundtrip (same as Python's test)
         let original_bits = float_to_int(val, FloatWidth::Width64);
@@ -1267,8 +1267,8 @@ fn test_final_python_parity_verification() {
     // From test_integral_floats_order_as_integers
     let integral_pairs = [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)];
     for (smaller, larger) in integral_pairs {
-        let smaller_lex = float_to_lex_width(smaller, FloatWidth::Width64);
-        let larger_lex = float_to_lex_width(larger, FloatWidth::Width64);
+        let smaller_lex = float_to_lex(smaller, FloatWidth::Width64);
+        let larger_lex = float_to_lex(larger, FloatWidth::Width64);
         assert!(smaller_lex < larger_lex,
             "Python ordering violated: {} >= {} for values {} < {}", 
             smaller_lex, larger_lex, smaller, larger);
@@ -1277,9 +1277,9 @@ fn test_final_python_parity_verification() {
     // Verify specific Python fractional ordering
     // From test_fractional_floats_are_worse_than_one  
     let fractional_values = [0.1, 0.25, 0.5, 0.75, 0.9];
-    let one_lex = float_to_lex_width(1.0, FloatWidth::Width64);
+    let one_lex = float_to_lex(1.0, FloatWidth::Width64);
     for &frac in &fractional_values {
-        let frac_lex = float_to_lex_width(frac, FloatWidth::Width64);
+        let frac_lex = float_to_lex(frac, FloatWidth::Width64);
         assert!(frac_lex > one_lex,
             "Python fractional ordering violated: {} <= {} for {} vs 1.0",
             frac_lex, one_lex, frac);
@@ -1297,8 +1297,8 @@ fn test_final_python_parity_verification() {
     
     // Verify tag bit behavior matches Python exactly
     // Simple integers should have tag bit 0, complex floats should have tag bit 1
-    let simple_encoded = float_to_lex_width(42.0, FloatWidth::Width64);
-    let complex_encoded = float_to_lex_width(0.5, FloatWidth::Width64);
+    let simple_encoded = float_to_lex(42.0, FloatWidth::Width64);
+    let complex_encoded = float_to_lex(0.5, FloatWidth::Width64);
     
     assert_eq!(simple_encoded >> 63, 0, "Simple integer should have tag bit 0");
     assert_eq!(complex_encoded >> 63, 1, "Complex float should have tag bit 1");
@@ -1329,8 +1329,8 @@ fn test_print_comparison_values() {
     println!("────────────────────────────────────────────────────────────────────────────────");
     
     for f in python_test_cases {
-        let lex_encoding = float_to_lex_width(f, FloatWidth::Width64);
-        let roundtrip = lex_to_float_width(lex_encoding, FloatWidth::Width64);
+        let lex_encoding = float_to_lex(f, FloatWidth::Width64);
+        let roundtrip = lex_to_float(lex_encoding, FloatWidth::Width64);
         
         let orig_bits = float_to_int(f, FloatWidth::Width64);
         let roundtrip_bits = float_to_int(roundtrip, FloatWidth::Width64);
@@ -1353,8 +1353,8 @@ fn test_print_comparison_values() {
     println!("────────────────────────────────────────────────────────────────────────────────");
     
     for f in additional_test_cases {
-        let lex_encoding = float_to_lex_width(f, FloatWidth::Width64);
-        let roundtrip = lex_to_float_width(lex_encoding, FloatWidth::Width64);
+        let lex_encoding = float_to_lex(f, FloatWidth::Width64);
+        let roundtrip = lex_to_float(lex_encoding, FloatWidth::Width64);
         
         let orig_bits = float_to_int(f, FloatWidth::Width64);
         let roundtrip_bits = float_to_int(roundtrip, FloatWidth::Width64);
@@ -1416,8 +1416,8 @@ fn test_print_comparison_values() {
     println!("──────────────────────────────────────────────────────────────────────");
     
     for (a, b) in ordering_pairs {
-        let lex_a = float_to_lex_width(a, FloatWidth::Width64);
-        let lex_b = float_to_lex_width(b, FloatWidth::Width64);
+        let lex_a = float_to_lex(a, FloatWidth::Width64);
+        let lex_b = float_to_lex(b, FloatWidth::Width64);
         
         println!("{:<15} {:<15} {:016x}  {:016x}", a, b, lex_a, lex_b);
     }
@@ -1437,8 +1437,8 @@ fn test_mantissa_bit_reversal_edge_cases() {
     
     // Case 1: unbiased_exponent <= 0 (reverse all mantissa bits)
     let subnormal_value = 1e-310; // Very small value with negative unbiased exponent
-    let encoded = float_to_lex_width(subnormal_value, FloatWidth::Width64);
-    let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+    let encoded = float_to_lex(subnormal_value, FloatWidth::Width64);
+    let decoded = lex_to_float(encoded, FloatWidth::Width64);
     assert_eq!(subnormal_value.to_bits(), decoded.to_bits(), 
                "Mantissa reversal failed for negative unbiased exponent");
     
@@ -1453,16 +1453,16 @@ fn test_mantissa_bit_reversal_edge_cases() {
     ];
     
     for &val in &test_values {
-        let encoded = float_to_lex_width(val, FloatWidth::Width64);
-        let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+        let encoded = float_to_lex(val, FloatWidth::Width64);
+        let decoded = lex_to_float(encoded, FloatWidth::Width64);
         assert_eq!(val.to_bits(), decoded.to_bits(), 
                    "Fractional bit reversal failed for {}", val);
     }
     
     // Case 3: unbiased_exponent > 52 (no reversal)
     let large_value = 1e20; // Large value with high exponent
-    let encoded = float_to_lex_width(large_value, FloatWidth::Width64);
-    let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+    let encoded = float_to_lex(large_value, FloatWidth::Width64);
+    let decoded = lex_to_float(encoded, FloatWidth::Width64);
     assert_eq!(large_value.to_bits(), decoded.to_bits(), 
                "Large value encoding failed");
 }
@@ -1505,8 +1505,8 @@ fn test_multi_width_precision_preservation() {
     
     for &val in &test_values {
         // Test f16 precision - use relative tolerance
-        let f16_encoded = float_to_lex_width(val, FloatWidth::Width16);
-        let f16_decoded = lex_to_float_width(f16_encoded, FloatWidth::Width16);
+        let f16_encoded = float_to_lex(val, FloatWidth::Width16);
+        let f16_decoded = lex_to_float(f16_encoded, FloatWidth::Width16);
         let f16_expected = f16::from_f64(val).to_f64();
         let f16_tolerance = f16_expected.abs() * 1e-3 + 1e-6;
         assert!((f16_decoded - f16_expected).abs() <= f16_tolerance,
@@ -1514,8 +1514,8 @@ fn test_multi_width_precision_preservation() {
                 val, f16_decoded, f16_expected, (f16_decoded - f16_expected).abs());
         
         // Test f32 precision
-        let f32_encoded = float_to_lex_width(val, FloatWidth::Width32);
-        let f32_decoded = lex_to_float_width(f32_encoded, FloatWidth::Width32);
+        let f32_encoded = float_to_lex(val, FloatWidth::Width32);
+        let f32_decoded = lex_to_float(f32_encoded, FloatWidth::Width32);
         let f32_expected = val as f32 as f64;
         let f32_tolerance = f32_expected.abs() * 1e-6 + 1e-12;
         assert!((f32_decoded - f32_expected).abs() <= f32_tolerance,
@@ -1523,8 +1523,8 @@ fn test_multi_width_precision_preservation() {
                 val, f32_decoded, f32_expected, (f32_decoded - f32_expected).abs());
         
         // Test f64 precision (should be exact)
-        let f64_encoded = float_to_lex_width(val, FloatWidth::Width64);
-        let f64_decoded = lex_to_float_width(f64_encoded, FloatWidth::Width64);
+        let f64_encoded = float_to_lex(val, FloatWidth::Width64);
+        let f64_decoded = lex_to_float(f64_encoded, FloatWidth::Width64);
         assert_eq!(val.to_bits(), f64_decoded.to_bits(),
                   "f64 precision mismatch for {}", val);
     }
@@ -1547,8 +1547,8 @@ fn test_lexicographic_ordering_with_compaction_sensitive_values() {
     ];
     
     for (smaller, larger) in sensitive_pairs {
-        let lex_smaller = float_to_lex_width(smaller, FloatWidth::Width64);
-        let lex_larger = float_to_lex_width(larger, FloatWidth::Width64);
+        let lex_smaller = float_to_lex(smaller, FloatWidth::Width64);
+        let lex_larger = float_to_lex(larger, FloatWidth::Width64);
         
         assert!(lex_smaller < lex_larger,
                 "Ordering failed: {} (lex: {:016x}) should be < {} (lex: {:016x})",
@@ -1566,14 +1566,14 @@ fn test_tag_bit_consistency() {
     
     // Simple values should have tag bit = 0
     for &val in &simple_values {
-        let encoded = float_to_lex_width(val, FloatWidth::Width64);
+        let encoded = float_to_lex(val, FloatWidth::Width64);
         let tag_bit = encoded >> 63;
         assert_eq!(tag_bit, 0, "Simple value {} should have tag bit 0", val);
     }
     
     // Complex values should have tag bit = 1  
     for &val in &complex_values {
-        let encoded = float_to_lex_width(val, FloatWidth::Width64);
+        let encoded = float_to_lex(val, FloatWidth::Width64);
         let tag_bit = encoded >> 63;
         assert_eq!(tag_bit, 1, "Complex value {} should have tag bit 1", val);
     }
@@ -1582,8 +1582,8 @@ fn test_tag_bit_consistency() {
     let large_simple = (1u64 << 55) as f64;  // 2^55 - should be simple  
     let large_complex = (1u64 << 57) as f64; // 2^57 - should be complex
     
-    let encoded_simple = float_to_lex_width(large_simple, FloatWidth::Width64);
-    let encoded_complex = float_to_lex_width(large_complex, FloatWidth::Width64);
+    let encoded_simple = float_to_lex(large_simple, FloatWidth::Width64);
+    let encoded_complex = float_to_lex(large_complex, FloatWidth::Width64);
     
     assert_eq!(encoded_simple >> 63, 0, "2^55 should be simple (tag bit 0)");
     assert_eq!(encoded_complex >> 63, 1, "2^57 should be complex (tag bit 1)");
@@ -1607,7 +1607,7 @@ fn test_exact_python_bit_patterns() {
     ];
     
     for (input, expected) in python_test_cases {
-        let actual = float_to_lex_width(input, FloatWidth::Width64);
+        let actual = float_to_lex(input, FloatWidth::Width64);
         assert_eq!(actual, expected,
                   "Python bit pattern mismatch for {}: got {:016x}, expected {:016x}",
                   input, actual, expected);
@@ -1637,8 +1637,8 @@ fn test_width_specific_constants_and_calculations() {
         
         // Test that these constants are actually used in calculations
         let test_value = 2.5;
-        let encoded = float_to_lex_width(test_value, width);
-        let decoded = lex_to_float_width(encoded, width);
+        let encoded = float_to_lex(test_value, width);
+        let decoded = lex_to_float(encoded, width);
         
         // Should roundtrip within width precision
         let precision_adjusted = match width {
@@ -1667,8 +1667,8 @@ fn test_subnormal_float_handling() {
     
     for &val in &subnormal_values {
         if val > 0.0 && val.is_finite() {
-            let encoded = float_to_lex_width(val, FloatWidth::Width64);
-            let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+            let encoded = float_to_lex(val, FloatWidth::Width64);
+            let decoded = lex_to_float(encoded, FloatWidth::Width64);
             assert_eq!(val.to_bits(), decoded.to_bits(),
                       "Subnormal encoding failed for {}", val);
         }
@@ -1705,8 +1705,8 @@ fn test_extended_signed_zero_handling() {
     let neg_zero = -0.0;
     
     // Both should encode to the same value (positive zero)
-    let pos_encoded = float_to_lex_width(pos_zero, FloatWidth::Width64);
-    let neg_encoded = float_to_lex_width(neg_zero, FloatWidth::Width64);
+    let pos_encoded = float_to_lex(pos_zero, FloatWidth::Width64);
+    let neg_encoded = float_to_lex(neg_zero, FloatWidth::Width64);
     
     assert_eq!(pos_encoded, neg_encoded, "Signed zeros should encode identically");
     assert_eq!(pos_encoded, 0, "Zero should encode to 0");
@@ -1716,7 +1716,7 @@ fn test_extended_signed_zero_handling() {
     assert!(is_simple_width(neg_zero, FloatWidth::Width64), "-0.0 should be simple");
     
     // Decoding should give positive zero
-    let decoded = lex_to_float_width(pos_encoded, FloatWidth::Width64);
+    let decoded = lex_to_float(pos_encoded, FloatWidth::Width64);
     assert_eq!(decoded, 0.0, "Decoded zero should be positive");
     assert!(decoded.is_sign_positive(), "Decoded zero should have positive sign");
 }
@@ -1730,8 +1730,8 @@ fn test_narrow_float_intervals() {
         let next_val = next_float_width(val, FloatWidth::Width64);
         
         if val != next_val && val.is_finite() && next_val.is_finite() {
-            let lex_a = float_to_lex_width(val, FloatWidth::Width64);
-            let lex_b = float_to_lex_width(next_val, FloatWidth::Width64);
+            let lex_a = float_to_lex(val, FloatWidth::Width64);
+            let lex_b = float_to_lex(next_val, FloatWidth::Width64);
             
             // Lexicographic ordering should match numerical ordering
             assert!(lex_a < lex_b, 
@@ -1747,8 +1747,8 @@ fn test_nan_handling_basic() {
     let nan_value = f64::NAN;
     
     if nan_value.is_nan() {
-        let encoded = float_to_lex_width(nan_value, FloatWidth::Width64);
-        let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+        let encoded = float_to_lex(nan_value, FloatWidth::Width64);
+        let decoded = lex_to_float(encoded, FloatWidth::Width64);
         
         assert!(decoded.is_nan(), "NaN should decode to NaN");
         
@@ -1763,8 +1763,8 @@ fn test_infinity_handling() {
     let inf_values = [f64::INFINITY, f64::NEG_INFINITY];
     
     for &inf_val in &inf_values {
-        let encoded = float_to_lex_width(inf_val.abs(), FloatWidth::Width64); // We only handle positive
-        let decoded = lex_to_float_width(encoded, FloatWidth::Width64);
+        let encoded = float_to_lex(inf_val.abs(), FloatWidth::Width64); // We only handle positive
+        let decoded = lex_to_float(encoded, FloatWidth::Width64);
         
         assert!(decoded.is_infinite(), "Infinity should decode to infinity");
         assert!(decoded.is_sign_positive(), "Our encoding handles positive infinity");
@@ -1784,15 +1784,15 @@ fn test_cross_width_precision_consistency() {
     
     for &val in &test_values {
         // f64 -> f32 -> f64 roundtrip
-        let f32_encoded = float_to_lex_width(val, FloatWidth::Width32);
-        let f32_decoded = lex_to_float_width(f32_encoded, FloatWidth::Width32);
+        let f32_encoded = float_to_lex(val, FloatWidth::Width32);
+        let f32_decoded = lex_to_float(f32_encoded, FloatWidth::Width32);
         let f32_expected = val as f32 as f64;
         assert!((f32_decoded - f32_expected).abs() < 1e-6,
                "f32 precision error for {}: {} != {}", val, f32_decoded, f32_expected);
         
         // f64 -> f16 -> f64 roundtrip
-        let f16_encoded = float_to_lex_width(val, FloatWidth::Width16);
-        let f16_decoded = lex_to_float_width(f16_encoded, FloatWidth::Width16);
+        let f16_encoded = float_to_lex(val, FloatWidth::Width16);
+        let f16_decoded = lex_to_float(f16_encoded, FloatWidth::Width16);
         let f16_expected = f16::from_f64(val).to_f64();
         assert!((f16_decoded - f16_expected).abs() < 1e-3,
                "f16 precision error for {}: {} != {}", val, f16_decoded, f16_expected);
@@ -1816,8 +1816,8 @@ fn test_ordering_across_special_boundaries() {
     ];
     
     for (smaller, larger) in same_category_tests {
-        let lex_smaller = float_to_lex_width(smaller, FloatWidth::Width64);
-        let lex_larger = float_to_lex_width(larger, FloatWidth::Width64);
+        let lex_smaller = float_to_lex(smaller, FloatWidth::Width64);
+        let lex_larger = float_to_lex(larger, FloatWidth::Width64);
         
         assert!(lex_smaller < lex_larger,
                "Same-category ordering failed: {} (lex: {:016x}) should be < {} (lex: {:016x})",
@@ -1831,8 +1831,8 @@ fn test_ordering_across_special_boundaries() {
     ];
     
     for (integer, fraction) in cross_category_tests {
-        let lex_integer = float_to_lex_width(integer, FloatWidth::Width64);
-        let lex_fraction = float_to_lex_width(fraction, FloatWidth::Width64);
+        let lex_integer = float_to_lex(integer, FloatWidth::Width64);
+        let lex_fraction = float_to_lex(fraction, FloatWidth::Width64);
         
         // Verify our categorization
         assert!(is_simple_width(integer, FloatWidth::Width64), "{} should be simple", integer);
@@ -1860,8 +1860,8 @@ fn test_float_range_properties() {
         assert!(start < end, "Start {} should be < end {}", start, end);
         
         // Test that lexicographic encoding preserves ordering within same category
-        let lex_start = float_to_lex_width(start, FloatWidth::Width64);
-        let lex_end = float_to_lex_width(end, FloatWidth::Width64);
+        let lex_start = float_to_lex(start, FloatWidth::Width64);
+        let lex_end = float_to_lex(end, FloatWidth::Width64);
         
         // Our lexicographic ordering: simple integers < complex floats
         // So we need to be careful about cross-boundary comparisons

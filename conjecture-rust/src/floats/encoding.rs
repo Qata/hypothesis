@@ -126,7 +126,7 @@ fn update_mantissa(unbiased_exponent: i32, mantissa: u64, width: FloatWidth) -> 
 // This implements the exact two-branch tagged union approach used in Python Hypothesis:
 // - Tag bit 0: Simple integer encoding (direct representation)
 // - Tag bit 1: Complex float encoding (IEEE 754 with transformations)
-pub fn lex_to_float_width(i: u64, width: FloatWidth) -> f64 {
+pub fn lex_to_float(i: u64, width: FloatWidth) -> f64 {
     static ENCODING_TABLES_16: OnceLock<Vec<u32>> = OnceLock::new();
     static ENCODING_TABLES_32: OnceLock<Vec<u32>> = OnceLock::new();
     static ENCODING_TABLES_64: OnceLock<Vec<u32>> = OnceLock::new();
@@ -199,7 +199,7 @@ pub fn lex_to_float_width(i: u64, width: FloatWidth) -> f64 {
 // This implements the exact two-branch encoding used in Python Hypothesis:
 // - Simple integers use direct encoding with tag bit 0
 // - All other floats use complex IEEE 754 encoding with tag bit 1
-pub fn float_to_lex_width(f: f64, width: FloatWidth) -> u64 {
+pub fn float_to_lex(f: f64, width: FloatWidth) -> u64 {
     // Handle negative numbers by taking absolute value (sign encoded separately)
     let abs_f = f.abs();
     
@@ -208,13 +208,13 @@ pub fn float_to_lex_width(f: f64, width: FloatWidth) -> u64 {
         abs_f as u64
     } else {
         // Complex branch (tag = 1): IEEE 754 with transformations
-        base_float_to_lex_width(abs_f, width)
+        base_float_to_lex(abs_f, width)
     }
 }
 
 // Convert float to lexicographic encoding (internal implementation for complex branch).
 // This handles the complex encoding case with IEEE 754 transformations (Python-equivalent).
-fn base_float_to_lex_width(f: f64, width: FloatWidth) -> u64 {
+fn base_float_to_lex(f: f64, width: FloatWidth) -> u64 {
     static DECODING_TABLES_16: OnceLock<Vec<u32>> = OnceLock::new();
     static DECODING_TABLES_32: OnceLock<Vec<u32>> = OnceLock::new();
     static DECODING_TABLES_64: OnceLock<Vec<u32>> = OnceLock::new();
@@ -272,14 +272,6 @@ fn base_float_to_lex_width(f: f64, width: FloatWidth) -> u64 {
     (1u64 << tag_bit_pos) | (reordered_exponent << mantissa_bits) | mantissa
 }
 
-// Backward compatibility functions for existing f64-only API
-pub fn lex_to_float(i: u64) -> f64 {
-    lex_to_float_width(i, FloatWidth::Width64)
-}
-
-pub fn float_to_lex(f: f64) -> u64 {
-    float_to_lex_width(f, FloatWidth::Width64)
-}
 
 #[cfg(test)]
 mod tests {
@@ -476,8 +468,8 @@ mod tests {
         ];
         
         for (val, width) in test_cases {
-            let encoded = float_to_lex_width(val, width);
-            let decoded = lex_to_float_width(encoded, width);
+            let encoded = float_to_lex(val, width);
+            let decoded = lex_to_float(encoded, width);
             
             // Allow precision differences based on width
             let tolerance = match width {
