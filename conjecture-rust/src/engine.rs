@@ -417,6 +417,11 @@ where
     }
 
     fn adaptive_delete(&mut self) -> StepResult {
+        // First, try to identify and shrink array-like structures
+        // Arrays drawn with RepeatValues have a pattern where continuation draws
+        // determine the length
+        self.shrink_array_lengths()?;
+        
         let mut i = 0;
         let target = self.shrink_target.clone();
 
@@ -475,6 +480,120 @@ where
         Ok(())
     }
 
+    fn shrink_array_lengths(&mut self) -> StepResult {
+        println!("SHRINK DEBUG: shrink_array_lengths starting");
+        println!("SHRINK DEBUG: Current record: {:?}", self.shrink_target.record);
+        println!("SHRINK DEBUG: Current draws: {:?}", self.shrink_target.draws);
+        
+        // Improved approach: Use draw information to identify array structures
+        // Arrays have a pattern of draws where small draws (size 1) control continuation
+        // followed by larger draws for elements
+        
+        let target = self.shrink_target.clone();
+        
+        // Find groups of draws that look like array structures
+        let mut i = 0;
+        while i < target.draws.len() {
+            // Look for patterns of single-byte draws (continuation decisions)
+            let mut continuation_draws = Vec::new();
+            let mut j = i;
+            
+            // Collect consecutive single-byte draws
+            while j < target.draws.len() {
+                let draw = &target.draws[j];
+                if draw.end - draw.start == 1 {
+                    // Single byte draw - likely a continuation decision
+                    let byte_value = target.record[draw.start];
+                    if byte_value <= 1 {  // Boolean-like value
+                        continuation_draws.push(j);
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+            
+            if continuation_draws.len() >= 2 {
+                println!("SHRINK DEBUG: Found {} continuation draws starting at draw index {}", 
+                    continuation_draws.len(), i);
+                
+                // Now look for element draws that follow
+                let mut element_draws = Vec::new();
+                while j < target.draws.len() && element_draws.len() < continuation_draws.len() {
+                    element_draws.push(j);
+                    j += 1;
+                }
+                
+                println!("SHRINK DEBUG: Found {} element draws", element_draws.len());
+                
+                // Try to shrink the array by removing continuation+element pairs
+                // Start from the end to maintain indices
+                for num_to_remove in (1..=continuation_draws.len().min(element_draws.len())).rev() {
+                    println!("SHRINK DEBUG: Attempting to remove {} array elements", num_to_remove);
+                    
+                    // Build list of draws to delete (from the end)
+                    let mut draws_to_delete = Vec::new();
+                    
+                    // Add the last num_to_remove continuation draws
+                    for k in 0..num_to_remove {
+                        let cont_idx = continuation_draws.len() - 1 - k;
+                        if cont_idx < continuation_draws.len() {
+                            draws_to_delete.push(continuation_draws[cont_idx]);
+                        }
+                    }
+                    
+                    // Add the corresponding element draws
+                    for k in 0..num_to_remove {
+                        let elem_idx = element_draws.len() - 1 - k;
+                        if elem_idx < element_draws.len() {
+                            draws_to_delete.push(element_draws[elem_idx]);
+                        }
+                    }
+                    
+                    // Sort in reverse order to delete from end first
+                    draws_to_delete.sort_by(|a, b| b.cmp(a));
+                    draws_to_delete.dedup();
+                    
+                    println!("SHRINK DEBUG: Will try to delete draws: {:?}", draws_to_delete);
+                    
+                    // Try deleting these draws
+                    let mut attempt = target.record.clone();
+                    let mut deleted = 0;
+                    
+                    for draw_idx in draws_to_delete {
+                        if draw_idx < target.draws.len() {
+                            let draw = &target.draws[draw_idx];
+                            let start = draw.start - deleted;
+                            let end = draw.end - deleted;
+                            
+                            if start < attempt.len() && end <= attempt.len() {
+                                attempt.drain(start..end);
+                                deleted += end - start;
+                            }
+                        }
+                    }
+                    
+                    println!("SHRINK DEBUG: Trying array-shortened buffer: {:?}", attempt);
+                    
+                    if attempt.len() < self.shrink_target.record.len() {
+                        if self.incorporate(&attempt)? {
+                            println!("SHRINK DEBUG: Successfully shortened array by {} elements!", num_to_remove);
+                            // Continue shrinking from the new state
+                            return self.shrink_array_lengths();
+                        }
+                    }
+                }
+            }
+            
+            i = j.max(i + 1);
+        }
+        
+        println!("SHRINK DEBUG: shrink_array_lengths completed");
+        Ok(())
+    }
+    
     fn delete_all_ranges(&mut self) -> StepResult {
         let mut i = 0;
         while i < self.shrink_target.record.len() {

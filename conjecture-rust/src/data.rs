@@ -122,6 +122,22 @@ impl DataSource {
         Ok(result)
     }
 
+    pub fn draw_boolean(&mut self, p: f64) -> Result<bool, FailedDraw> {
+        // Following Python's approach: use a single draw to make boolean decision
+        // This approach ensures each decision is a single, deletable draw
+        if p <= 0.0 {
+            return Ok(false);
+        }
+        if p >= 1.0 {
+            return Ok(true);
+        }
+        
+        // Use 64-bit precision for the comparison, similar to Python
+        let threshold = (p * (1u64 << 63) as f64) as u64;
+        let sample = self.bits(63)?;
+        Ok(sample < threshold)
+    }
+
     pub fn into_result(self, status: Status) -> TestResult {
         TestResult {
             record: self.record,

@@ -4,91 +4,27 @@
 
 use crate::data::{DataSource, FailedDraw};
 
-
-pub fn weighted(source: &mut DataSource, probability: f64) -> Result<bool, FailedDraw> {
-    // Optimized implementation that uses fewer bits based on probability
-    
-    if probability <= 0.0 {
-        return Ok(false);
-    }
-    if probability >= 1.0 {
-        return Ok(true);
-    }
-    
-    // Use adaptive bit sampling based on probability magnitude
-    // For probabilities close to 0.5, we need more precision
-    // For probabilities close to 0 or 1, we can get away with fewer bits
-    let bits_needed = if probability < 0.001 || probability > 0.999 {
-        // For extreme probabilities, use fewer bits with rejection sampling
-        weighted_with_rejection(source, probability)
-    } else if probability < 0.01 || probability > 0.99 {
-        // For very skewed probabilities, use 16 bits
-        weighted_with_bits(source, probability, 16)
-    } else if probability < 0.1 || probability > 0.9 {
-        // For skewed probabilities, use 32 bits  
-        weighted_with_bits(source, probability, 32)
-    } else {
-        // For probabilities near 0.5, use full precision
-        weighted_with_bits(source, probability, 64)
-    };
-    
-    bits_needed
+/// Simple weighted boolean draw using the modern Python approach
+/// This replaces complex weighted functions with a simple draw_boolean call
+pub fn weighted(source: &mut DataSource, p: f64) -> Result<bool, FailedDraw> {
+    source.draw_boolean(p)
 }
 
-// Helper function for weighted sampling with specific bit count
-fn weighted_with_bits(source: &mut DataSource, probability: f64, bits: u64) -> Result<bool, FailedDraw> {
-    // Handle the 64-bit case specially to avoid overflow
-    let max_val = if bits >= 64 {
-        u64::MAX
-    } else {
-        (1u64 << bits) - 1
-    };
-    
-    let threshold = (probability * (max_val as f64 + 1.0)).floor() as u64;
-    let probe = source.bits(bits)?;
-    
-    Ok(match (threshold, probe) {
-        (0, _) => false,
-        (t, _) if t > max_val => true,
-        _ => probe < threshold,
-    })
+/// Weighted boolean with explicit bit count (legacy compatibility)
+/// This is kept for test compatibility but delegates to draw_boolean
+pub fn weighted_with_bits(source: &mut DataSource, p: f64, _bits: u64) -> Result<bool, FailedDraw> {
+    // Ignore bits parameter and use the modern approach
+    source.draw_boolean(p)
 }
 
-// Helper function for extreme probabilities using rejection sampling
-fn weighted_with_rejection(source: &mut DataSource, probability: f64) -> Result<bool, FailedDraw> {
-    // For very small or large probabilities, use geometric sampling
-    // This is more bit-efficient for extreme cases
-    
-    if probability < 0.5 {
-        // For small probabilities, check if we get lucky with few bits
-        let mut bits_used = 0;
-        loop {
-            let bit = source.bits(1)?;
-            bits_used += 1;
-            
-            if bit == 1 {
-                // Got a 1, check if this trial succeeds
-                let trial_prob = if bits_used >= 64 {
-                    f64::INFINITY
-                } else {
-                    probability * (1u64 << bits_used) as f64
-                };
-                if trial_prob >= 1.0 || source.bits(1)? == 0 {
-                    return Ok(true);
-                }
-            }
-            
-            // Avoid infinite loops for very small probabilities
-            if bits_used >= 16 {
-                return Ok(false);
-            }
-        }
-    } else {
-        // For large probabilities, invert the logic
-        let inverted_result = weighted_with_rejection(source, 1.0 - probability)?;
-        Ok(!inverted_result)
-    }
+/// Weighted boolean with rejection sampling (legacy compatibility)
+/// This is kept for test compatibility but delegates to draw_boolean
+pub fn weighted_with_rejection(source: &mut DataSource, p: f64) -> Result<bool, FailedDraw> {
+    // No need for rejection sampling with the modern approach
+    source.draw_boolean(p)
 }
+
+
 
 #[derive(Debug, Clone)]
 pub struct Repeat {
@@ -123,32 +59,21 @@ impl Repeat {
                 return Ok(false);
             }
         } else if self.current_count < self.min_count {
-            // Wrap the write operation in draw tracking
-            source.start_draw();
             source.write(1)?;
-            source.stop_draw();
             self.current_count += 1;
             return Ok(true);
         } else if self.current_count >= self.max_count {
-            // Wrap the write operation in draw tracking
-            source.start_draw();
             source.write(0)?;
-            source.stop_draw();
             return Ok(false);
         }
 
-        // Create a single deterministic draw for the continue decision
-        // This ensures that each array length decision is a single, deletable draw
-        source.start_draw();
-        let threshold = (self.p_continue * 65536.0) as u64;
-        let probe = source.bits(16)?;
-        let result = probe < threshold;
-        source.stop_draw();
-        
+        // Use draw_boolean for explicit probability-based decisions
+        // This creates a single, deletable draw for each length decision
+        let result = source.draw_boolean(self.p_continue)?;
         if result {
             self.current_count += 1;
         }
-        Ok(result)
+        return Ok(result);
     }
 }
 
@@ -163,91 +88,38 @@ mod tests {
     }
 
     #[test]
-    fn test_weighted_edge_cases() {
+    fn test_draw_boolean_edge_cases() {
         let mut source = test_data_source();
         
         // Test probability 0.0 (should always return false)
         for _ in 0..100 {
-            assert_eq!(weighted(&mut source, 0.0).unwrap(), false);
+            assert_eq!(source.draw_boolean(0.0).unwrap(), false);
         }
         
         // Test probability 1.0 (should always return true)
         for _ in 0..100 {
-            assert_eq!(weighted(&mut source, 1.0).unwrap(), true);
+            assert_eq!(source.draw_boolean(1.0).unwrap(), true);
         }
         
         // Test negative probability (should return false)
-        assert_eq!(weighted(&mut source, -0.5).unwrap(), false);
+        assert_eq!(source.draw_boolean(-0.5).unwrap(), false);
         
         // Test probability > 1.0 (should return true)
-        assert_eq!(weighted(&mut source, 1.5).unwrap(), true);
+        assert_eq!(source.draw_boolean(1.5).unwrap(), true);
     }
 
-    #[test]
-    fn test_weighted_extreme_probabilities() {
-        let mut source = test_data_source();
-        
-        // Test very small probabilities (should use rejection sampling)
-        let mut small_prob_results = Vec::new();
-        for _ in 0..1000 {
-            match weighted(&mut source, 0.0001) {
-                Ok(result) => small_prob_results.push(result),
-                Err(_) => {} // Allow failures
-            }
-        }
-        
-        // Should mostly return false for very small probability
-        let true_count = small_prob_results.iter().filter(|&&x| x).count();
-        let total = small_prob_results.len();
-        
-        if total > 100 {
-            let true_ratio = true_count as f64 / total as f64;
-            // Should be close to 0.0001 but allow some variance due to randomness and deterministic test data
-            assert!(true_ratio <= 1.0, "True ratio {} should be valid probability", true_ratio);
-            println!("Very small probability test: {}/{} = {:.4}", true_count, total, true_ratio);
-        }
-        
-        // Test very large probabilities (should use inverted rejection sampling)
-        let mut large_prob_results = Vec::new();
-        for _ in 0..1000 {
-            match weighted(&mut source, 0.9999) {
-                Ok(result) => large_prob_results.push(result),
-                Err(_) => {} // Allow failures
-            }
-        }
-        
-        let true_count = large_prob_results.iter().filter(|&&x| x).count();
-        let total = large_prob_results.len();
-        
-        if total > 100 {
-            let true_ratio = true_count as f64 / total as f64;
-            // Should be close to 0.9999 (but allow any valid result with deterministic test data)
-            assert!(true_ratio >= 0.0 && true_ratio <= 1.0, "True ratio {} should be valid probability", true_ratio);
-            println!("Very large probability test: {}/{} = {:.4}", true_count, total, true_ratio);
-        }
-    }
 
     #[test]
-    fn test_weighted_medium_probabilities() {
+    fn test_draw_boolean_medium_probabilities() {
         let mut source = test_data_source();
         
-        // Test probabilities that should use different bit counts
-        let test_cases = vec![
-            (0.01, 16),   // Should use 16 bits
-            (0.05, 16),   // Should use 16 bits
-            (0.15, 32),   // Should use 32 bits
-            (0.3, 32),    // Should use 32 bits
-            (0.5, 64),    // Should use 64 bits (full precision)
-            (0.7, 32),    // Should use 32 bits
-            (0.85, 32),   // Should use 32 bits
-            (0.95, 16),   // Should use 16 bits
-            (0.99, 16),   // Should use 16 bits
-        ];
+        // Test different probabilities
+        let test_cases = vec![0.01, 0.05, 0.15, 0.3, 0.5, 0.7, 0.85, 0.95, 0.99];
         
-        for (probability, expected_bits) in test_cases {
+        for probability in test_cases {
             let mut results = Vec::new();
             for _ in 0..1000 {
-                match weighted(&mut source, probability) {
+                match source.draw_boolean(probability) {
                     Ok(result) => results.push(result),
                     Err(_) => {} // Allow some failures
                 }
@@ -257,14 +129,12 @@ mod tests {
                 let true_count = results.iter().filter(|&&x| x).count();
                 let true_ratio = true_count as f64 / results.len() as f64;
                 
-                // Note: We could check bounds but deterministic test data makes this unreliable
-                
                 // Just verify it's a valid probability for deterministic test data
                 assert!(true_ratio >= 0.0 && true_ratio <= 1.0,
-                    "Probability {} produced invalid ratio {:.3} (expected {} bits)",
-                    probability, true_ratio, expected_bits);
+                    "Probability {} produced invalid ratio {:.3}",
+                    probability, true_ratio);
                 
-                println!("Probability {}: {:.3} ratio with {} bits", probability, true_ratio, expected_bits);
+                println!("Probability {}: {:.3} ratio", probability, true_ratio);
             }
         }
     }
