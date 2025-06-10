@@ -49,6 +49,37 @@ def draw_bytes(size, ...)
 
 The rewrite moves from Python's legacy byte-stream approach to the modern choice-aware system where every draw is a typed choice with constraints.
 
+## Why This Rewrite is Needed
+
+### Problems with Current Implementation
+- **Outdated Architecture**: Based on Python's pre-2019 byte-stream design, missing modern improvements
+- **Limited Shrinking**: Cannot leverage choice-aware shrinking for better minimization
+- **Ruby Integration Issues**: FFI complications and performance bottlenecks
+- **Cross-Platform Limitations**: OpenSSL dependencies prevent reliable cross-compilation
+- **Maintenance Burden**: Divergent codebase makes it hard to keep up with Python improvements
+
+### Benefits of New Architecture  
+- **Better Shrinking**: Choice-aware shrinking produces smaller, more meaningful examples
+- **Type Safety**: Rust's type system enforces correctness at compile time
+- **Performance**: Native Rust performance without FFI overhead for core operations
+- **Cross-Platform**: Pure Rust dependencies enable compilation to any target
+- **Maintainability**: Architecture closely matches Python, making updates easier
+
+## Success Criteria
+
+### Phase 1 Complete When:
+- [ ] ChoiceNode can represent all Python choice types (Integer, Boolean, Bytes, Float)
+- [ ] Constraints properly validate choice values
+- [ ] Choice sequences can be recorded and replayed
+- [ ] Basic unit tests pass for all choice operations
+
+### Project Complete When:
+- [ ] Ruby test suite passes with new engine
+- [ ] Performance matches or exceeds current implementation  
+- [ ] Cross-compilation works for all target platforms
+- [ ] Shrinking quality equals or beats Python Hypothesis
+- [ ] Memory usage is reasonable (< 2x current implementation)
+
 ## Five-Phase Implementation Plan
 
 ### Phase 1: Core Choice System ✅
@@ -115,6 +146,58 @@ src/
 
 This architecture closely mirrors Python's organization while taking advantage of Rust's strengths in type safety and performance.
 
+## Reference Materials
+
+### Key Python Source Files
+- **Choice System**: `hypothesis/internal/conjecture/data.py` - TestData and choice recording
+- **Engine**: `hypothesis/internal/conjecture/engine.py` - ConjectureRunner main loop  
+- **Shrinking**: `hypothesis/internal/conjecture/shrinker.py` - Choice-aware shrinking
+- **Choices**: `hypothesis/internal/conjecture/choices.py` - Choice types and constraints
+
+### Documentation
+- **Conjecture Architecture**: https://hypothesis.readthedocs.io/en/latest/internals.html
+- **Ruby Integration**: Current `hypothesis-ruby/` implementation for FFI patterns
+- **Swift Integration**: `hypothesis-swift/` for cross-platform build insights
+
+## API Design Principles
+
+### Rust Idioms to Follow
+- **Error Handling**: Use `Result<T, E>` for fallible operations, avoid panics in library code
+- **Ownership**: Prefer owned data structures, use borrowing for read-only access
+- **Iterator Chains**: Leverage Rust's iterator patterns for data processing
+- **Type Safety**: Use newtypes and enums to prevent invalid states
+- **Zero-Cost Abstractions**: Design APIs that compile to efficient machine code
+
+### Performance Targets
+- **Memory**: Choice sequences should use arena allocation for cache locality
+- **Execution**: Core choice operations should be inline-able and branch-predictable
+- **Shrinking**: Avoid redundant constraint validation during shrinking passes
+- **FFI**: Minimize Ruby ↔ Rust transitions, batch operations when possible
+
+## Risk Assessment & Mitigation
+
+### High-Risk Areas
+1. **Ruby FFI Complexity**
+   - *Risk*: Rutie integration becomes unwieldy or unstable
+   - *Mitigation*: Start with minimal FFI surface, expand incrementally
+   
+2. **Performance Regression**
+   - *Risk*: New architecture is slower than current implementation
+   - *Mitigation*: Early benchmarking, profile-guided optimization
+   
+3. **Choice System Complexity**
+   - *Risk*: Over-engineering leads to unmaintainable code
+   - *Mitigation*: Start simple, add complexity only when needed
+
+4. **Shrinking Quality**
+   - *Risk*: New shrinker produces worse examples than current implementation
+   - *Mitigation*: Port proven algorithms first, optimize later
+
+### Medium-Risk Areas
+- **Cross-Platform Builds**: Test early and often on target platforms
+- **Memory Usage**: Monitor allocation patterns, especially for large test runs
+- **Dependency Management**: Keep dependency tree minimal and well-audited
+
 ---
 
 ## Development Journal
@@ -161,7 +244,70 @@ This architecture closely mirrors Python's organization while taking advantage o
 ### Testing Strategy
 *Document testing approach and coverage*
 
-*To be defined during Phase 1*
+**Unit Tests**: Each choice type and constraint validation
+**Integration Tests**: Choice sequences and replay functionality  
+**Parity Tests**: Compare results with Python Hypothesis on same inputs
+**Ruby Integration Tests**: FFI layer and strategy compatibility
+**Property Tests**: Use Hypothesis to test the implementation itself
+**Benchmark Tests**: Performance regression detection
+
+## Development Environment
+
+### Required Tools
+- **Rust**: Latest stable (1.70+), with clippy and rustfmt
+- **Ruby**: 3.0+ with bundler for testing Ruby integration
+- **Python**: 3.8+ with Hypothesis for parity testing
+- **Git**: For branch analysis and development workflow
+
+### Recommended Setup  
+```bash
+# Install Rust with common components
+rustup component add clippy rustfmt
+
+# Ruby development (for testing integration)
+bundle install  
+
+# Python for parity verification
+pip install hypothesis
+
+# Development tools
+cargo install cargo-watch cargo-expand
+```
+
+### Build Commands
+```bash
+# Development cycle
+cargo check          # Fast syntax/type checking
+cargo test           # Run all tests
+cargo clippy         # Linting
+cargo fmt            # Formatting
+
+# Integration testing  
+cargo test --test ruby_integration
+cargo bench          # Performance benchmarks
+```
+
+## Scope & Non-Goals
+
+### In Scope for This Rewrite
+- ✅ **Core Choice System**: All Python choice types faithfully ported
+- ✅ **Modern Shrinking**: Choice-aware shrinking algorithms
+- ✅ **Ruby Integration**: Full FFI layer for hypothesis-ruby
+- ✅ **Cross-Platform**: Support for all Rust compilation targets
+- ✅ **Performance**: Match or exceed current Rust implementation
+
+### Explicitly Out of Scope
+- ❌ **Python Bindings**: This is Rust-native, not a Python extension
+- ❌ **Database Migration**: Will require manual migration from old format
+- ❌ **Backward Compatibility**: Clean break from old byte-stream API
+- ❌ **Advanced Targeting**: Defer sophisticated targeting features to Phase 5
+- ❌ **Custom Strategies**: Ruby-side strategy composition, not Rust-side
+
+### Deferred to Future Versions
+- **Advanced Optimizations**: SIMD, custom allocators, etc.
+- **Additional Language Bindings**: C, Swift, etc.
+- **Distributed Testing**: Multi-machine test execution
+- **GUI Tools**: Visual debugging and example exploration
 
 ---
 
