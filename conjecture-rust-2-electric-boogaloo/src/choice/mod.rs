@@ -4,13 +4,19 @@
 //! flows through strongly-typed choices with associated constraints.
 
 mod constraints;
+mod indexing;
+mod indexing_correct;
 mod node;
 mod values;
 
 #[cfg(test)]
 mod python_parity_tests;
 
+#[cfg(test)]
+mod choice_debug;
+
 pub use constraints::*;
+pub use indexing::*;
 pub use node::*;
 pub use values::*;
 
