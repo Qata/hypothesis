@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    hypothesis-specs (0.7.0)
+    hypothesis-specs (0.7.1)
       rutie (~> 0.0.3)
 
 GEM

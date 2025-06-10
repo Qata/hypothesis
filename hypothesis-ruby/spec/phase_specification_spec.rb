@@ -5,7 +5,9 @@ RSpec.describe 'specifying which phases to include' do
 
   it 'alerts of improper phase names' do
     expect do
-      hypothesis(phases: [:sHrInK])
+      hypothesis(phases: [:sHrInK]) do
+        # This block should never execute
+      end
     end.to raise_exception(
       ArgumentError,
       'Cannot convert to Phase: sHrInK is not a valid Phase'

@@ -14,8 +14,8 @@ use rutie::{
 
 use conjecture::data::{DataSource, Status, TestResult};
 use conjecture::database::{BoxedDatabase, DirectoryDatabase, NoDatabase};
-use conjecture::distributions;
 use conjecture::distributions::Repeat;
+use conjecture::ints::{Sampler, good_bitlengths, integer_from_bitlengths, bounded_int};
 use conjecture::engine::{Engine, Phase};
 
 pub struct HypothesisCoreDataSourceStruct {
@@ -158,25 +158,26 @@ methods!(
         name: RString,
         database_path: RString,
         seed: Integer,
-        max_example: Integer,
+        max_examples: Integer,
         phases: Array
     ) -> AnyObject {
-        let rust_phases = safe_access(phases)
+        let rust_phases: Result<Vec<Phase>, AnyException> = safe_access(phases)
             .into_iter()
             .map(|ruby_phase| {
                 let phase_sym = safe_access(ruby_phase.try_convert_to::<Symbol>());
-                let phase = Phase::try_from(phase_sym.to_str())
-                    .map_err(|e| AnyException::new("ArgumentError", Some(&e)));
-
-                safe_access(phase)
+                let phase_str = phase_sym.to_str();
+                Phase::try_from(phase_str)
+                    .map_err(|e| AnyException::new("ArgumentError", Some(&e)))
             })
             .collect();
+        
+        let rust_phases = safe_access(rust_phases);
 
         let core_engine = HypothesisCoreEngineStruct::new(
             safe_access(name).to_string(),
             database_path.ok().map(|p| p.to_string()),
             safe_access(seed).to_u64(),
-            safe_access(max_example).to_u64(),
+            safe_access(max_examples).to_u64(),
             rust_phases,
         );
 
@@ -254,19 +255,19 @@ methods!(
 );
 
 pub struct HypothesisCoreIntegersStruct {
-    bitlengths: distributions::Sampler,
+    bitlengths: Sampler,
 }
 
 impl HypothesisCoreIntegersStruct {
     fn new() -> HypothesisCoreIntegersStruct {
         HypothesisCoreIntegersStruct {
-            bitlengths: distributions::good_bitlengths(),
+            bitlengths: good_bitlengths(),
         }
     }
 
     fn provide(&mut self, data: &mut HypothesisCoreDataSourceStruct) -> Option<i64> {
         data.source.as_mut().and_then(|ref mut source| {
-            distributions::integer_from_bitlengths(source, &self.bitlengths).ok()
+            integer_from_bitlengths(source, &self.bitlengths).ok()
         })
     }
 }
@@ -386,7 +387,7 @@ impl HypothesisCoreBoundedIntegersStruct {
     fn provide(&mut self, data: &mut HypothesisCoreDataSourceStruct) -> Option<u64> {
         data.source
             .as_mut()
-            .and_then(|ref mut source| distributions::bounded_int(source, self.max_value).ok())
+            .and_then(|ref mut source| bounded_int(source, self.max_value).ok())
     }
 }
 
@@ -427,7 +428,7 @@ methods!(
 
 #[allow(non_snake_case)]
 #[no_mangle]
-pub extern "C" fn Init_rutie_hypothesis_core() {
+pub extern "C" fn Init_hypothesis_ruby_core() {
     Class::new("HypothesisCoreEngine", None).define(|klass| {
         klass.def_self("new", ruby_hypothesis_core_engine_new);
         klass.def("new_source", ruby_hypothesis_core_engine_new_source);

@@ -6,6 +6,8 @@ RSpec.describe 'shrinking' do
 
   it 'finds a small list' do
     ls, = find { any(arrays(of: integers)).length >= 2 }
+    puts "DEBUG: Found list: #{ls.inspect}"
+    puts "DEBUG: List length: #{ls.length}"
     expect(ls).to eq([0, 0])
   end
 
@@ -22,6 +24,9 @@ RSpec.describe 'shrinking' do
         !@original_target.nil? && v && v[-1] == @original_target[-1]
       end
 
+      puts "DEBUG: Shrunk list: #{ls.inspect}"
+      puts "DEBUG: Shrunk list length: #{ls.length}"
+      puts "DEBUG: Original target: #{@original_target.inspect}"
       expect(ls.length).to eq(1)
     end
   end

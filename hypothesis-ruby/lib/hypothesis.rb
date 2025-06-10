@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+# No library loading here - done in engine.rb
 require_relative 'hypothesis/junkdrawer'
 require_relative 'hypothesis/errors'
 require_relative 'hypothesis/possible'
@@ -8,12 +9,17 @@ require_relative 'hypothesis/engine'
 require_relative 'hypothesis/world'
 
 module Phase
+  EXPLICIT = :explicit
+  REUSE = :reuse
+  GENERATE = :generate
+  TARGET = :target
   SHRINK = :shrink
+  EXPLAIN = :explain
 
   module_function
 
   def all
-    [SHRINK]
+    [EXPLICIT, REUSE, GENERATE, TARGET, SHRINK, EXPLAIN]
   end
 
   def excluding(*phases)
@@ -50,12 +56,6 @@ module Hypothesis
   end
 
   def self.included(*)
-    if setup_called == false
-      Rutie.new(:hypothesis_ruby_core).init(
-        'Init_rutie_hypothesis_core',
-        __dir__
-      )
-    end
     @@setup_called = true
   end
 

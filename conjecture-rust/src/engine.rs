@@ -16,14 +16,26 @@ use crate::data::{DataSource, DataStreamSlice, Status, TestResult};
 use crate::database::BoxedDatabase;
 use crate::intminimize::minimize_integer;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Phase {
+    Explicit,
+    Reuse,
+    Generate,
+    Target,
     Shrink,
+    Explain,
 }
 
 impl Phase {
     pub fn all() -> Vec<Self> {
-        vec![Phase::Shrink]
+        vec![
+            Phase::Explicit,
+            Phase::Reuse,
+            Phase::Generate,
+            Phase::Target,
+            Phase::Shrink,
+            Phase::Explain,
+        ]
     }
 }
 
@@ -32,7 +44,12 @@ impl TryFrom<&str> for Phase {
 
     fn try_from(value: &str) -> Result<Self, String> {
         match value {
+            "explicit" => Ok(Phase::Explicit),
+            "reuse" => Ok(Phase::Reuse),
+            "generate" => Ok(Phase::Generate),
+            "target" => Ok(Phase::Target),
             "shrink" => Ok(Phase::Shrink),
+            "explain" => Ok(Phase::Explain),
             _ => Err(format!(
                 "Cannot convert to Phase: {} is not a valid Phase",
                 value

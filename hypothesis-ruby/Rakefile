@@ -109,3 +109,5 @@ end
 task gem: :clean do
   sh 'gem build hypothesis-specs.gemspec'
 end
+
+task default: :test

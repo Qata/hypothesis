@@ -1,6 +1,11 @@
 # frozen_string_literal: true
 
-require 'rutie'
+# Load the native extension directly
+require 'fiddle'
+lib_path = File.join(__dir__, 'libhypothesis_ruby_core.so')
+lib = Fiddle.dlopen(lib_path)
+init_func = Fiddle::Function.new(lib['Init_hypothesis_ruby_core'], [], Fiddle::TYPE_VOID)
+init_func.call
 
 module Hypothesis
   DEFAULT_DATABASE_PATH = File.join(Dir.pwd, '.hypothesis', 'examples')
@@ -9,8 +14,10 @@ module Hypothesis
     attr_reader :current_source
     attr_accessor :is_find
 
-    def initialize(name, options)
-      seed = Random.rand(2**64 - 1)
+    def initialize(name, options = {})
+      seed = options.fetch(:seed, Random.rand(2**64 - 1))
+      max_examples = options.fetch(:max_examples, 100)
+      phases = options.fetch(:phases, [:shrink])
 
       database = options.fetch(:database, nil)
 
@@ -19,11 +26,11 @@ module Hypothesis
       database = nil if database == false
 
       @core_engine = HypothesisCoreEngine.new(
-        name,
-        database,
+        name.to_s,
+        database.nil? ? "" : database.to_s,
         seed,
-        options.fetch(:max_examples),
-        options.fetch(:phases)
+        max_examples,
+        phases
       )
 
       @exceptions_to_tags = Hash.new { |h, k| h[k] = h.size }
