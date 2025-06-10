@@ -8,6 +8,14 @@ RSpec.describe 'shrinking' do
     ls, = find { any(arrays(of: integers)).length >= 2 }
     puts "DEBUG: Found list: #{ls.inspect}"
     puts "DEBUG: List length: #{ls.length}"
+    
+    # Debug: let's see what the draws look like when we replay this
+    if ls.length > 2
+      puts "DEBUG: Failure case - array too long!"
+      puts "DEBUG: Let's examine draw structure..."
+      # We can't easily access the draws from here, but we know something went wrong
+    end
+    
     expect(ls).to eq([0, 0])
   end
 

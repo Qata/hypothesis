@@ -16,26 +16,14 @@ use crate::data::{DataSource, DataStreamSlice, Status, TestResult};
 use crate::database::BoxedDatabase;
 use crate::intminimize::minimize_integer;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub enum Phase {
-    Explicit,
-    Reuse,
-    Generate,
-    Target,
     Shrink,
-    Explain,
 }
 
 impl Phase {
     pub fn all() -> Vec<Self> {
-        vec![
-            Phase::Explicit,
-            Phase::Reuse,
-            Phase::Generate,
-            Phase::Target,
-            Phase::Shrink,
-            Phase::Explain,
-        ]
+        vec![Phase::Shrink]
     }
 }
 
@@ -44,12 +32,7 @@ impl TryFrom<&str> for Phase {
 
     fn try_from(value: &str) -> Result<Self, String> {
         match value {
-            "explicit" => Ok(Phase::Explicit),
-            "reuse" => Ok(Phase::Reuse),
-            "generate" => Ok(Phase::Generate),
-            "target" => Ok(Phase::Target),
             "shrink" => Ok(Phase::Shrink),
-            "explain" => Ok(Phase::Explain),
             _ => Err(format!(
                 "Cannot convert to Phase: {} is not a valid Phase",
                 value
@@ -254,6 +237,10 @@ where
 
     fn predicate(&mut self, result: &TestResult) -> bool {
         let succeeded = (self._predicate)(result);
+        println!("SHRINK DEBUG: predicate called - succeeded={}", succeeded);
+        println!("SHRINK DEBUG: result.record: {:?}", result.record);
+        println!("SHRINK DEBUG: current shrink_target: {:?}", self.shrink_target.record);
+        
         if succeeded
             && (
                 // In the presence of writes it may be the case that we thought
@@ -264,31 +251,64 @@ where
                         && result.record < self.shrink_target.record)
             )
         {
+            println!("SHRINK DEBUG: Updating shrink target! Old: {:?}, New: {:?}", self.shrink_target.record, result.record);
             self.changes += 1;
             self.shrink_target = result.clone();
+        } else if succeeded {
+            println!("SHRINK DEBUG: Predicate succeeded but no shrink improvement");
+        } else {
+            println!("SHRINK DEBUG: Predicate failed");
         }
         succeeded
     }
 
     fn run(&mut self) -> StepResult {
         let mut prev = self.changes + 1;
+        let mut iteration = 0;
+
+        println!("SHRINK DEBUG: Starting shrinking with target: {:?}", self.shrink_target.record);
+        println!("SHRINK DEBUG: Target draws: {:?}", self.shrink_target.draws);
 
         while prev != self.changes {
+            iteration += 1;
             prev = self.changes;
+            println!("SHRINK DEBUG: === Iteration {} ===", iteration);
+            println!("SHRINK DEBUG: Starting with {} changes, record: {:?}", self.changes, self.shrink_target.record);
+            
+            println!("SHRINK DEBUG: Running adaptive_delete...");
             self.adaptive_delete()?;
+            println!("SHRINK DEBUG: After adaptive_delete, changes: {}, record: {:?}", self.changes, self.shrink_target.record);
+            
+            println!("SHRINK DEBUG: Running minimize_individual_blocks...");
             self.minimize_individual_blocks()?;
+            println!("SHRINK DEBUG: After minimize_individual_blocks, changes: {}, record: {:?}", self.changes, self.shrink_target.record);
+            
+            println!("SHRINK DEBUG: Running minimize_duplicated_blocks...");
             self.minimize_duplicated_blocks()?;
+            println!("SHRINK DEBUG: After minimize_duplicated_blocks, changes: {}, record: {:?}", self.changes, self.shrink_target.record);
+            
             if prev == self.changes {
                 self.expensive_passes_enabled = true;
+                println!("SHRINK DEBUG: Enabling expensive passes");
             }
             if !self.expensive_passes_enabled {
                 continue;
             }
 
+            println!("SHRINK DEBUG: Running expensive passes...");
+            println!("SHRINK DEBUG: Running reorder_blocks...");
             self.reorder_blocks()?;
+            println!("SHRINK DEBUG: After reorder_blocks, changes: {}, record: {:?}", self.changes, self.shrink_target.record);
+            
+            println!("SHRINK DEBUG: Running lower_and_delete...");
             self.lower_and_delete()?;
+            println!("SHRINK DEBUG: After lower_and_delete, changes: {}, record: {:?}", self.changes, self.shrink_target.record);
+            
+            println!("SHRINK DEBUG: Running delete_all_ranges...");
             self.delete_all_ranges()?;
+            println!("SHRINK DEBUG: After delete_all_ranges, changes: {}, record: {:?}", self.changes, self.shrink_target.record);
         }
+        println!("SHRINK DEBUG: Final shrunk result: {:?}", self.shrink_target.record);
         Ok(())
     }
 
@@ -351,29 +371,48 @@ where
         k: usize,
     ) -> Result<bool, LoopExitReason> {
         // Attempts to delete k non-overlapping draws starting from the draw at index i.
+        println!("SHRINK DEBUG: try_delete_range - draw index {}, k={}", i, k);
+        println!("SHRINK DEBUG: Available draws: {:?}", target.draws);
 
         let mut stack: Vec<(usize, usize)> = Vec::new();
         let mut j = i;
         while j < target.draws.len() && stack.len() < k {
             let m = target.draws[j].start;
             let n = target.draws[j].end;
+            println!("SHRINK DEBUG: Examining draw {}: bytes {}..{}", j, m, n);
             assert!(m < n);
             if m < n && (stack.is_empty() || stack[stack.len() - 1].1 <= m) {
-                stack.push((m, n))
+                stack.push((m, n));
+                println!("SHRINK DEBUG: Added to deletion stack: ({}, {})", m, n);
+            } else {
+                println!("SHRINK DEBUG: Skipped draw {} due to overlap", j);
             }
             j += 1;
         }
 
+        println!("SHRINK DEBUG: Deletion stack: {:?}", stack);
+
         let mut attempt = target.record.clone();
+        println!("SHRINK DEBUG: Original record: {:?}", attempt);
+        
         while !stack.is_empty() {
             let (m, n) = stack.pop().unwrap();
+            println!("SHRINK DEBUG: Draining bytes {}..{}", m, n);
             attempt.drain(m..n);
+            println!("SHRINK DEBUG: After drain: {:?}", attempt);
         }
 
         if attempt.len() >= self.shrink_target.record.len() {
+            println!("SHRINK DEBUG: Deletion failed - no length reduction ({} >= {})", attempt.len(), self.shrink_target.record.len());
             Ok(false)
         } else {
-            self.incorporate(&attempt)
+            println!("SHRINK DEBUG: Attempting to incorporate shorter record: {:?}", attempt);
+            let result = self.incorporate(&attempt);
+            match &result {
+                Ok(succeeded) => println!("SHRINK DEBUG: Incorporate result: {}", succeeded),
+                Err(e) => println!("SHRINK DEBUG: Incorporate error: {:?}", e),
+            }
+            result
         }
     }
 
@@ -572,6 +611,9 @@ where
     }
 
     fn incorporate(&mut self, buf: &DataStreamSlice) -> Result<bool, LoopExitReason> {
+        println!("SHRINK DEBUG: incorporate called with buf: {:?}", buf);
+        println!("SHRINK DEBUG: Current shrink_target: {:?}", self.shrink_target.record);
+        
         assert!(
             buf.len() <= self.shrink_target.record.len(),
             "Expected incorporate to not increase length, but buf.len() = {} \
@@ -583,9 +625,20 @@ where
             assert!(buf < &self.shrink_target.record);
         }
         if self.shrink_target.record.starts_with(buf) {
+            println!("SHRINK DEBUG: Skipping incorporate - target starts with buf");
             return Ok(false);
         }
-        let (succeeded, _) = self.execute(buf)?;
+        
+        println!("SHRINK DEBUG: Executing with shortened buffer...");
+        let (succeeded, result) = self.execute(buf)?;
+        println!("SHRINK DEBUG: Execute returned succeeded={}, result.record={:?}", succeeded, result.record);
+        
+        if succeeded {
+            println!("SHRINK DEBUG: Successfully incorporated shorter record!");
+        } else {
+            println!("SHRINK DEBUG: Failed to incorporate - predicate not satisfied");
+        }
+        
         Ok(succeeded)
     }
 }
@@ -997,5 +1050,42 @@ mod tests {
         assert!(total_calls > 0);
         
         println!("Handled errors gracefully with {} total calls", total_calls);
+    }
+
+    #[test]
+    fn test_array_shrinking_debug() {
+        let results = run_to_results(move |source| {
+            // Create an array by drawing multiple values WITH PROPER DRAW TRACKING
+            let mut arr = Vec::new();
+            
+            // Draw array length (small range) - track as one draw
+            source.start_draw();
+            let len = (source.bits(8)? % 5) + 5; // 5-9 elements for easier debugging
+            source.stop_draw();
+            
+            // Draw each array element as a separate draw
+            for i in 0..len {
+                source.start_draw();
+                let val = source.bits(16)? as i32; // Smaller values for easier debugging
+                source.stop_draw();
+                arr.push(val);
+                println!("ARRAY DEBUG: Drew element {}: {}", i, val);
+            }
+            
+            println!("ARRAY DEBUG: Generated array: {:?} (len={})", arr, arr.len());
+            
+            // Condition: array must have at least 5 elements with last element > 100
+            if arr.len() >= 5 && arr[arr.len() - 1] > 100 {
+                println!("ARRAY DEBUG: Interesting array found!");
+                Ok(Status::Interesting(0))
+            } else {
+                Ok(Status::Valid)
+            }
+        });
+
+        println!("ARRAY DEBUG: Final results count: {}", results.len());
+        for (i, result) in results.iter().enumerate() {
+            println!("ARRAY DEBUG: Result {}: record={:?}, draws={:?}", i, result.record, result.draws);
+        }
     }
 }

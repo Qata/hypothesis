@@ -9,17 +9,12 @@ require_relative 'hypothesis/engine'
 require_relative 'hypothesis/world'
 
 module Phase
-  EXPLICIT = :explicit
-  REUSE = :reuse
-  GENERATE = :generate
-  TARGET = :target
   SHRINK = :shrink
-  EXPLAIN = :explain
 
   module_function
 
   def all
-    [EXPLICIT, REUSE, GENERATE, TARGET, SHRINK, EXPLAIN]
+    [SHRINK]
   end
 
   def excluding(*phases)

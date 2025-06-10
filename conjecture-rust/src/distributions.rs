@@ -123,18 +123,30 @@ impl Repeat {
                 return Ok(false);
             }
         } else if self.current_count < self.min_count {
+            // Wrap the write operation in draw tracking
+            source.start_draw();
             source.write(1)?;
+            source.stop_draw();
             self.current_count += 1;
             return Ok(true);
         } else if self.current_count >= self.max_count {
+            // Wrap the write operation in draw tracking
+            source.start_draw();
             source.write(0)?;
+            source.stop_draw();
             return Ok(false);
         }
 
-        let result = weighted(source, self.p_continue)?;
+        // Create a single deterministic draw for the continue decision
+        // This ensures that each array length decision is a single, deletable draw
+        source.start_draw();
+        let threshold = (self.p_continue * 65536.0) as u64;
+        let probe = source.bits(16)?;
+        let result = probe < threshold;
+        source.stop_draw();
+        
         if result {
             self.current_count += 1;
-        } else {
         }
         Ok(result)
     }
