@@ -68,10 +68,12 @@ The rewrite moves from Python's legacy byte-stream approach to the modern choice
 ## Success Criteria
 
 ### Phase 1 Complete When:
+- [ ] ALL Python conjecture tests have been ported and are passing
+- [ ] Additional comprehensive tests written for edge cases
 - [ ] ChoiceNode can represent all Python choice types (Integer, Boolean, Bytes, Float)
 - [ ] Constraints properly validate choice values
 - [ ] Choice sequences can be recorded and replayed
-- [ ] Basic unit tests pass for all choice operations
+- [ ] Test coverage exceeds 95% for all core choice functionality
 
 ### Project Complete When:
 - [ ] Ruby test suite passes with new engine
@@ -82,10 +84,12 @@ The rewrite moves from Python's legacy byte-stream approach to the modern choice
 
 ## Five-Phase Implementation Plan
 
-### Phase 1: Core Choice System ✅
-- [x] Choice types and constraints
-- [x] Choice node implementation
-- [x] Basic choice validation
+### Phase 1: Core Choice System 🚧
+- [ ] Port ALL Python conjecture tests (RED phase - tests should fail initially)
+- [ ] Write additional comprehensive tests for edge cases
+- [ ] Choice types and constraints (implement to pass tests)
+- [ ] Choice node implementation (implement to pass tests)
+- [ ] Basic choice validation (implement to pass tests)
 
 ### Phase 2: ConjectureRunner & Data
 - [ ] TestData equivalent 
@@ -160,6 +164,12 @@ This architecture closely mirrors Python's organization while taking advantage o
 - **Swift Integration**: `hypothesis-swift/` for cross-platform build insights
 
 ## API Design Principles
+
+### Test-Driven Development Workflow
+1. **RED**: Write failing tests first (port from Python + write additional)
+2. **GREEN**: Implement minimal code to make tests pass
+3. **REFACTOR**: Improve code quality while keeping tests green
+4. **REPEAT**: Cycle through RED-GREEN-REFACTOR for each feature
 
 ### Rust Idioms to Follow
 - **Error Handling**: Use `Result<T, E>` for fallible operations, avoid panics in library code
@@ -244,12 +254,22 @@ This architecture closely mirrors Python's organization while taking advantage o
 ### Testing Strategy
 *Document testing approach and coverage*
 
-**Unit Tests**: Each choice type and constraint validation
-**Integration Tests**: Choice sequences and replay functionality  
-**Parity Tests**: Compare results with Python Hypothesis on same inputs
-**Ruby Integration Tests**: FFI layer and strategy compatibility
-**Property Tests**: Use Hypothesis to test the implementation itself
-**Benchmark Tests**: Performance regression detection
+**🚨 TDD IS PARAMOUNT**: Test-Driven Development is the core methodology for this project
+
+**Phase 1 Testing Priority:**
+1. **Port Python Tests**: Copy ALL relevant tests from `hypothesis-python/tests/conjecture/`
+2. **Write Additional Tests**: Expand test coverage beyond Python's test suite
+3. **Red-Green-Refactor**: Write failing tests first, then implement to make them pass
+4. **Comprehensive Coverage**: Every choice type, constraint, and edge case must be tested
+
+**Test Categories:**
+- **Unit Tests**: Each choice type and constraint validation (COPY FROM PYTHON)
+- **Integration Tests**: Choice sequences and replay functionality  
+- **Parity Tests**: Compare results with Python Hypothesis on same inputs
+- **Ruby Integration Tests**: FFI layer and strategy compatibility
+- **Property Tests**: Use Hypothesis to test the implementation itself
+- **Benchmark Tests**: Performance regression detection
+- **Edge Case Tests**: Boundary conditions, overflow, underflow scenarios
 
 ## Development Environment
 
@@ -276,11 +296,17 @@ cargo install cargo-watch cargo-expand
 
 ### Build Commands
 ```bash
-# Development cycle
+# TDD Development cycle
+cargo test           # Run all tests (RED/GREEN verification)
 cargo check          # Fast syntax/type checking
-cargo test           # Run all tests
 cargo clippy         # Linting
 cargo fmt            # Formatting
+
+# Test-driven workflow
+cargo test --lib                    # Unit tests only
+cargo test test_choice_integer      # Specific test
+cargo test -- --nocapture          # See println! output
+cargo watch -x test                 # Auto-run tests on file changes
 
 # Integration testing  
 cargo test --test ruby_integration
