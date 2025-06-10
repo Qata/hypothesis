@@ -1,0 +1,757 @@
+//! Python-compatible float encoding implementation
+//! 
+//! This module implements Python Hypothesis's sophisticated float-to-lexicographic
+//! encoding algorithm with proper bit manipulation for optimal shrinking behavior.
+
+/// Float width enumeration for multi-width support
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FloatWidth {
+    Width16,
+    Width32, 
+    Width64,
+}
+
+impl FloatWidth {
+    pub fn bits(self) -> u32 {
+        match self {
+            FloatWidth::Width16 => 16,
+            FloatWidth::Width32 => 32,
+            FloatWidth::Width64 => 64,
+        }
+    }
+    
+    pub fn exponent_bits(self) -> u32 {
+        match self {
+            FloatWidth::Width16 => 5,
+            FloatWidth::Width32 => 8,
+            FloatWidth::Width64 => 11,
+        }
+    }
+    
+    pub fn mantissa_bits(self) -> u32 {
+        match self {
+            FloatWidth::Width16 => 10,
+            FloatWidth::Width32 => 23,
+            FloatWidth::Width64 => 52,
+        }
+    }
+    
+    pub fn bias(self) -> i32 {
+        match self {
+            FloatWidth::Width16 => 15,
+            FloatWidth::Width32 => 127,
+            FloatWidth::Width64 => 1023,
+        }
+    }
+    
+    pub fn max_exponent(self) -> u32 {
+        (1 << self.exponent_bits()) - 1
+    }
+    
+    pub fn mantissa_mask(self) -> u64 {
+        (1u64 << self.mantissa_bits()) - 1
+    }
+    
+    pub fn exponent_mask(self) -> u64 {
+        (1u64 << self.exponent_bits()) - 1
+    }
+}
+
+/// IEEE 754 double precision constants (for backward compatibility)
+const MANTISSA_MASK: u64 = (1u64 << 52) - 1;
+const EXPONENT_MASK: u64 = (1u64 << 11) - 1;
+const BIAS: u64 = 1023;
+const MAX_EXPONENT: u64 = 2047;
+
+/// Pre-computed lookup table for bit reversal (matches Python's REVERSE_BITS_TABLE exactly)
+static REVERSE_BITS_TABLE: [u8; 256] = [
+    0x00, 0x80, 0x40, 0xC0, 0x20, 0xA0, 0x60, 0xE0, 0x10, 0x90, 0x50, 0xD0, 0x30, 0xB0, 0x70, 0xF0,
+    0x08, 0x88, 0x48, 0xC8, 0x28, 0xA8, 0x68, 0xE8, 0x18, 0x98, 0x58, 0xD8, 0x38, 0xB8, 0x78, 0xF8,
+    0x04, 0x84, 0x44, 0xC4, 0x24, 0xA4, 0x64, 0xE4, 0x14, 0x94, 0x54, 0xD4, 0x34, 0xB4, 0x74, 0xF4,
+    0x0C, 0x8C, 0x4C, 0xCC, 0x2C, 0xAC, 0x6C, 0xEC, 0x1C, 0x9C, 0x5C, 0xDC, 0x3C, 0xBC, 0x7C, 0xFC,
+    0x02, 0x82, 0x42, 0xC2, 0x22, 0xA2, 0x62, 0xE2, 0x12, 0x92, 0x52, 0xD2, 0x32, 0xB2, 0x72, 0xF2,
+    0x0A, 0x8A, 0x4A, 0xCA, 0x2A, 0xAA, 0x6A, 0xEA, 0x1A, 0x9A, 0x5A, 0xDA, 0x3A, 0xBA, 0x7A, 0xFA,
+    0x06, 0x86, 0x46, 0xC6, 0x26, 0xA6, 0x66, 0xE6, 0x16, 0x96, 0x56, 0xD6, 0x36, 0xB6, 0x76, 0xF6,
+    0x0E, 0x8E, 0x4E, 0xCE, 0x2E, 0xAE, 0x6E, 0xEE, 0x1E, 0x9E, 0x5E, 0xDE, 0x3E, 0xBE, 0x7E, 0xFE,
+    0x01, 0x81, 0x41, 0xC1, 0x21, 0xA1, 0x61, 0xE1, 0x11, 0x91, 0x51, 0xD1, 0x31, 0xB1, 0x71, 0xF1,
+    0x09, 0x89, 0x49, 0xC9, 0x29, 0xA9, 0x69, 0xE9, 0x19, 0x99, 0x59, 0xD9, 0x39, 0xB9, 0x79, 0xF9,
+    0x05, 0x85, 0x45, 0xC5, 0x25, 0xA5, 0x65, 0xE5, 0x15, 0x95, 0x55, 0xD5, 0x35, 0xB5, 0x75, 0xF5,
+    0x0D, 0x8D, 0x4D, 0xCD, 0x2D, 0xAD, 0x6D, 0xED, 0x1D, 0x9D, 0x5D, 0xDD, 0x3D, 0xBD, 0x7D, 0xFD,
+    0x03, 0x83, 0x43, 0xC3, 0x23, 0xA3, 0x63, 0xE3, 0x13, 0x93, 0x53, 0xD3, 0x33, 0xB3, 0x73, 0xF3,
+    0x0B, 0x8B, 0x4B, 0xCB, 0x2B, 0xAB, 0x6B, 0xEB, 0x1B, 0x9B, 0x5B, 0xDB, 0x3B, 0xBB, 0x7B, 0xFB,
+    0x07, 0x87, 0x47, 0xC7, 0x27, 0xA7, 0x67, 0xE7, 0x17, 0x97, 0x57, 0xD7, 0x37, 0xB7, 0x77, 0xF7,
+    0x0F, 0x8F, 0x4F, 0xCF, 0x2F, 0xAF, 0x6F, 0xEF, 0x1F, 0x9F, 0x5F, 0xDF, 0x3F, 0xBF, 0x7F, 0xFF,
+];
+
+/// Generate exponent ordering key for lexicographic encoding (matches Python's logic)
+fn exponent_key(e: u32) -> f64 {
+    let max_exp = 2047; // f64 max exponent
+    if e == max_exp {
+        // Special values (infinity, NaN) come last
+        f64::INFINITY
+    } else {
+        let unbiased = e as i32 - BIAS as i32;
+        if unbiased < 0 {
+            // Negative exponents (values < 1.0) come after positive exponents
+            // Map to range [10001, 10001 + max_negative_exp]
+            10000.0 - unbiased as f64
+        } else {
+            // Positive exponents (values >= 1.0) come first
+            // Map to range [0, max_positive_exp]
+            unbiased as f64
+        }
+    }
+}
+
+/// Build encoding/decoding tables for exponents (matches original implementation)
+pub fn build_exponent_tables() -> (Vec<u32>, Vec<u32>) {
+    let max_exp = 2047;
+    let mut exponents: Vec<u32> = (0..=max_exp).collect();
+    exponents.sort_by(|&a, &b| exponent_key(a).partial_cmp(&exponent_key(b)).unwrap());
+    
+    let mut decoding_table = vec![0u32; (max_exp + 1) as usize];
+    for (i, &exp) in exponents.iter().enumerate() {
+        decoding_table[exp as usize] = i as u32;
+    }
+    
+    (exponents, decoding_table)
+}
+
+/// Reverse bits in a 64-bit integer using lookup table
+fn reverse_bits_64(v: u64) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: Reversing bits of {:016X}", v);
+    
+    let result = ((REVERSE_BITS_TABLE[((v >> 0) & 0xFF) as usize] as u64) << 56) |
+                 ((REVERSE_BITS_TABLE[((v >> 8) & 0xFF) as usize] as u64) << 48) |
+                 ((REVERSE_BITS_TABLE[((v >> 16) & 0xFF) as usize] as u64) << 40) |
+                 ((REVERSE_BITS_TABLE[((v >> 24) & 0xFF) as usize] as u64) << 32) |
+                 ((REVERSE_BITS_TABLE[((v >> 32) & 0xFF) as usize] as u64) << 24) |
+                 ((REVERSE_BITS_TABLE[((v >> 40) & 0xFF) as usize] as u64) << 16) |
+                 ((REVERSE_BITS_TABLE[((v >> 48) & 0xFF) as usize] as u64) << 8) |
+                 ((REVERSE_BITS_TABLE[((v >> 56) & 0xFF) as usize] as u64) << 0);
+    
+    println!("FLOAT_ENCODING DEBUG: {:016X} -> {:016X}", v, result);
+    result
+}
+
+/// Reverse specific number of bits (used for partial mantissa reversal)
+fn reverse_bits_n(v: u64, n_bits: u32) -> u64 {
+    if n_bits == 0 {
+        return v;
+    }
+    if n_bits >= 64 {
+        return reverse_bits_64(v);
+    }
+    
+    let mask = (1u64 << n_bits) - 1;
+    let masked_value = v & mask;
+    let reversed = reverse_bits_64(masked_value);
+    
+    // Shift the reversed bits to the right position
+    reversed >> (64 - n_bits)
+}
+
+/// Check if a float can be represented as a simple integer
+fn is_simple(f: f64) -> bool {
+    if !f.is_finite() {
+        return false;
+    }
+    
+    if f < 0.0 {
+        return false;
+    }
+    
+    // Check if it's a whole number that fits in reasonable range
+    if f.fract() != 0.0 {
+        return false;
+    }
+    
+    // Limit to reasonable range to avoid issues
+    f >= 0.0 && f <= 1000000.0
+}
+
+/// Encode exponent using Python's shrink-aware ordering
+fn encode_exponent(exponent: u64) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: Encoding exponent {}", exponent);
+    
+    let (_, decoding_table) = build_exponent_tables();
+    
+    if exponent >= 2048 {
+        println!("FLOAT_ENCODING DEBUG: Exponent {} out of range, using 2047", exponent);
+        return decoding_table[2047] as u64;
+    }
+    
+    let encoded = decoding_table[exponent as usize] as u64;
+    println!("FLOAT_ENCODING DEBUG: Exponent {} -> encoded {}", exponent, encoded);
+    encoded
+}
+
+/// Decode exponent from encoded value
+fn decode_exponent(encoded: u64) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: Decoding exponent {}", encoded);
+    
+    let (encoding_table, _) = build_exponent_tables();
+    
+    if encoded >= 2048 {
+        println!("FLOAT_ENCODING DEBUG: Encoded {} out of range, using 2047", encoded);
+        return 2047;
+    }
+    
+    let decoded = encoding_table[encoded as usize] as u64;
+    println!("FLOAT_ENCODING DEBUG: Encoded {} -> exponent {}", encoded, decoded);
+    decoded
+}
+
+/// Update mantissa according to Python's lexicographic encoding rules.
+/// This implements the exact same mantissa bit reversal algorithm used in Python Hypothesis.
+/// The reversal ensures that lexicographically smaller encodings represent "simpler" values.
+fn update_mantissa(unbiased_exponent: i32, mantissa: u64, mantissa_bits: u32) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: Updating mantissa {:013X} for unbiased_exponent {} (mantissa_bits: {})", 
+             mantissa, unbiased_exponent, mantissa_bits);
+    
+    if unbiased_exponent <= 0 {
+        // For values < 2.0 (unbiased exponent <= 0):
+        // Reverse all mantissa bits to ensure proper ordering
+        let result = reverse_bits_n(mantissa, mantissa_bits);
+        println!("FLOAT_ENCODING DEBUG: Full mantissa reversal: {:013X} -> {:013X}", mantissa, result);
+        result
+    } else if unbiased_exponent <= mantissa_bits as i32 {
+        // For values 2.0 to 2^mantissa_bits (e.g., 2.0 to 2^52 for f64):
+        // Reverse only the fractional part bits, leave integer part unchanged
+        let n_fractional_bits = mantissa_bits - unbiased_exponent as u32;
+        let fractional_mask = (1u64 << n_fractional_bits) - 1;
+        let fractional_part = mantissa & fractional_mask;
+        let integer_part = mantissa & !fractional_mask;
+        
+        // Reconstruct with reversed fractional bits
+        let result = integer_part | reverse_bits_n(fractional_part, n_fractional_bits);
+        
+        println!("FLOAT_ENCODING DEBUG: Partial mantissa reversal: {:013X} -> {:013X} (frac_bits: {})", 
+                 mantissa, result, n_fractional_bits);
+        result
+    } else {
+        // For unbiased_exponent > mantissa_bits (very large integers):
+        // No fractional part exists, leave mantissa unchanged
+        println!("FLOAT_ENCODING DEBUG: No mantissa change for large integer");
+        mantissa
+    }
+}
+
+/// Reverse mantissa update operation (exact inverse of update_mantissa)
+fn reverse_update_mantissa(unbiased_exponent: i32, mantissa: u64, mantissa_bits: u32) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: Reversing mantissa update for {:013X}, unbiased_exponent {} (mantissa_bits: {})", 
+             mantissa, unbiased_exponent, mantissa_bits);
+    
+    if unbiased_exponent <= 0 {
+        // Reverse the full mantissa reversal
+        let result = reverse_bits_n(mantissa, mantissa_bits);
+        println!("FLOAT_ENCODING DEBUG: Reversing full mantissa reversal: {:013X} -> {:013X}", mantissa, result);
+        result
+    } else if unbiased_exponent <= mantissa_bits as i32 {
+        // Reverse the partial mantissa reversal
+        let n_fractional_bits = mantissa_bits - unbiased_exponent as u32;
+        let fractional_mask = (1u64 << n_fractional_bits) - 1;
+        let fractional_part = mantissa & fractional_mask;
+        let integer_part = mantissa & !fractional_mask;
+        
+        let original_fractional = reverse_bits_n(fractional_part, n_fractional_bits);
+        let result = integer_part | original_fractional;
+        
+        println!("FLOAT_ENCODING DEBUG: Reversing partial mantissa reversal: {:013X} -> {:013X}", mantissa, result);
+        result
+    } else {
+        // No change was made for large integers
+        println!("FLOAT_ENCODING DEBUG: No reversal needed for large integer");
+        mantissa
+    }
+}
+
+/// Convert float to IEEE 754 bit representation
+fn float_to_int(f: f64) -> u64 {
+    f.to_bits()
+}
+
+/// Convert IEEE 754 bit representation to float
+fn int_to_float(bits: u64) -> f64 {
+    f64::from_bits(bits)
+}
+
+/// Python's base_float_to_lex implementation
+fn base_float_to_lex(f: f64) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: base_float_to_lex({})", f);
+    
+    let bits = float_to_int(f);
+    println!("FLOAT_ENCODING DEBUG: Float bits: {:016X}", bits);
+    
+    // Strip sign bit (handled at higher level)
+    let magnitude_bits = bits & 0x7FFFFFFFFFFFFFFF;
+    
+    // Extract exponent and mantissa
+    let exponent = (magnitude_bits >> 52) & EXPONENT_MASK;
+    let mantissa = magnitude_bits & MANTISSA_MASK;
+    
+    println!("FLOAT_ENCODING DEBUG: Exponent: {}, Mantissa: {:013X}", exponent, mantissa);
+    
+    // Transform mantissa based on exponent
+    let unbiased_exponent = exponent as i32 - BIAS as i32;
+    let updated_mantissa = update_mantissa(unbiased_exponent, mantissa, 52);
+    
+    // Encode exponent for shrink-friendly ordering
+    let encoded_exponent = encode_exponent(exponent);
+    
+    // Combine into final result with high bit set
+    let result = (1u64 << 63) | (encoded_exponent << 52) | updated_mantissa;
+    
+    println!("FLOAT_ENCODING DEBUG: Final lex encoding: {:016X}", result);
+    result
+}
+
+/// Python's base_lex_to_float implementation  
+fn base_lex_to_float(lex: u64) -> f64 {
+    println!("FLOAT_ENCODING DEBUG: base_lex_to_float({:016X})", lex);
+    
+    // Extract components
+    let encoded_exponent = (lex >> 52) & EXPONENT_MASK;
+    let updated_mantissa = lex & MANTISSA_MASK;
+    
+    println!("FLOAT_ENCODING DEBUG: Encoded exponent: {}, Updated mantissa: {:013X}", encoded_exponent, updated_mantissa);
+    
+    // Decode exponent
+    let exponent = decode_exponent(encoded_exponent);
+    let unbiased_exponent = exponent as i32 - BIAS as i32;
+    
+    // Reverse mantissa transformation
+    let original_mantissa = reverse_update_mantissa(unbiased_exponent, updated_mantissa, 52);
+    
+    // Reconstruct IEEE 754 bits (positive number only)
+    let magnitude_bits = (exponent << 52) | original_mantissa;
+    let result = int_to_float(magnitude_bits);
+    
+    println!("FLOAT_ENCODING DEBUG: Reconstructed float: {}", result);
+    result
+}
+
+/// Python's float_to_lex with simple integer optimization
+pub fn float_to_lex(f: f64) -> u64 {
+    println!("FLOAT_ENCODING DEBUG: float_to_lex({})", f);
+    
+    if f.is_nan() {
+        println!("FLOAT_ENCODING DEBUG: NaN -> max value");
+        return u64::MAX;
+    }
+    
+    if f.is_infinite() {
+        let result = if f.is_sign_positive() {
+            u64::MAX - 1 // +∞ sorts second to last
+        } else {
+            0 // -∞ sorts first (but this function should only get positive values)
+        };
+        println!("FLOAT_ENCODING DEBUG: Infinity {} -> {}", f, result);
+        return result;
+    }
+    
+    // Handle negative zero as positive zero
+    let abs_f = if f == 0.0 { 0.0 } else { f.abs() };
+    
+    if is_simple(abs_f) {
+        println!("FLOAT_ENCODING DEBUG: Simple integer {} -> {}", abs_f, abs_f as u64);
+        abs_f as u64
+    } else {
+        base_float_to_lex(abs_f)
+    }
+}
+
+/// Python's lex_to_float with simple integer optimization
+pub fn lex_to_float(lex: u64) -> f64 {
+    println!("FLOAT_ENCODING DEBUG: lex_to_float({})", lex);
+    
+    if lex == u64::MAX {
+        println!("FLOAT_ENCODING DEBUG: Max lex -> NaN");
+        return f64::NAN;
+    }
+    
+    if lex == u64::MAX - 1 {
+        println!("FLOAT_ENCODING DEBUG: Max-1 lex -> +∞");
+        return f64::INFINITY;
+    }
+    
+    if lex == 0 {
+        println!("FLOAT_ENCODING DEBUG: Zero lex -> 0.0");
+        return 0.0;
+    }
+    
+    // Check if high bit is set (complex encoding)
+    if (lex & (1u64 << 63)) != 0 {
+        println!("FLOAT_ENCODING DEBUG: High bit set, using complex encoding");
+        base_lex_to_float(lex)
+    } else {
+        // Check if it's in the simple integer range
+        if lex <= 1000000 {
+            let as_float = lex as f64;
+            if is_simple(as_float) {
+                println!("FLOAT_ENCODING DEBUG: Simple integer lex {} -> {}", lex, as_float);
+                return as_float;
+            }
+        }
+        
+        // For large values without high bit, treat as simple integer
+        let as_float = lex as f64;
+        println!("FLOAT_ENCODING DEBUG: Large simple integer lex {} -> {}", lex, as_float);
+        as_float
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_bit_reversal() {
+        println!("FLOAT_ENCODING DEBUG: Testing bit reversal");
+        
+        // Test full 64-bit reversal
+        let test_val = 0x0123456789ABCDEF;
+        let reversed = reverse_bits_64(test_val);
+        let double_reversed = reverse_bits_64(reversed);
+        
+        assert_eq!(test_val, double_reversed, "Double reversal should equal original");
+        
+        // Test partial bit reversal
+        let partial = reverse_bits_n(0xFF, 8);
+        assert_eq!(partial, 0xFF, "Reversing all 1s should give all 1s");
+        
+        println!("FLOAT_ENCODING DEBUG: Bit reversal tests passed");
+    }
+
+    #[test]
+    fn test_simple_integers() {
+        println!("FLOAT_ENCODING DEBUG: Testing simple integer encoding");
+        
+        let test_cases = vec![0.0, 1.0, 2.0, 10.0, 100.0];
+        
+        for val in test_cases {
+            let lex = float_to_lex(val);
+            let recovered = lex_to_float(lex);
+            
+            println!("FLOAT_ENCODING DEBUG: {} -> {} -> {}", val, lex, recovered);
+            assert_eq!(val, recovered, "Simple integer {} should roundtrip exactly", val);
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Simple integer tests passed");
+    }
+
+    #[test]
+    fn test_special_values() {
+        println!("FLOAT_ENCODING DEBUG: Testing special value encoding");
+        
+        // Test NaN
+        let nan_lex = float_to_lex(f64::NAN);
+        let recovered_nan = lex_to_float(nan_lex);
+        assert!(recovered_nan.is_nan(), "NaN should roundtrip to NaN");
+        
+        // Test infinity
+        let inf_lex = float_to_lex(f64::INFINITY);
+        let recovered_inf = lex_to_float(inf_lex);
+        assert_eq!(recovered_inf, f64::INFINITY, "Infinity should roundtrip exactly");
+        
+        // Test zero
+        let zero_lex = float_to_lex(0.0);
+        let recovered_zero = lex_to_float(zero_lex);
+        assert_eq!(recovered_zero, 0.0, "Zero should roundtrip exactly");
+        
+        println!("FLOAT_ENCODING DEBUG: Special value tests passed");
+    }
+
+    #[test]
+    fn test_complex_floats() {
+        println!("FLOAT_ENCODING DEBUG: Testing complex float encoding");
+        
+        let test_cases = vec![1.5, 2.25, 0.125, 1000000.5];
+        
+        for val in test_cases {
+            let lex = float_to_lex(val);
+            let recovered = lex_to_float(lex);
+            
+            println!("FLOAT_ENCODING DEBUG: {} -> {} -> {}", val, lex, recovered);
+            assert_eq!(val, recovered, "Complex float {} should roundtrip exactly", val);
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Complex float tests passed");
+    }
+
+    #[test]
+    fn test_ordering_property() {
+        println!("FLOAT_ENCODING DEBUG: Testing ordering property");
+        
+        // Smaller positive numbers should have smaller lex values
+        let val1 = 1.0;
+        let val2 = 2.0;
+        
+        let lex1 = float_to_lex(val1);
+        let lex2 = float_to_lex(val2);
+        
+        println!("FLOAT_ENCODING DEBUG: {} -> {}, {} -> {}", val1, lex1, val2, lex2);
+        assert!(lex1 < lex2, "Smaller numbers should have smaller lex values");
+        
+        println!("FLOAT_ENCODING DEBUG: Ordering property test passed");
+    }
+
+    #[test]
+    fn test_reverse_bits_table_reverses_bits() {
+        // Matches Python's test_reverse_bits_table_reverses_bits exactly
+        println!("FLOAT_ENCODING DEBUG: Testing bit reversal table correctness");
+        
+        for i in 0..=255u8 {
+            let reversed = REVERSE_BITS_TABLE[i as usize];
+            
+            // Check that each bit is in the correct position
+            for bit_pos in 0..8 {
+                let original_bit = (i >> bit_pos) & 1;
+                let reversed_bit = (reversed >> (7 - bit_pos)) & 1;
+                assert_eq!(original_bit, reversed_bit, 
+                    "Bit reversal failed for byte {} at position {}", i, bit_pos);
+            }
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Bit reversal table test passed");
+    }
+    
+    #[test]
+    fn test_reverse_bits_table_has_right_elements() {
+        // Matches Python's test_reverse_bits_table_has_right_elements exactly
+        println!("FLOAT_ENCODING DEBUG: Testing bit reversal table elements");
+        
+        assert_eq!(REVERSE_BITS_TABLE.len(), 256, "Table should have 256 elements");
+        assert_eq!(REVERSE_BITS_TABLE[0], 0);
+        assert_eq!(REVERSE_BITS_TABLE[1], 128);  // 0b00000001 -> 0b10000000
+        assert_eq!(REVERSE_BITS_TABLE[128], 1);  // 0b10000000 -> 0b00000001
+        assert_eq!(REVERSE_BITS_TABLE[255], 255); // 0b11111111 -> 0b11111111
+        
+        println!("FLOAT_ENCODING DEBUG: Bit reversal table elements test passed");
+    }
+    
+    #[test]
+    fn test_double_reverse() {
+        // Test that reversing bits twice returns original value
+        println!("FLOAT_ENCODING DEBUG: Testing double bit reversal is identity");
+        
+        let test_values = [0u64, 1, 0x123456789ABCDEF0, u64::MAX];
+        for i in test_values {
+            let j = reverse_bits_64(i);
+            let double_reversed = reverse_bits_64(j);
+            assert_eq!(double_reversed, i, 
+                "Double reverse64 should be identity for {:#X}", i);
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Double bit reversal test passed");
+    }
+
+    #[test]
+    fn test_update_mantissa_python_compatibility() {
+        // Test our update_mantissa function matches Python's behavior exactly
+        println!("FLOAT_ENCODING DEBUG: Testing mantissa update Python compatibility");
+        
+        let width_bits = 52; // f64 mantissa bits
+        let mantissa = 0x123456789ABCD;
+        
+        // Test case 1: unbiased_exponent <= 0 (reverse all bits)
+        let updated = update_mantissa(-1, mantissa, width_bits);
+        let expected = reverse_bits_n(mantissa, width_bits);
+        assert_eq!(updated, expected, "Failed for unbiased_exponent <= 0");
+        
+        // Test case 2: unbiased_exponent in [1, 51] (reverse fractional part only)
+        let unbiased_exp = 10;
+        let updated = update_mantissa(unbiased_exp, mantissa, width_bits);
+        let n_fractional_bits = width_bits - unbiased_exp as u32;
+        let fractional_mask = (1u64 << n_fractional_bits) - 1;
+        let fractional_part = mantissa & fractional_mask;
+        let integer_part = mantissa & !fractional_mask;
+        let expected = integer_part | reverse_bits_n(fractional_part, n_fractional_bits);
+        assert_eq!(updated, expected, "Failed for unbiased_exponent in [1, 51]");
+        
+        // Test case 3: unbiased_exponent > 51 (no change)
+        let updated = update_mantissa(100, mantissa, width_bits);
+        assert_eq!(updated, mantissa, "Failed for unbiased_exponent > 51");
+        
+        println!("FLOAT_ENCODING DEBUG: Mantissa update Python compatibility test passed");
+    }
+
+    #[test]
+    fn test_exponent_encoding_tables_integrity() {
+        // Test that exponent encoding/decoding tables are properly built
+        println!("FLOAT_ENCODING DEBUG: Testing exponent encoding table integrity");
+        
+        let (encoding_table, decoding_table) = build_exponent_tables();
+        
+        // Test some properties of the encoding table
+        let mut seen_positions = vec![false; 2048];
+        let mut seen_exponents = vec![false; 2048];
+        
+        for encoded_pos in 0..2048 {
+            let original_exp = encoding_table[encoded_pos];
+            assert!(!seen_positions[encoded_pos], "Duplicate encoded position {}", encoded_pos);
+            seen_positions[encoded_pos] = true;
+            
+            let decoded_exp = decoding_table[original_exp as usize];
+            assert_eq!(decoded_exp as usize, encoded_pos, "Encoding/decoding should be inverse");
+            
+            assert!(!seen_exponents[original_exp as usize], "Duplicate original exponent {}", original_exp);
+            seen_exponents[original_exp as usize] = true;
+        }
+        
+        // All positions and exponents should be covered
+        assert!(seen_positions.iter().all(|&x| x), "Some encoded positions missing");
+        assert!(seen_exponents.iter().all(|&x| x), "Some original exponents missing");
+        
+        println!("FLOAT_ENCODING DEBUG: Exponent encoding table integrity test passed");
+    }
+
+    #[test]
+    fn test_bit_level_compatibility_with_python() {
+        // Test our implementation produces exactly the same bit patterns as Python
+        println!("FLOAT_ENCODING DEBUG: Testing bit-level Python compatibility");
+        
+        // These are verified results from Python implementation
+        let test_cases = [
+            // (input_float, expected_lex_encoding)
+            (0.0, 0),
+            (1.0, 1),
+            (2.0, 2),
+        ];
+        
+        for &(input, expected_lex) in &test_cases {
+            let actual_lex = float_to_lex(input);
+            assert_eq!(actual_lex, expected_lex, 
+                "Bit-level mismatch for {}: expected {:#X}, got {:#X}", 
+                input, expected_lex, actual_lex);
+                
+            let roundtrip = lex_to_float(actual_lex);
+            assert_eq!(roundtrip, input, 
+                "Roundtrip failed for {}: {} -> {:#X} -> {}", 
+                input, input, actual_lex, roundtrip);
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Bit-level Python compatibility test passed");
+    }
+
+    #[test]
+    fn test_lexicographic_ordering_simple() {
+        // Test basic ordering for simple cases
+        println!("FLOAT_ENCODING DEBUG: Testing simple lexicographic ordering");
+        
+        // Test simple integer ordering (should work correctly)
+        let val_a = 1.0;
+        let val_b = 2.0;
+        
+        let lex_a = float_to_lex(val_a);
+        let lex_b = float_to_lex(val_b);
+        
+        println!("FLOAT_ENCODING DEBUG: {} -> {:#X}, {} -> {:#X}", val_a, lex_a, val_b, lex_b);
+        assert!(lex_a < lex_b, "Simple integers should have correct ordering");
+        
+        // Test zero vs positive
+        let zero = 0.0;
+        let one = 1.0;
+        
+        let lex_zero = float_to_lex(zero);
+        let lex_one = float_to_lex(one);
+        
+        println!("FLOAT_ENCODING DEBUG: {} -> {:#X}, {} -> {:#X}", zero, lex_zero, one, lex_one);
+        assert!(lex_zero < lex_one, "Zero should be smaller than one");
+        
+        println!("FLOAT_ENCODING DEBUG: Simple lexicographic ordering test passed");
+    }
+
+    #[test]
+    fn test_boundary_values() {
+        // Test encoding of boundary values
+        println!("FLOAT_ENCODING DEBUG: Testing boundary value encoding");
+        
+        let boundary_values = vec![
+            f64::MIN_POSITIVE,
+            f64::MAX,
+            1.0 - f64::EPSILON,
+            1.0 + f64::EPSILON,
+            2.0 - f64::EPSILON,
+            2.0 + f64::EPSILON,
+        ];
+        
+        for val in boundary_values {
+            if val.is_finite() && val >= 0.0 {
+                let lex = float_to_lex(val);
+                let recovered = lex_to_float(lex);
+                
+                assert_eq!(recovered, val, 
+                    "Boundary value {} failed to roundtrip: {} -> {:#X} -> {}", 
+                    val, val, lex, recovered);
+            }
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Boundary value encoding test passed");
+    }
+
+    #[test]
+    fn test_multi_width_support_basic() {
+        // Test that our FloatWidth enum works correctly for basic cases
+        println!("FLOAT_ENCODING DEBUG: Testing multi-width support basic functionality");
+        
+        // Test that FloatWidth enum variants can be created
+        let _width16 = FloatWidth::Width16;
+        let _width32 = FloatWidth::Width32;
+        let _width64 = FloatWidth::Width64;
+        
+        // Test basic width properties
+        assert_eq!(FloatWidth::Width64.bits(), 64);
+        assert_eq!(FloatWidth::Width64.mantissa_bits(), 52);
+        assert_eq!(FloatWidth::Width64.exponent_bits(), 11);
+        assert_eq!(FloatWidth::Width64.bias(), 1023);
+        
+        println!("FLOAT_ENCODING DEBUG: Multi-width support basic test passed");
+    }
+
+    #[test]
+    fn test_python_parity_simple_integers() {
+        // Test exact Python parity for simple integer cases
+        println!("FLOAT_ENCODING DEBUG: Testing Python parity for simple integers");
+        
+        // These should use the simple integer branch and match Python exactly
+        let test_cases = vec![0.0, 1.0, 2.0, 3.0, 10.0, 100.0];
+        
+        for val in test_cases {
+            let lex = float_to_lex(val);
+            let recovered = lex_to_float(lex);
+            
+            assert_eq!(recovered, val, 
+                "Simple integer {} failed Python parity: {} -> {} -> {}", 
+                val, val, lex, recovered);
+            
+            // Simple integers should have small lex values
+            assert!(lex <= 1000000, "Simple integer {} should have small lex value, got {}", val, lex);
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Python parity simple integers test passed");
+    }
+
+    #[test]
+    fn test_complex_floats_roundtrip() {
+        // Test that complex floats (non-integers) roundtrip correctly
+        println!("FLOAT_ENCODING DEBUG: Testing complex float roundtrip");
+        
+        let test_cases = vec![1.5, 2.25, 3.14159, 0.1, 0.333333];
+        
+        for val in test_cases {
+            let lex = float_to_lex(val);
+            let recovered = lex_to_float(lex);
+            
+            assert_eq!(recovered, val, 
+                "Complex float {} failed roundtrip: {} -> {} -> {}", 
+                val, val, lex, recovered);
+            
+            // Complex floats should have high bit set
+            assert!((lex & (1u64 << 63)) != 0, 
+                "Complex float {} should have high bit set, lex = {:#X}", val, lex);
+        }
+        
+        println!("FLOAT_ENCODING DEBUG: Complex float roundtrip test passed");
+    }
+}

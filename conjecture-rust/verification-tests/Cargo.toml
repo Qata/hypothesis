@@ -1,0 +1,20 @@
+[package]
+name = "conjecture-verification"
+version = "0.1.0"
+edition = "2021"
+description = "Verification tests for conjecture-rust against Python Hypothesis"
+
+# This is a test-only crate, not a library
+[[bin]]
+name = "verify"
+path = "src/main.rs"
+
+[dependencies]
+# Our main library to test
+conjecture = { path = "..", package = "conjecture-rust" }
+
+# Python FFI for calling actual Python Hypothesis functions
+pyo3 = { path = "/home/ch/Develop/pyo3", features = ["auto-initialize"] }
+
+# CLI argument parsing
+clap = { version = "4.0", features = ["derive"] }
