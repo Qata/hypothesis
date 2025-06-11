@@ -1998,6 +1998,12 @@ impl ConjectureData {
         self.status == Status::Valid && !self.frozen
     }
     
+    /// Get the sequence of choice nodes made during execution
+    /// This provides access to the complete choice sequence for testing
+    pub fn get_choice_sequence(&self) -> &[ChoiceNode] {
+        &self.nodes
+    }
+    
     /// Add a note to the test output for debugging/reporting
     /// This matches Python's note() method for adding debug information
     pub fn note(&mut self, value: impl std::fmt::Display) {

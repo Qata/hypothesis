@@ -11,6 +11,7 @@ mod navigation;
 mod node;
 pub mod shrinking_system;
 pub mod shrinking_demo;
+pub mod templating;
 mod values;
 
 #[cfg(test)]
@@ -34,6 +35,15 @@ mod navigation_system_comprehensive_tests;
 #[cfg(test)]
 mod navigation_capability_ffi_tests;
 
+#[cfg(test)]
+mod choice_templating_forcing_tests;
+
+#[cfg(test)]
+mod templating_comprehensive_capability_tests;
+
+// #[cfg(test)]
+// mod advanced_shrinking_tests;
+
 pub use self::advanced_shrinking::*;
 pub use self::constraints::*;
 pub use self::indexing::*;
@@ -41,6 +51,7 @@ pub use self::navigation::*;
 pub use self::node::*;
 pub use self::shrinking_system::*;
 pub use self::shrinking_demo::*;
+pub use self::templating::*;
 pub use self::values::*;
 
 /// Choice types that can be drawn

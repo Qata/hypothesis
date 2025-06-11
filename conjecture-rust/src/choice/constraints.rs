@@ -138,6 +138,12 @@ impl IntervalSet {
         Self { intervals }
     }
 
+    pub fn from_ranges(ranges: &[(u32, u32)]) -> Self {
+        Self {
+            intervals: ranges.to_vec(),
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.intervals.is_empty()
     }
