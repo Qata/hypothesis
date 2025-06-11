@@ -6,6 +6,14 @@
 use super::{ChoiceValue, Constraints, IntegerConstraints, FloatConstraints, IntervalSet};
 pub mod float_encoding;
 
+// Conditional debug logging - disabled during tests for performance
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(not(test))]
+        println!($($arg)*);
+    };
+}
+
 #[cfg(test)]
 use super::{BooleanConstraints, StringConstraints, BytesConstraints};
 
@@ -71,23 +79,23 @@ fn lex_to_float(lex: u64) -> f64 {
 
 /// Apply float constraints to clamp a value into valid range
 fn clamp_float(f: f64, constraints: &FloatConstraints) -> f64 {
-    println!("FLOAT_CLAMP DEBUG: Clamping float {} with constraints {:?}", f, constraints);
+    debug_log!("FLOAT_CLAMP DEBUG: Clamping float {} with constraints {:?}", f, constraints);
     
     // Check if value is already valid
     if is_float_permitted(f, constraints) {
-        println!("FLOAT_CLAMP DEBUG: Float {} already permitted, no clamping needed", f);
+        debug_log!("FLOAT_CLAMP DEBUG: Float {} already permitted, no clamping needed", f);
         return f;
     }
     
     // Handle NaN case
     if f.is_nan() {
         if constraints.allow_nan {
-            println!("FLOAT_CLAMP DEBUG: NaN allowed, returning NaN");
+            debug_log!("FLOAT_CLAMP DEBUG: NaN allowed, returning NaN");
             return f;
         } else {
             // Map NaN to a valid value within constraints
             let result = constraints.min_value;
-            println!("FLOAT_CLAMP DEBUG: NaN not allowed, mapping to min_value {}", result);
+            debug_log!("FLOAT_CLAMP DEBUG: NaN not allowed, mapping to min_value {}", result);
             return result;
         }
     }
@@ -112,7 +120,7 @@ fn clamp_float(f: f64, constraints: &FloatConstraints) -> f64 {
         }
     }
     
-    println!("FLOAT_CLAMP DEBUG: Clamped {} to {}", f, result);
+    debug_log!("FLOAT_CLAMP DEBUG: Clamped {} to {}", f, result);
     result
 }
 
@@ -141,31 +149,97 @@ fn is_float_permitted(f: f64, constraints: &FloatConstraints) -> bool {
 /// Returns >= 0 index for valid choices, used for deterministic ordering
 /// Uses u128 to support Python's 65-bit float indices
 pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
-    println!("INDEXING DEBUG: Converting choice to index");
-    println!("INDEXING DEBUG: value={:?}", value);
+    debug_log!("INDEXING DEBUG: Converting choice to index");
+    debug_log!("INDEXING DEBUG: value={:?}", value);
     
     match (value, constraints) {
         (ChoiceValue::Integer(val), Constraints::Integer(c)) => {
-            // For bounded ranges, use sequence generation
+            // For bounded ranges, generate the actual sequence to match Python exactly
             if c.min_value.is_some() || c.max_value.is_some() {
-                let sequence = generate_bounded_integer_sequence(c, 1000); // Reasonable limit
-                if let Some(index) = sequence.iter().position(|&x| x == *val) {
-                    println!("INDEXING DEBUG: Found bounded integer {} at index {}", val, index);
-                    return index as u128;
+                let shrink_towards = c.shrink_towards.unwrap_or(0);
+                let clamped_shrink = match (c.min_value, c.max_value) {
+                    (Some(min), Some(max)) => shrink_towards.max(min).min(max),
+                    (Some(min), None) => shrink_towards.max(min),
+                    (None, Some(max)) => shrink_towards.min(max),
+                    (None, None) => shrink_towards,
+                };
+                
+                // Check if value is within bounds
+                let value_valid = match (c.min_value, c.max_value) {
+                    (Some(min), Some(max)) => *val >= min && *val <= max,
+                    (Some(min), None) => *val >= min,
+                    (None, Some(max)) => *val <= max,
+                    (None, None) => true,
+                };
+                
+                if value_valid {
+                    if *val == clamped_shrink {
+                        debug_log!("INDEXING DEBUG: Bounded integer {} at shrink_towards, index=0", val);
+                        return 0;
+                    }
+                    
+                    // Generate the sequence in the exact Python order
+                    let mut sequence = vec![clamped_shrink];
+                    let mut index = 1u128;
+                    
+                    for distance in 1..=10000 { // Increased limit to handle larger bounded ranges
+                        // Try positive direction first
+                        let positive_candidate = clamped_shrink + distance;
+                        let positive_valid = match (c.min_value, c.max_value) {
+                            (Some(min), Some(max)) => positive_candidate >= min && positive_candidate <= max,
+                            (Some(min), None) => positive_candidate >= min,
+                            (None, Some(max)) => positive_candidate <= max,
+                            (None, None) => true,
+                        };
+                        
+                        if positive_valid {
+                            if positive_candidate == *val {
+                                debug_log!("INDEXING DEBUG: Found bounded integer {} at index {}", val, index);
+                                return index;
+                            }
+                            index += 1;
+                        }
+                        
+                        // Try negative direction
+                        let negative_candidate = clamped_shrink - distance;
+                        let negative_valid = match (c.min_value, c.max_value) {
+                            (Some(min), Some(max)) => negative_candidate >= min && negative_candidate <= max,
+                            (Some(min), None) => negative_candidate >= min,
+                            (None, Some(max)) => negative_candidate <= max,
+                            (None, None) => true,
+                        };
+                        
+                        if negative_valid {
+                            if negative_candidate == *val {
+                                debug_log!("INDEXING DEBUG: Found bounded integer {} at index {}", val, index);
+                                return index;
+                            }
+                            index += 1;
+                        }
+                        
+                        // If neither direction produces valid values, we're done
+                        if !positive_valid && !negative_valid {
+                            break;
+                        }
+                    }
+                    
+                    // If we didn't find the value, something is wrong
+                    debug_log!("INDEXING DEBUG: Could not find bounded integer {} in sequence", val);
+                    return 0;
                 }
             }
             
             // For unbounded ranges, use mathematical formula
             let shrink_towards = c.shrink_towards.unwrap_or(0);
             if *val == shrink_towards {
-                println!("INDEXING DEBUG: Value {} equals shrink_towards, index=0", val);
+                debug_log!("INDEXING DEBUG: Value {} equals shrink_towards, index=0", val);
                 return 0;
             }
             
             // Use checked arithmetic to avoid overflow with extreme values
             let distance_result = val.checked_sub(shrink_towards);
             if distance_result.is_none() {
-                println!("INDEXING DEBUG: Integer subtraction overflow for {} - {}, returning 0", val, shrink_towards);
+                debug_log!("INDEXING DEBUG: Integer subtraction overflow for {} - {}, returning 0", val, shrink_towards);
                 return 0;
             }
             
@@ -175,7 +249,7 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
                 match distance.checked_mul(2).and_then(|x| x.checked_sub(1)) {
                     Some(result) => result as u128,
                     None => {
-                        println!("INDEXING DEBUG: Positive index calculation overflow for distance {}, returning large index", distance);
+                        debug_log!("INDEXING DEBUG: Positive index calculation overflow for distance {}, returning large index", distance);
                         u128::MAX / 2  // Return a large but safe index
                     }
                 }
@@ -184,13 +258,13 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
                 match distance.checked_mul(2) {
                     Some(result) => result as u128,
                     None => {
-                        println!("INDEXING DEBUG: Negative index calculation overflow for distance {}, returning large index", distance);
+                        debug_log!("INDEXING DEBUG: Negative index calculation overflow for distance {}, returning large index", distance);
                         u128::MAX / 2  // Return a large but safe index
                     }
                 }
             };
             
-            println!("INDEXING DEBUG: Unbounded integer {} -> index {}", val, index);
+            debug_log!("INDEXING DEBUG: Unbounded integer {} -> index {}", val, index);
             index
         }
         
@@ -199,7 +273,7 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
                 // Only false is permitted
                 if *val {
                     // true with p=0.0 is invalid, but for robustness return 0
-                    println!("INDEXING DEBUG: WARNING: true value with p=0.0 is invalid, returning 0");
+                    debug_log!("INDEXING DEBUG: WARNING: true value with p=0.0 is invalid, returning 0");
                     0
                 } else {
                     0  // false -> index 0
@@ -210,7 +284,7 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
                     0  // true -> index 0
                 } else {
                     // false with p=1.0 is invalid, but for robustness return 0
-                    println!("INDEXING DEBUG: WARNING: false value with p=1.0 is invalid, returning 0");
+                    debug_log!("INDEXING DEBUG: WARNING: false value with p=1.0 is invalid, returning 0");
                     0
                 }
             } else {
@@ -218,7 +292,7 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
                 if *val { 1 } else { 0 }
             };
             
-            println!("INDEXING DEBUG: Boolean {} with p={} -> index {}", val, c.p, index);
+            debug_log!("INDEXING DEBUG: Boolean {} with p={} -> index {}", val, c.p, index);
             index
         }
         
@@ -234,7 +308,7 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
             // Now we can implement Python's exact 65-bit algorithm with u128
             let index = (sign << 64) | lex_val;
             
-            println!("INDEXING DEBUG: Float {} -> sign={}, abs={}, lex={}, index={}", 
+            debug_log!("INDEXING DEBUG: Float {} -> sign={}, abs={}, lex={}, index={}", 
                 val, sign, abs_val, lex_val, index);
             index
         }
@@ -252,12 +326,12 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
             
             if size == 0 {
                 // Empty string
-                println!("INDEXING DEBUG: Empty string -> index {}", size_index);
+                debug_log!("INDEXING DEBUG: Empty string -> index {}", size_index);
                 return size_index;
             }
             
             if base == 0 {
-                println!("INDEXING DEBUG: Empty alphabet, returning size index {}", size_index);
+                debug_log!("INDEXING DEBUG: Empty alphabet, returning size index {}", size_index);
                 return size_index;
             }
             
@@ -268,12 +342,12 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
                     let position_value = (base as u128).pow((size - 1 - i) as u32);
                     content_index += char_idx as u128 * position_value;
                 } else {
-                    println!("INDEXING DEBUG: Character '{}' not in alphabet, using 0", ch);
+                    debug_log!("INDEXING DEBUG: Character '{}' not in alphabet, using 0", ch);
                 }
             }
             
             let index = size_index + content_index;
-            println!("INDEXING DEBUG: String '{}' (size {}) -> size_index={}, content_index={}, total_index={}", 
+            debug_log!("INDEXING DEBUG: String '{}' (size {}) -> size_index={}, content_index={}, total_index={}", 
                 val, size, size_index, content_index, index);
             index
         }
@@ -284,7 +358,7 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
             let size_index = size_to_index(size, c.min_size, c.max_size);
             
             if size == 0 {
-                println!("INDEXING DEBUG: Empty bytes -> index {}", size_index);
+                debug_log!("INDEXING DEBUG: Empty bytes -> index {}", size_index);
                 return size_index;
             }
             
@@ -296,13 +370,13 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
             }
             
             let index = size_index + content_index;
-            println!("INDEXING DEBUG: Bytes {:?} (size {}) -> size_index={}, content_index={}, total_index={}", 
+            debug_log!("INDEXING DEBUG: Bytes {:?} (size {}) -> size_index={}, content_index={}, total_index={}", 
                 val, size, size_index, content_index, index);
             index
         }
         
         _ => {
-            println!("INDEXING DEBUG: Unsupported choice type, returning 0");
+            debug_log!("INDEXING DEBUG: Unsupported choice type, returning 0");
             0
         }
     }
@@ -312,31 +386,82 @@ pub fn choice_to_index(value: &ChoiceValue, constraints: &Constraints) -> u128 {
 /// This is the inverse of choice_to_index
 /// Uses u128 to support Python's 65-bit float indices
 pub fn choice_from_index(index: u128, choice_type: &str, constraints: &Constraints) -> ChoiceValue {
-    println!("INDEXING DEBUG: Converting index {} to choice", index);
-    println!("INDEXING DEBUG: choice_type={}, constraints={:?}", choice_type, constraints);
+    debug_log!("INDEXING DEBUG: Converting index {} to choice", index);
+    debug_log!("INDEXING DEBUG: choice_type={}, constraints={:?}", choice_type, constraints);
     
     match (choice_type, constraints) {
         ("integer", Constraints::Integer(c)) => {
-            println!("INDEXING DEBUG: Converting index {} to integer", index);
+            debug_log!("INDEXING DEBUG: Converting index {} to integer", index);
             
-            // For bounded ranges, use sequence generation to get exact match
+            // For bounded ranges, generate the same sequence to reverse the indexing
             if c.min_value.is_some() || c.max_value.is_some() {
-                let sequence = generate_bounded_integer_sequence(c, 1000); // Same limit as choice_to_index
-                if (index as usize) < sequence.len() {
-                    let value = sequence[index as usize];
-                    println!("INDEXING DEBUG: Bounded index {} -> integer {}", index, value);
-                    return ChoiceValue::Integer(value);
-                } else {
-                    println!("INDEXING DEBUG: Bounded index {} out of range, returning first value", index);
-                    return ChoiceValue::Integer(sequence[0]);
+                let shrink_towards = c.shrink_towards.unwrap_or(0);
+                let clamped_shrink = match (c.min_value, c.max_value) {
+                    (Some(min), Some(max)) => shrink_towards.max(min).min(max),
+                    (Some(min), None) => shrink_towards.max(min),
+                    (None, Some(max)) => shrink_towards.min(max),
+                    (None, None) => shrink_towards,
+                };
+                
+                if index == 0 {
+                    debug_log!("INDEXING DEBUG: Bounded index 0 -> shrink_towards {}", clamped_shrink);
+                    return ChoiceValue::Integer(clamped_shrink);
                 }
+                
+                // Generate the same sequence as in choice_to_index
+                let mut current_index = 1u128;
+                
+                for distance in 1..=10000 { // Increased limit to handle larger bounded ranges
+                    // Try positive direction first
+                    let positive_candidate = clamped_shrink + distance;
+                    let positive_valid = match (c.min_value, c.max_value) {
+                        (Some(min), Some(max)) => positive_candidate >= min && positive_candidate <= max,
+                        (Some(min), None) => positive_candidate >= min,
+                        (None, Some(max)) => positive_candidate <= max,
+                        (None, None) => true,
+                    };
+                    
+                    if positive_valid {
+                        if current_index == index {
+                            debug_log!("INDEXING DEBUG: Bounded index {} -> integer {}", index, positive_candidate);
+                            return ChoiceValue::Integer(positive_candidate);
+                        }
+                        current_index += 1;
+                    }
+                    
+                    // Try negative direction
+                    let negative_candidate = clamped_shrink - distance;
+                    let negative_valid = match (c.min_value, c.max_value) {
+                        (Some(min), Some(max)) => negative_candidate >= min && negative_candidate <= max,
+                        (Some(min), None) => negative_candidate >= min,
+                        (None, Some(max)) => negative_candidate <= max,
+                        (None, None) => true,
+                    };
+                    
+                    if negative_valid {
+                        if current_index == index {
+                            debug_log!("INDEXING DEBUG: Bounded index {} -> integer {}", index, negative_candidate);
+                            return ChoiceValue::Integer(negative_candidate);
+                        }
+                        current_index += 1;
+                    }
+                    
+                    // If neither direction produces valid values, we're done
+                    if !positive_valid && !negative_valid {
+                        break;
+                    }
+                }
+                
+                // If index is out of range, return clamped_shrink as fallback
+                debug_log!("INDEXING DEBUG: Bounded index {} out of range, returning shrink_towards {}", index, clamped_shrink);
+                return ChoiceValue::Integer(clamped_shrink);
             }
             
             // For unbounded ranges, use mathematical formula
             let shrink_towards = c.shrink_towards.unwrap_or(0);
             
             if index == 0 {
-                println!("INDEXING DEBUG: Index 0 -> shrink_towards {}", shrink_towards);
+                debug_log!("INDEXING DEBUG: Index 0 -> shrink_towards {}", shrink_towards);
                 return ChoiceValue::Integer(shrink_towards);
             }
             
@@ -358,13 +483,13 @@ pub fn choice_from_index(index: u128, choice_type: &str, constraints: &Constrain
                 shrink_towards - distance
             };
             
-            println!("INDEXING DEBUG: Unbounded index {} -> integer {} (distance {} {}, shrink_towards {})", 
+            debug_log!("INDEXING DEBUG: Unbounded index {} -> integer {} (distance {} {}, shrink_towards {})", 
                 index, result, distance, if is_positive { "positive" } else { "negative" }, shrink_towards);
             ChoiceValue::Integer(result)
         }
         
         ("boolean", Constraints::Boolean(c)) => {
-            println!("INDEXING DEBUG: Converting index {} to boolean", index);
+            debug_log!("INDEXING DEBUG: Converting index {} to boolean", index);
             
             let result = if c.p == 0.0 {
                 // Only false is possible
@@ -377,12 +502,12 @@ pub fn choice_from_index(index: u128, choice_type: &str, constraints: &Constrain
                 index == 1
             };
             
-            println!("INDEXING DEBUG: Index {} with p={} -> boolean {}", index, c.p, result);
+            debug_log!("INDEXING DEBUG: Index {} with p={} -> boolean {}", index, c.p, result);
             ChoiceValue::Boolean(result)
         }
         
         ("float", Constraints::Float(c)) => {
-            println!("INDEXING DEBUG: Converting index {} to float", index);
+            debug_log!("INDEXING DEBUG: Converting index {} to float", index);
             
             // Python's algorithm:
             // sign = -1 if index >> 64 else 1  
@@ -402,13 +527,13 @@ pub fn choice_from_index(index: u128, choice_type: &str, constraints: &Constrain
             
             let result = clamp_float(unclamped_result, c);
             
-            println!("INDEXING DEBUG: Index {} -> sign_bit={}, lex_part={}, magnitude={}, unclamped={}, clamped={}", 
+            debug_log!("INDEXING DEBUG: Index {} -> sign_bit={}, lex_part={}, magnitude={}, unclamped={}, clamped={}", 
                 index, sign_bit, lex_part, magnitude, unclamped_result, result);
             ChoiceValue::Float(result)
         }
         
         ("string", Constraints::String(c)) => {
-            println!("INDEXING DEBUG: Converting index {} to string", index);
+            debug_log!("INDEXING DEBUG: Converting index {} to string", index);
             
             // Get ordered alphabet from constraints
             let alphabet = get_ordered_alphabet(&c.intervals);
@@ -418,7 +543,7 @@ pub fn choice_from_index(index: u128, choice_type: &str, constraints: &Constrain
             let size = index_to_size_with_base(index, c.min_size, c.max_size, base);
             
             if size == 0 {
-                println!("INDEXING DEBUG: Index {} -> empty string", index);
+                debug_log!("INDEXING DEBUG: Index {} -> empty string", index);
                 return ChoiceValue::String(String::new());
             }
             

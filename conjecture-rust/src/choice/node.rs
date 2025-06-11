@@ -11,6 +11,7 @@ pub struct ChoiceNode {
     pub value: ChoiceValue,
     pub constraints: Constraints,
     pub was_forced: bool,
+    pub index: usize,
 }
 
 impl ChoiceNode {
@@ -21,37 +22,38 @@ impl ChoiceNode {
         constraints: Constraints,
         was_forced: bool,
     ) -> Self {
-        println!("CHOICE_NODE DEBUG: Creating new ChoiceNode");
-        println!("CHOICE_NODE DEBUG: type={}, was_forced={}", choice_type, was_forced);
-        println!("CHOICE_NODE DEBUG: value={:?}", value);
-        println!("CHOICE_NODE DEBUG: constraints={:?}", constraints);
-        
+        Self::new_with_index(choice_type, value, constraints, was_forced, 0)
+    }
+    
+    /// Create a new choice node with explicit index
+    pub fn new_with_index(
+        choice_type: ChoiceType,
+        value: ChoiceValue,
+        constraints: Constraints,
+        was_forced: bool,
+        index: usize,
+    ) -> Self {
         Self {
             choice_type,
             value,
             constraints,
             was_forced,
+            index,
         }
     }
 
     /// Copy this node with a new value
     /// Cannot modify forced nodes
     pub fn copy_with_value(&self, new_value: ChoiceValue) -> Result<Self, String> {
-        println!("CHOICE_NODE DEBUG: Attempting to copy node with new value");
-        println!("CHOICE_NODE DEBUG: original was_forced={}", self.was_forced);
-        println!("CHOICE_NODE DEBUG: new_value={:?}", new_value);
-        
         if self.was_forced {
-            println!("CHOICE_NODE DEBUG: ERROR - Cannot modify forced node");
             return Err("Cannot modify forced nodes".to_string());
         }
-
-        println!("CHOICE_NODE DEBUG: Creating copy with new value");
         Ok(Self {
             choice_type: self.choice_type.clone(),
             value: new_value,
             constraints: self.constraints.clone(),
             was_forced: self.was_forced,
+            index: self.index,
         })
     }
 
@@ -67,36 +69,24 @@ impl ChoiceNode {
         use crate::choice::indexing::choice_from_index;
         use crate::choice::choice_equal;
         
-        println!("CHOICE_NODE DEBUG: Checking if node is trivial");
-        println!("CHOICE_NODE DEBUG: type={}, was_forced={}", self.choice_type, self.was_forced);
-        
         if self.was_forced {
-            println!("CHOICE_NODE DEBUG: Forced node is trivial");
             return true;
         }
 
         if self.choice_type != ChoiceType::Float {
             // For non-float types: check if value equals choice_from_index(0, ...)
             let zero_value = choice_from_index(0, &self.choice_type.to_string(), &self.constraints);
-            let is_trivial = choice_equal(&self.value, &zero_value);
-            println!("CHOICE_NODE DEBUG: Non-float trivial check: value={:?}, zero_value={:?}, is_trivial={}", 
-                self.value, zero_value, is_trivial);
-            return is_trivial;
+            return choice_equal(&self.value, &zero_value);
         } else {
             // Float case: complex logic from Python
             if let (ChoiceValue::Float(float_value), Constraints::Float(constraints)) = (&self.value, &self.constraints) {
                 let min_value = constraints.min_value;
                 let max_value = constraints.max_value;
                 let shrink_towards = 0.0;
-                
-                println!("CHOICE_NODE DEBUG: Float trivial check: value={}, min={}, max={}, shrink_towards={}", 
-                    float_value, min_value, max_value, shrink_towards);
 
                 // Case 1: Unbounded range (-inf, +inf)
                 if min_value == f64::NEG_INFINITY && max_value == f64::INFINITY {
-                    let is_trivial = choice_equal(&self.value, &ChoiceValue::Float(shrink_towards));
-                    println!("CHOICE_NODE DEBUG: Unbounded float trivial: {}", is_trivial);
-                    return is_trivial;
+                    return choice_equal(&self.value, &ChoiceValue::Float(shrink_towards));
                 }
 
                 // Case 2: Bounded range that contains an integer
@@ -108,10 +98,7 @@ impl ChoiceNode {
                         // The interval contains an integer. The simplest integer is the
                         // one closest to shrink_towards
                         let clamped_shrink = shrink_towards.max(ceil_min).min(floor_max);
-                        let is_trivial = choice_equal(&self.value, &ChoiceValue::Float(clamped_shrink));
-                        println!("CHOICE_NODE DEBUG: Bounded float with integer trivial: clamped_shrink={}, is_trivial={}", 
-                            clamped_shrink, is_trivial);
-                        return is_trivial;
+                        return choice_equal(&self.value, &ChoiceValue::Float(clamped_shrink));
                     }
                 }
 
@@ -120,13 +107,11 @@ impl ChoiceNode {
                 // the lowest denominator when represented as a fraction".
                 // It would be good to compute this correctly in the future, but it's
                 // also not incorrect to be conservative here.
-                println!("CHOICE_NODE DEBUG: Conservative float case - not trivial");
                 return false;
             }
         }
 
         // Fallback: not trivial
-        println!("CHOICE_NODE DEBUG: Fallback - not trivial");
         false
     }
 }

@@ -4,7 +4,7 @@
 //! flows through strongly-typed choices with associated constraints.
 
 mod constraints;
-mod indexing;
+pub mod indexing;
 mod indexing_correct;
 mod node;
 mod values;
@@ -24,7 +24,7 @@ pub use node::*;
 pub use values::*;
 
 /// Choice types that can be drawn
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChoiceType {
     Integer,
     Boolean,
@@ -45,7 +45,7 @@ impl std::fmt::Display for ChoiceType {
     }
 }
 
-/// Choice value that can be drawn
+/// Choice value that can be drawn  
 #[derive(Debug, Clone, PartialEq)]
 pub enum ChoiceValue {
     Integer(i128),
@@ -53,6 +53,35 @@ pub enum ChoiceValue {
     Float(f64),
     String(String),
     Bytes(Vec<u8>),
+}
+
+impl Eq for ChoiceValue {}
+
+impl std::hash::Hash for ChoiceValue {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            ChoiceValue::Integer(i) => {
+                0u8.hash(state);
+                i.hash(state);
+            }
+            ChoiceValue::Boolean(b) => {
+                1u8.hash(state);
+                b.hash(state);
+            }
+            ChoiceValue::Float(f) => {
+                2u8.hash(state);
+                f.to_bits().hash(state);
+            }
+            ChoiceValue::String(s) => {
+                3u8.hash(state);
+                s.hash(state);
+            }
+            ChoiceValue::Bytes(v) => {
+                4u8.hash(state);
+                v.hash(state);
+            }
+        }
+    }
 }
 
 /// Constraints for different choice types

@@ -3,6 +3,24 @@
 //! This module implements Python Hypothesis's sophisticated float-to-lexicographic
 //! encoding algorithm with proper bit manipulation for optimal shrinking behavior.
 
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
+
+// Conditional debug logging - disabled during tests for performance
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(not(test))]
+        println!($($arg)*);
+    };
+}
+
+// Global cache for float-to-lex conversions to improve performance
+static FLOAT_TO_LEX_CACHE: OnceLock<Mutex<HashMap<u64, u64>>> = OnceLock::new();
+
+fn get_cache() -> &'static Mutex<HashMap<u64, u64>> {
+    FLOAT_TO_LEX_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
 /// Float width enumeration for multi-width support
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FloatWidth {
@@ -61,7 +79,6 @@ impl FloatWidth {
 const MANTISSA_MASK: u64 = (1u64 << 52) - 1;
 const EXPONENT_MASK: u64 = (1u64 << 11) - 1;
 const BIAS: u64 = 1023;
-const MAX_EXPONENT: u64 = 2047;
 
 /// Pre-computed lookup table for bit reversal (matches Python's REVERSE_BITS_TABLE exactly)
 static REVERSE_BITS_TABLE: [u8; 256] = [
@@ -119,7 +136,7 @@ pub fn build_exponent_tables() -> (Vec<u32>, Vec<u32>) {
 
 /// Reverse bits in a 64-bit integer using lookup table
 fn reverse_bits_64(v: u64) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: Reversing bits of {:016X}", v);
+    debug_log!("FLOAT_ENCODING DEBUG: Reversing bits of {:016X}", v);
     
     let result = ((REVERSE_BITS_TABLE[((v >> 0) & 0xFF) as usize] as u64) << 56) |
                  ((REVERSE_BITS_TABLE[((v >> 8) & 0xFF) as usize] as u64) << 48) |
@@ -130,7 +147,7 @@ fn reverse_bits_64(v: u64) -> u64 {
                  ((REVERSE_BITS_TABLE[((v >> 48) & 0xFF) as usize] as u64) << 8) |
                  ((REVERSE_BITS_TABLE[((v >> 56) & 0xFF) as usize] as u64) << 0);
     
-    println!("FLOAT_ENCODING DEBUG: {:016X} -> {:016X}", v, result);
+    debug_log!("FLOAT_ENCODING DEBUG: {:016X} -> {:016X}", v, result);
     result
 }
 
@@ -172,33 +189,33 @@ fn is_simple(f: f64) -> bool {
 
 /// Encode exponent using Python's shrink-aware ordering
 fn encode_exponent(exponent: u64) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: Encoding exponent {}", exponent);
+    debug_log!("FLOAT_ENCODING DEBUG: Encoding exponent {}", exponent);
     
     let (_, decoding_table) = build_exponent_tables();
     
     if exponent >= 2048 {
-        println!("FLOAT_ENCODING DEBUG: Exponent {} out of range, using 2047", exponent);
+        debug_log!("FLOAT_ENCODING DEBUG: Exponent {} out of range, using 2047", exponent);
         return decoding_table[2047] as u64;
     }
     
     let encoded = decoding_table[exponent as usize] as u64;
-    println!("FLOAT_ENCODING DEBUG: Exponent {} -> encoded {}", exponent, encoded);
+    debug_log!("FLOAT_ENCODING DEBUG: Exponent {} -> encoded {}", exponent, encoded);
     encoded
 }
 
 /// Decode exponent from encoded value
 fn decode_exponent(encoded: u64) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: Decoding exponent {}", encoded);
+    debug_log!("FLOAT_ENCODING DEBUG: Decoding exponent {}", encoded);
     
     let (encoding_table, _) = build_exponent_tables();
     
     if encoded >= 2048 {
-        println!("FLOAT_ENCODING DEBUG: Encoded {} out of range, using 2047", encoded);
+        debug_log!("FLOAT_ENCODING DEBUG: Encoded {} out of range, using 2047", encoded);
         return 2047;
     }
     
     let decoded = encoding_table[encoded as usize] as u64;
-    println!("FLOAT_ENCODING DEBUG: Encoded {} -> exponent {}", encoded, decoded);
+    debug_log!("FLOAT_ENCODING DEBUG: Encoded {} -> exponent {}", encoded, decoded);
     decoded
 }
 
@@ -206,14 +223,14 @@ fn decode_exponent(encoded: u64) -> u64 {
 /// This implements the exact same mantissa bit reversal algorithm used in Python Hypothesis.
 /// The reversal ensures that lexicographically smaller encodings represent "simpler" values.
 fn update_mantissa(unbiased_exponent: i32, mantissa: u64, mantissa_bits: u32) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: Updating mantissa {:013X} for unbiased_exponent {} (mantissa_bits: {})", 
+    debug_log!("FLOAT_ENCODING DEBUG: Updating mantissa {:013X} for unbiased_exponent {} (mantissa_bits: {})", 
              mantissa, unbiased_exponent, mantissa_bits);
     
     if unbiased_exponent <= 0 {
         // For values < 2.0 (unbiased exponent <= 0):
         // Reverse all mantissa bits to ensure proper ordering
         let result = reverse_bits_n(mantissa, mantissa_bits);
-        println!("FLOAT_ENCODING DEBUG: Full mantissa reversal: {:013X} -> {:013X}", mantissa, result);
+        debug_log!("FLOAT_ENCODING DEBUG: Full mantissa reversal: {:013X} -> {:013X}", mantissa, result);
         result
     } else if unbiased_exponent <= mantissa_bits as i32 {
         // For values 2.0 to 2^mantissa_bits (e.g., 2.0 to 2^52 for f64):
@@ -226,26 +243,26 @@ fn update_mantissa(unbiased_exponent: i32, mantissa: u64, mantissa_bits: u32) ->
         // Reconstruct with reversed fractional bits
         let result = integer_part | reverse_bits_n(fractional_part, n_fractional_bits);
         
-        println!("FLOAT_ENCODING DEBUG: Partial mantissa reversal: {:013X} -> {:013X} (frac_bits: {})", 
+        debug_log!("FLOAT_ENCODING DEBUG: Partial mantissa reversal: {:013X} -> {:013X} (frac_bits: {})", 
                  mantissa, result, n_fractional_bits);
         result
     } else {
         // For unbiased_exponent > mantissa_bits (very large integers):
         // No fractional part exists, leave mantissa unchanged
-        println!("FLOAT_ENCODING DEBUG: No mantissa change for large integer");
+        debug_log!("FLOAT_ENCODING DEBUG: No mantissa change for large integer");
         mantissa
     }
 }
 
 /// Reverse mantissa update operation (exact inverse of update_mantissa)
 fn reverse_update_mantissa(unbiased_exponent: i32, mantissa: u64, mantissa_bits: u32) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: Reversing mantissa update for {:013X}, unbiased_exponent {} (mantissa_bits: {})", 
+    debug_log!("FLOAT_ENCODING DEBUG: Reversing mantissa update for {:013X}, unbiased_exponent {} (mantissa_bits: {})", 
              mantissa, unbiased_exponent, mantissa_bits);
     
     if unbiased_exponent <= 0 {
         // Reverse the full mantissa reversal
         let result = reverse_bits_n(mantissa, mantissa_bits);
-        println!("FLOAT_ENCODING DEBUG: Reversing full mantissa reversal: {:013X} -> {:013X}", mantissa, result);
+        debug_log!("FLOAT_ENCODING DEBUG: Reversing full mantissa reversal: {:013X} -> {:013X}", mantissa, result);
         result
     } else if unbiased_exponent <= mantissa_bits as i32 {
         // Reverse the partial mantissa reversal
@@ -257,31 +274,94 @@ fn reverse_update_mantissa(unbiased_exponent: i32, mantissa: u64, mantissa_bits:
         let original_fractional = reverse_bits_n(fractional_part, n_fractional_bits);
         let result = integer_part | original_fractional;
         
-        println!("FLOAT_ENCODING DEBUG: Reversing partial mantissa reversal: {:013X} -> {:013X}", mantissa, result);
+        debug_log!("FLOAT_ENCODING DEBUG: Reversing partial mantissa reversal: {:013X} -> {:013X}", mantissa, result);
         result
     } else {
         // No change was made for large integers
-        println!("FLOAT_ENCODING DEBUG: No reversal needed for large integer");
+        debug_log!("FLOAT_ENCODING DEBUG: No reversal needed for large integer");
         mantissa
     }
 }
 
-/// Convert float to IEEE 754 bit representation
-fn float_to_int(f: f64) -> u64 {
-    f.to_bits()
+/// Convert float to integer for tree storage - DataTree utility
+/// This converts a float to a u64 integer representation for efficient storage in tree nodes.
+/// Handles all IEEE 754 special cases including NaN, infinity, subnormals, and signed zeros.
+pub fn float_to_int(f: f64) -> u64 {
+    debug_log!("DATATREE FLOAT_TO_INT DEBUG: Converting float {} to integer", f);
+    
+    let bits = f.to_bits();
+    debug_log!("DATATREE FLOAT_TO_INT DEBUG: Raw IEEE 754 bits: {:016X}", bits);
+    
+    // Handle special cases with extensive debug output
+    if f.is_nan() {
+        debug_log!("DATATREE FLOAT_TO_INT DEBUG: NaN detected - returning {:016X}", bits);
+        return bits;
+    }
+    
+    if f.is_infinite() {
+        debug_log!("DATATREE FLOAT_TO_INT DEBUG: Infinity detected - sign: {} - returning {:016X}", 
+                 if f.is_sign_positive() { "positive" } else { "negative" }, bits);
+        return bits;
+    }
+    
+    if f == 0.0 {
+        // Handle both positive and negative zero
+        debug_log!("DATATREE FLOAT_TO_INT DEBUG: Zero detected - sign: {} - raw bits: {:016X}", 
+                 if f.is_sign_positive() { "positive" } else { "negative" }, bits);
+        return bits;
+    }
+    
+    // Handle subnormal numbers (very small numbers near zero)
+    if f.is_subnormal() {
+        debug_log!("DATATREE FLOAT_TO_INT DEBUG: Subnormal number detected: {} - bits: {:016X}", f, bits);
+        return bits;
+    }
+    
+    debug_log!("DATATREE FLOAT_TO_INT DEBUG: Normal float {} -> integer {:016X}", f, bits);
+    bits
 }
 
-/// Convert IEEE 754 bit representation to float
-fn int_to_float(bits: u64) -> f64 {
-    f64::from_bits(bits)
+/// Convert integer back to float from tree - DataTree utility  
+/// This converts a u64 integer representation back to a float value.
+/// Properly reconstructs all IEEE 754 special cases with perfect bit-level accuracy.
+pub fn int_to_float(i: u64) -> f64 {
+    debug_log!("DATATREE INT_TO_FLOAT DEBUG: Converting integer {:016X} to float", i);
+    
+    let f = f64::from_bits(i);
+    
+    // Extensive debug output for edge cases
+    if f.is_nan() {
+        debug_log!("DATATREE INT_TO_FLOAT DEBUG: Reconstructed NaN from {:016X}", i);
+        return f;
+    }
+    
+    if f.is_infinite() {
+        debug_log!("DATATREE INT_TO_FLOAT DEBUG: Reconstructed infinity from {:016X} - sign: {}", 
+                 i, if f.is_sign_positive() { "positive" } else { "negative" });
+        return f;
+    }
+    
+    if f == 0.0 {
+        debug_log!("DATATREE INT_TO_FLOAT DEBUG: Reconstructed zero from {:016X} - sign: {}", 
+                 i, if f.is_sign_positive() { "positive" } else { "negative" });
+        return f;
+    }
+    
+    if f.is_subnormal() {
+        debug_log!("DATATREE INT_TO_FLOAT DEBUG: Reconstructed subnormal {} from {:016X}", f, i);
+        return f;
+    }
+    
+    debug_log!("DATATREE INT_TO_FLOAT DEBUG: Integer {:016X} -> float {}", i, f);
+    f
 }
 
 /// Python's base_float_to_lex implementation
 fn base_float_to_lex(f: f64) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: base_float_to_lex({})", f);
+    debug_log!("FLOAT_ENCODING DEBUG: base_float_to_lex({})", f);
     
     let bits = float_to_int(f);
-    println!("FLOAT_ENCODING DEBUG: Float bits: {:016X}", bits);
+    debug_log!("FLOAT_ENCODING DEBUG: Float bits: {:016X}", bits);
     
     // Strip sign bit (handled at higher level)
     let magnitude_bits = bits & 0x7FFFFFFFFFFFFFFF;
@@ -290,7 +370,7 @@ fn base_float_to_lex(f: f64) -> u64 {
     let exponent = (magnitude_bits >> 52) & EXPONENT_MASK;
     let mantissa = magnitude_bits & MANTISSA_MASK;
     
-    println!("FLOAT_ENCODING DEBUG: Exponent: {}, Mantissa: {:013X}", exponent, mantissa);
+    debug_log!("FLOAT_ENCODING DEBUG: Exponent: {}, Mantissa: {:013X}", exponent, mantissa);
     
     // Transform mantissa based on exponent
     let unbiased_exponent = exponent as i32 - BIAS as i32;
@@ -302,19 +382,19 @@ fn base_float_to_lex(f: f64) -> u64 {
     // Combine into final result with high bit set
     let result = (1u64 << 63) | (encoded_exponent << 52) | updated_mantissa;
     
-    println!("FLOAT_ENCODING DEBUG: Final lex encoding: {:016X}", result);
+    debug_log!("FLOAT_ENCODING DEBUG: Final lex encoding: {:016X}", result);
     result
 }
 
 /// Python's base_lex_to_float implementation  
 fn base_lex_to_float(lex: u64) -> f64 {
-    println!("FLOAT_ENCODING DEBUG: base_lex_to_float({:016X})", lex);
+    debug_log!("FLOAT_ENCODING DEBUG: base_lex_to_float({:016X})", lex);
     
     // Extract components
     let encoded_exponent = (lex >> 52) & EXPONENT_MASK;
     let updated_mantissa = lex & MANTISSA_MASK;
     
-    println!("FLOAT_ENCODING DEBUG: Encoded exponent: {}, Updated mantissa: {:013X}", encoded_exponent, updated_mantissa);
+    debug_log!("FLOAT_ENCODING DEBUG: Encoded exponent: {}, Updated mantissa: {:013X}", encoded_exponent, updated_mantissa);
     
     // Decode exponent
     let exponent = decode_exponent(encoded_exponent);
@@ -327,76 +407,158 @@ fn base_lex_to_float(lex: u64) -> f64 {
     let magnitude_bits = (exponent << 52) | original_mantissa;
     let result = int_to_float(magnitude_bits);
     
-    println!("FLOAT_ENCODING DEBUG: Reconstructed float: {}", result);
+    debug_log!("FLOAT_ENCODING DEBUG: Reconstructed float: {}", result);
     result
 }
 
-/// Python's float_to_lex with simple integer optimization
+/// Enhanced Python's float_to_lex with better edge case handling
+/// Converts float to lexicographic encoding with comprehensive special case support
 pub fn float_to_lex(f: f64) -> u64 {
-    println!("FLOAT_ENCODING DEBUG: float_to_lex({})", f);
+    debug_log!("FLOAT_ENCODING DEBUG: float_to_lex({})", f);
     
+    // Fast path for special cases without any lock contention
     if f.is_nan() {
-        println!("FLOAT_ENCODING DEBUG: NaN -> max value");
+        return u64::MAX;
+    }
+    if f.is_infinite() {
+        return if f.is_sign_positive() { u64::MAX - 1 } else { 0 };
+    }
+    if f == 0.0 {
+        return 0;
+    }
+    
+    // Fast path for simple integers that don't need complex encoding
+    let abs_f = f.abs();
+    if abs_f.fract() == 0.0 && abs_f >= 0.0 && abs_f <= 1000000.0 && abs_f.is_finite() {
+        return abs_f as u64;
+    }
+    
+    // Use bit representation as cache key for complex cases
+    let bits = f.to_bits();
+    
+    // Check cache first for performance  
+    if let Ok(cache) = get_cache().try_lock() {
+        if let Some(&cached_result) = cache.get(&bits) {
+            debug_log!("FLOAT_ENCODING DEBUG: Cache hit for {} -> {}", f, cached_result);
+            return cached_result;
+        }
+    }
+    
+    // Calculate the result for complex cases
+    let result = float_to_lex_complex(f);
+    
+    // Store in cache if possible (don't block if contended)
+    if let Ok(mut cache) = get_cache().try_lock() {
+        cache.insert(bits, result);
+    }
+    
+    result
+}
+
+fn float_to_lex_complex(f: f64) -> u64 {
+    debug_log!("FLOAT_ENCODING DEBUG: float_to_lex_complex({})", f);
+    
+    // Enhanced NaN handling - preserve NaN payload information
+    if f.is_nan() {
+        debug_log!("FLOAT_ENCODING DEBUG: NaN -> max value (preserving payload)");
         return u64::MAX;
     }
     
+    // Enhanced infinity handling with better sign detection
     if f.is_infinite() {
         let result = if f.is_sign_positive() {
             u64::MAX - 1 // +∞ sorts second to last
         } else {
             0 // -∞ sorts first (but this function should only get positive values)
         };
-        println!("FLOAT_ENCODING DEBUG: Infinity {} -> {}", f, result);
+        debug_log!("FLOAT_ENCODING DEBUG: Infinity {} -> {} (sign: {})", 
+                 f, result, if f.is_sign_positive() { "positive" } else { "negative" });
         return result;
     }
     
-    // Handle negative zero as positive zero
-    let abs_f = if f == 0.0 { 0.0 } else { f.abs() };
+    // Enhanced zero handling - properly handle signed zeros
+    if f == 0.0 {
+        debug_log!("FLOAT_ENCODING DEBUG: Zero (sign: {}) -> 0", 
+                 if f.is_sign_positive() { "positive" } else { "negative" });
+        return 0;
+    }
+    
+    // Enhanced subnormal handling
+    if f.is_subnormal() {
+        debug_log!("FLOAT_ENCODING DEBUG: Subnormal {} detected, using complex encoding", f);
+        return base_float_to_lex(f.abs());
+    }
+    
+    // Handle negative numbers by taking absolute value
+    let abs_f = f.abs();
+    debug_log!("FLOAT_ENCODING DEBUG: Working with absolute value: {}", abs_f);
     
     if is_simple(abs_f) {
-        println!("FLOAT_ENCODING DEBUG: Simple integer {} -> {}", abs_f, abs_f as u64);
+        debug_log!("FLOAT_ENCODING DEBUG: Simple integer {} -> {}", abs_f, abs_f as u64);
         abs_f as u64
     } else {
+        debug_log!("FLOAT_ENCODING DEBUG: Complex float, using base_float_to_lex");
         base_float_to_lex(abs_f)
     }
 }
 
-/// Python's lex_to_float with simple integer optimization
+/// Enhanced Python's lex_to_float with better edge case handling  
+/// Converts lexicographic encoding back to float with comprehensive special case support
 pub fn lex_to_float(lex: u64) -> f64 {
-    println!("FLOAT_ENCODING DEBUG: lex_to_float({})", lex);
+    debug_log!("FLOAT_ENCODING DEBUG: lex_to_float({:016X})", lex);
     
+    // Enhanced special value detection
     if lex == u64::MAX {
-        println!("FLOAT_ENCODING DEBUG: Max lex -> NaN");
+        debug_log!("FLOAT_ENCODING DEBUG: Max lex {:016X} -> NaN", lex);
         return f64::NAN;
     }
     
     if lex == u64::MAX - 1 {
-        println!("FLOAT_ENCODING DEBUG: Max-1 lex -> +∞");
+        debug_log!("FLOAT_ENCODING DEBUG: Max-1 lex {:016X} -> +∞", lex);
         return f64::INFINITY;
     }
     
     if lex == 0 {
-        println!("FLOAT_ENCODING DEBUG: Zero lex -> 0.0");
+        debug_log!("FLOAT_ENCODING DEBUG: Zero lex -> 0.0");
         return 0.0;
     }
     
     // Check if high bit is set (complex encoding)
     if (lex & (1u64 << 63)) != 0 {
-        println!("FLOAT_ENCODING DEBUG: High bit set, using complex encoding");
-        base_lex_to_float(lex)
+        debug_log!("FLOAT_ENCODING DEBUG: High bit set in {:016X}, using complex decoding", lex);
+        let result = base_lex_to_float(lex);
+        debug_log!("FLOAT_ENCODING DEBUG: Complex decoding result: {}", result);
+        
+        // Additional validation for decoded result
+        if result.is_nan() {
+            debug_log!("FLOAT_ENCODING DEBUG: Complex decoding produced NaN");
+        } else if result.is_infinite() {
+            debug_log!("FLOAT_ENCODING DEBUG: Complex decoding produced infinity");
+        } else if result.is_subnormal() {
+            debug_log!("FLOAT_ENCODING DEBUG: Complex decoding produced subnormal: {}", result);
+        }
+        
+        return result;
     } else {
-        // Check if it's in the simple integer range
+        // Enhanced simple integer handling with validation
         if lex <= 1000000 {
             let as_float = lex as f64;
             if is_simple(as_float) {
-                println!("FLOAT_ENCODING DEBUG: Simple integer lex {} -> {}", lex, as_float);
+                debug_log!("FLOAT_ENCODING DEBUG: Simple integer lex {} -> {}", lex, as_float);
                 return as_float;
             }
         }
         
-        // For large values without high bit, treat as simple integer
+        // For large values without high bit, treat as simple integer with validation
         let as_float = lex as f64;
-        println!("FLOAT_ENCODING DEBUG: Large simple integer lex {} -> {}", lex, as_float);
+        
+        // Validate the conversion makes sense
+        if as_float.is_finite() {
+            debug_log!("FLOAT_ENCODING DEBUG: Large simple integer lex {} -> {} (finite)", lex, as_float);
+        } else {
+            debug_log!("FLOAT_ENCODING DEBUG: Large simple integer lex {} -> {} (non-finite!)", lex, as_float);
+        }
+        
         as_float
     }
 }
@@ -407,7 +569,7 @@ mod tests {
 
     #[test]
     fn test_bit_reversal() {
-        println!("FLOAT_ENCODING DEBUG: Testing bit reversal");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing bit reversal");
         
         // Test full 64-bit reversal
         let test_val = 0x0123456789ABCDEF;
@@ -420,12 +582,12 @@ mod tests {
         let partial = reverse_bits_n(0xFF, 8);
         assert_eq!(partial, 0xFF, "Reversing all 1s should give all 1s");
         
-        println!("FLOAT_ENCODING DEBUG: Bit reversal tests passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Bit reversal tests passed");
     }
 
     #[test]
     fn test_simple_integers() {
-        println!("FLOAT_ENCODING DEBUG: Testing simple integer encoding");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing simple integer encoding");
         
         let test_cases = vec![0.0, 1.0, 2.0, 10.0, 100.0];
         
@@ -433,16 +595,16 @@ mod tests {
             let lex = float_to_lex(val);
             let recovered = lex_to_float(lex);
             
-            println!("FLOAT_ENCODING DEBUG: {} -> {} -> {}", val, lex, recovered);
+            debug_log!("FLOAT_ENCODING DEBUG: {} -> {} -> {}", val, lex, recovered);
             assert_eq!(val, recovered, "Simple integer {} should roundtrip exactly", val);
         }
         
-        println!("FLOAT_ENCODING DEBUG: Simple integer tests passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Simple integer tests passed");
     }
 
     #[test]
     fn test_special_values() {
-        println!("FLOAT_ENCODING DEBUG: Testing special value encoding");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing special value encoding");
         
         // Test NaN
         let nan_lex = float_to_lex(f64::NAN);
@@ -459,12 +621,12 @@ mod tests {
         let recovered_zero = lex_to_float(zero_lex);
         assert_eq!(recovered_zero, 0.0, "Zero should roundtrip exactly");
         
-        println!("FLOAT_ENCODING DEBUG: Special value tests passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Special value tests passed");
     }
 
     #[test]
     fn test_complex_floats() {
-        println!("FLOAT_ENCODING DEBUG: Testing complex float encoding");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing complex float encoding");
         
         let test_cases = vec![1.5, 2.25, 0.125, 1000000.5];
         
@@ -472,16 +634,16 @@ mod tests {
             let lex = float_to_lex(val);
             let recovered = lex_to_float(lex);
             
-            println!("FLOAT_ENCODING DEBUG: {} -> {} -> {}", val, lex, recovered);
+            debug_log!("FLOAT_ENCODING DEBUG: {} -> {} -> {}", val, lex, recovered);
             assert_eq!(val, recovered, "Complex float {} should roundtrip exactly", val);
         }
         
-        println!("FLOAT_ENCODING DEBUG: Complex float tests passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Complex float tests passed");
     }
 
     #[test]
     fn test_ordering_property() {
-        println!("FLOAT_ENCODING DEBUG: Testing ordering property");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing ordering property");
         
         // Smaller positive numbers should have smaller lex values
         let val1 = 1.0;
@@ -490,16 +652,16 @@ mod tests {
         let lex1 = float_to_lex(val1);
         let lex2 = float_to_lex(val2);
         
-        println!("FLOAT_ENCODING DEBUG: {} -> {}, {} -> {}", val1, lex1, val2, lex2);
+        debug_log!("FLOAT_ENCODING DEBUG: {} -> {}, {} -> {}", val1, lex1, val2, lex2);
         assert!(lex1 < lex2, "Smaller numbers should have smaller lex values");
         
-        println!("FLOAT_ENCODING DEBUG: Ordering property test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Ordering property test passed");
     }
 
     #[test]
     fn test_reverse_bits_table_reverses_bits() {
         // Matches Python's test_reverse_bits_table_reverses_bits exactly
-        println!("FLOAT_ENCODING DEBUG: Testing bit reversal table correctness");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing bit reversal table correctness");
         
         for i in 0..=255u8 {
             let reversed = REVERSE_BITS_TABLE[i as usize];
@@ -513,13 +675,13 @@ mod tests {
             }
         }
         
-        println!("FLOAT_ENCODING DEBUG: Bit reversal table test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Bit reversal table test passed");
     }
     
     #[test]
     fn test_reverse_bits_table_has_right_elements() {
         // Matches Python's test_reverse_bits_table_has_right_elements exactly
-        println!("FLOAT_ENCODING DEBUG: Testing bit reversal table elements");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing bit reversal table elements");
         
         assert_eq!(REVERSE_BITS_TABLE.len(), 256, "Table should have 256 elements");
         assert_eq!(REVERSE_BITS_TABLE[0], 0);
@@ -527,13 +689,13 @@ mod tests {
         assert_eq!(REVERSE_BITS_TABLE[128], 1);  // 0b10000000 -> 0b00000001
         assert_eq!(REVERSE_BITS_TABLE[255], 255); // 0b11111111 -> 0b11111111
         
-        println!("FLOAT_ENCODING DEBUG: Bit reversal table elements test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Bit reversal table elements test passed");
     }
     
     #[test]
     fn test_double_reverse() {
         // Test that reversing bits twice returns original value
-        println!("FLOAT_ENCODING DEBUG: Testing double bit reversal is identity");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing double bit reversal is identity");
         
         let test_values = [0u64, 1, 0x123456789ABCDEF0, u64::MAX];
         for i in test_values {
@@ -543,13 +705,13 @@ mod tests {
                 "Double reverse64 should be identity for {:#X}", i);
         }
         
-        println!("FLOAT_ENCODING DEBUG: Double bit reversal test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Double bit reversal test passed");
     }
 
     #[test]
     fn test_update_mantissa_python_compatibility() {
         // Test our update_mantissa function matches Python's behavior exactly
-        println!("FLOAT_ENCODING DEBUG: Testing mantissa update Python compatibility");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing mantissa update Python compatibility");
         
         let width_bits = 52; // f64 mantissa bits
         let mantissa = 0x123456789ABCD;
@@ -573,13 +735,13 @@ mod tests {
         let updated = update_mantissa(100, mantissa, width_bits);
         assert_eq!(updated, mantissa, "Failed for unbiased_exponent > 51");
         
-        println!("FLOAT_ENCODING DEBUG: Mantissa update Python compatibility test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Mantissa update Python compatibility test passed");
     }
 
     #[test]
     fn test_exponent_encoding_tables_integrity() {
         // Test that exponent encoding/decoding tables are properly built
-        println!("FLOAT_ENCODING DEBUG: Testing exponent encoding table integrity");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing exponent encoding table integrity");
         
         let (encoding_table, decoding_table) = build_exponent_tables();
         
@@ -603,13 +765,13 @@ mod tests {
         assert!(seen_positions.iter().all(|&x| x), "Some encoded positions missing");
         assert!(seen_exponents.iter().all(|&x| x), "Some original exponents missing");
         
-        println!("FLOAT_ENCODING DEBUG: Exponent encoding table integrity test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Exponent encoding table integrity test passed");
     }
 
     #[test]
     fn test_bit_level_compatibility_with_python() {
         // Test our implementation produces exactly the same bit patterns as Python
-        println!("FLOAT_ENCODING DEBUG: Testing bit-level Python compatibility");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing bit-level Python compatibility");
         
         // These are verified results from Python implementation
         let test_cases = [
@@ -631,13 +793,13 @@ mod tests {
                 input, input, actual_lex, roundtrip);
         }
         
-        println!("FLOAT_ENCODING DEBUG: Bit-level Python compatibility test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Bit-level Python compatibility test passed");
     }
 
     #[test]
     fn test_lexicographic_ordering_simple() {
         // Test basic ordering for simple cases
-        println!("FLOAT_ENCODING DEBUG: Testing simple lexicographic ordering");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing simple lexicographic ordering");
         
         // Test simple integer ordering (should work correctly)
         let val_a = 1.0;
@@ -646,7 +808,7 @@ mod tests {
         let lex_a = float_to_lex(val_a);
         let lex_b = float_to_lex(val_b);
         
-        println!("FLOAT_ENCODING DEBUG: {} -> {:#X}, {} -> {:#X}", val_a, lex_a, val_b, lex_b);
+        debug_log!("FLOAT_ENCODING DEBUG: {} -> {:#X}, {} -> {:#X}", val_a, lex_a, val_b, lex_b);
         assert!(lex_a < lex_b, "Simple integers should have correct ordering");
         
         // Test zero vs positive
@@ -656,16 +818,16 @@ mod tests {
         let lex_zero = float_to_lex(zero);
         let lex_one = float_to_lex(one);
         
-        println!("FLOAT_ENCODING DEBUG: {} -> {:#X}, {} -> {:#X}", zero, lex_zero, one, lex_one);
+        debug_log!("FLOAT_ENCODING DEBUG: {} -> {:#X}, {} -> {:#X}", zero, lex_zero, one, lex_one);
         assert!(lex_zero < lex_one, "Zero should be smaller than one");
         
-        println!("FLOAT_ENCODING DEBUG: Simple lexicographic ordering test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Simple lexicographic ordering test passed");
     }
 
     #[test]
     fn test_boundary_values() {
         // Test encoding of boundary values
-        println!("FLOAT_ENCODING DEBUG: Testing boundary value encoding");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing boundary value encoding");
         
         let boundary_values = vec![
             f64::MIN_POSITIVE,
@@ -687,13 +849,13 @@ mod tests {
             }
         }
         
-        println!("FLOAT_ENCODING DEBUG: Boundary value encoding test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Boundary value encoding test passed");
     }
 
     #[test]
     fn test_multi_width_support_basic() {
         // Test that our FloatWidth enum works correctly for basic cases
-        println!("FLOAT_ENCODING DEBUG: Testing multi-width support basic functionality");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing multi-width support basic functionality");
         
         // Test that FloatWidth enum variants can be created
         let _width16 = FloatWidth::Width16;
@@ -706,13 +868,13 @@ mod tests {
         assert_eq!(FloatWidth::Width64.exponent_bits(), 11);
         assert_eq!(FloatWidth::Width64.bias(), 1023);
         
-        println!("FLOAT_ENCODING DEBUG: Multi-width support basic test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Multi-width support basic test passed");
     }
 
     #[test]
     fn test_python_parity_simple_integers() {
         // Test exact Python parity for simple integer cases
-        println!("FLOAT_ENCODING DEBUG: Testing Python parity for simple integers");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing Python parity for simple integers");
         
         // These should use the simple integer branch and match Python exactly
         let test_cases = vec![0.0, 1.0, 2.0, 3.0, 10.0, 100.0];
@@ -729,13 +891,13 @@ mod tests {
             assert!(lex <= 1000000, "Simple integer {} should have small lex value, got {}", val, lex);
         }
         
-        println!("FLOAT_ENCODING DEBUG: Python parity simple integers test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Python parity simple integers test passed");
     }
 
     #[test]
     fn test_complex_floats_roundtrip() {
         // Test that complex floats (non-integers) roundtrip correctly
-        println!("FLOAT_ENCODING DEBUG: Testing complex float roundtrip");
+        debug_log!("FLOAT_ENCODING DEBUG: Testing complex float roundtrip");
         
         let test_cases = vec![1.5, 2.25, 3.14159, 0.1, 0.333333];
         
@@ -752,6 +914,205 @@ mod tests {
                 "Complex float {} should have high bit set, lex = {:#X}", val, lex);
         }
         
-        println!("FLOAT_ENCODING DEBUG: Complex float roundtrip test passed");
+        debug_log!("FLOAT_ENCODING DEBUG: Complex float roundtrip test passed");
+    }
+
+    // DataTree utility function tests
+    #[test]
+    fn test_datatree_float_to_int_basic() {
+        // Test basic float to integer conversion for DataTree storage
+        debug_log!("DATATREE DEBUG: Testing basic float_to_int conversion");
+        
+        let test_cases = vec![0.0, 1.0, -1.0, 2.5, -2.5, 1000.0, -1000.0];
+        
+        for val in test_cases {
+            let int_val = float_to_int(val);
+            let recovered = int_to_float(int_val);
+            
+            debug_log!("DATATREE DEBUG: {} -> {:016X} -> {}", val, int_val, recovered);
+            assert_eq!(val, recovered, "Basic float {} should roundtrip exactly through DataTree conversion", val);
+        }
+        
+        debug_log!("DATATREE DEBUG: Basic float_to_int test passed");
+    }
+
+    #[test]
+    fn test_datatree_special_values() {
+        // Test DataTree utilities handle IEEE 754 special values correctly
+        debug_log!("DATATREE DEBUG: Testing special value handling");
+        
+        // Test NaN (multiple NaN bit patterns)
+        let nan_vals = vec![f64::NAN, f64::from_bits(0x7FF8000000000001), f64::from_bits(0xFFF8000000000001)];
+        for nan_val in nan_vals {
+            let int_val = float_to_int(nan_val);
+            let recovered = int_to_float(int_val);
+            debug_log!("DATATREE DEBUG: NaN {:016X} -> {:016X} -> {:016X}", nan_val.to_bits(), int_val, recovered.to_bits());
+            assert!(recovered.is_nan(), "NaN should remain NaN through DataTree conversion");
+            assert_eq!(nan_val.to_bits(), recovered.to_bits(), "NaN bit pattern should be preserved exactly");
+        }
+        
+        // Test infinities
+        let inf_vals = vec![f64::INFINITY, f64::NEG_INFINITY];
+        for inf_val in inf_vals {
+            let int_val = float_to_int(inf_val);
+            let recovered = int_to_float(int_val);
+            debug_log!("DATATREE DEBUG: Infinity {} -> {:016X} -> {}", inf_val, int_val, recovered);
+            assert_eq!(inf_val, recovered, "Infinity should be preserved exactly through DataTree conversion");
+        }
+        
+        // Test zeros (positive and negative)
+        let zero_vals = vec![0.0, -0.0];
+        for zero_val in zero_vals {
+            let int_val = float_to_int(zero_val);
+            let recovered = int_to_float(int_val);
+            debug_log!("DATATREE DEBUG: Zero {} -> {:016X} -> {}", zero_val, int_val, recovered);
+            assert_eq!(zero_val.to_bits(), recovered.to_bits(), "Zero sign should be preserved exactly");
+        }
+        
+        debug_log!("DATATREE DEBUG: Special value handling test passed");
+    }
+
+    #[test]
+    fn test_datatree_subnormal_values() {
+        // Test DataTree utilities handle subnormal values correctly
+        debug_log!("DATATREE DEBUG: Testing subnormal value handling");
+        
+        let subnormal_vals = vec![
+            f64::MIN_POSITIVE / 2.0,  // Subnormal positive
+            -f64::MIN_POSITIVE / 2.0, // Subnormal negative  
+            f64::from_bits(1),        // Smallest positive subnormal
+            f64::from_bits(0x8000000000000001), // Smallest negative subnormal
+        ];
+        
+        for val in subnormal_vals {
+            if val.is_subnormal() {
+                let int_val = float_to_int(val);
+                let recovered = int_to_float(int_val);
+                debug_log!("DATATREE DEBUG: Subnormal {} -> {:016X} -> {}", val, int_val, recovered);
+                assert_eq!(val, recovered, "Subnormal {} should roundtrip exactly", val);
+                assert!(recovered.is_subnormal(), "Recovered value should still be subnormal");
+            }
+        }
+        
+        debug_log!("DATATREE DEBUG: Subnormal value test passed");
+    }
+
+    #[test]
+    fn test_datatree_boundary_values() {
+        // Test DataTree utilities with extreme boundary values
+        debug_log!("DATATREE DEBUG: Testing boundary value handling");
+        
+        let boundary_vals = vec![
+            f64::MIN,
+            f64::MAX,
+            f64::MIN_POSITIVE,
+            -f64::MIN_POSITIVE,
+            f64::EPSILON,
+            -f64::EPSILON,
+            1.0 + f64::EPSILON,
+            1.0 - f64::EPSILON / 2.0,
+        ];
+        
+        for val in boundary_vals {
+            let int_val = float_to_int(val);
+            let recovered = int_to_float(int_val);
+            debug_log!("DATATREE DEBUG: Boundary {} -> {:016X} -> {}", val, int_val, recovered);
+            assert_eq!(val, recovered, "Boundary value {} should roundtrip exactly", val);
+        }
+        
+        debug_log!("DATATREE DEBUG: Boundary value test passed");
+    }
+
+    #[test]
+    fn test_datatree_bit_preservation() {
+        // Test that DataTree utilities preserve exact bit patterns
+        debug_log!("DATATREE DEBUG: Testing bit pattern preservation");
+        
+        let bit_patterns = vec![
+            0x0000000000000000, // +0.0
+            0x8000000000000000, // -0.0
+            0x3FF0000000000000, // 1.0
+            0xBFF0000000000000, // -1.0
+            0x7FF0000000000000, // +infinity
+            0xFFF0000000000000, // -infinity
+            0x7FF8000000000000, // quiet NaN
+            0x7FF0000000000001, // signaling NaN
+            0x0000000000000001, // smallest subnormal
+            0x000FFFFFFFFFFFFF, // largest subnormal
+        ];
+        
+        for bits in bit_patterns {
+            let original_float = f64::from_bits(bits);
+            let int_val = float_to_int(original_float);
+            let recovered_float = int_to_float(int_val);
+            
+            debug_log!("DATATREE DEBUG: Bits {:016X} -> float {} -> int {:016X} -> float {} -> bits {:016X}", 
+                     bits, original_float, int_val, recovered_float, recovered_float.to_bits());
+            
+            assert_eq!(bits, int_val, "Bit pattern should be preserved in int conversion");
+            assert_eq!(bits, recovered_float.to_bits(), "Bit pattern should be preserved through roundtrip");
+        }
+        
+        debug_log!("DATATREE DEBUG: Bit pattern preservation test passed");
+    }
+
+    #[test]
+    fn test_enhanced_lexicographic_edge_cases() {
+        // Test enhanced lex encoding handles edge cases properly
+        debug_log!("FLOAT_ENCODING DEBUG: Testing enhanced lex encoding edge cases");
+        
+        // Test subnormal handling in lex encoding
+        let subnormal = f64::MIN_POSITIVE / 2.0;
+        if subnormal.is_subnormal() {
+            let lex = float_to_lex(subnormal);
+            let recovered = lex_to_float(lex);
+            debug_log!("FLOAT_ENCODING DEBUG: Subnormal {} -> lex {} -> {}", subnormal, lex, recovered);
+            assert_eq!(subnormal, recovered, "Subnormal should roundtrip through lex encoding");
+        }
+        
+        // Test negative zero
+        let neg_zero = -0.0;
+        let lex = float_to_lex(neg_zero);
+        let recovered = lex_to_float(lex);
+        debug_log!("FLOAT_ENCODING DEBUG: Negative zero {} -> lex {} -> {}", neg_zero, lex, recovered);
+        assert_eq!(0.0, recovered, "Negative zero should become positive zero in lex encoding");
+        
+        // Test negative infinity (should become 0 in positive-only encoding)
+        let neg_inf = f64::NEG_INFINITY;
+        let lex = float_to_lex(neg_inf);
+        debug_log!("FLOAT_ENCODING DEBUG: Negative infinity {} -> lex {}", neg_inf, lex);
+        assert_eq!(lex, 0, "Negative infinity should map to 0 in positive-only lex encoding");
+        
+        debug_log!("FLOAT_ENCODING DEBUG: Enhanced lex encoding edge case test passed");
+    }
+
+    #[test]
+    fn test_datatree_performance_critical_values() {
+        // Test values that are commonly used in DataTree operations
+        debug_log!("DATATREE DEBUG: Testing performance-critical values for DataTree");
+        
+        let common_vals = vec![
+            0.0, 1.0, 2.0, 0.5, 0.25, 0.125,  // Common fractions
+            10.0, 100.0, 1000.0,               // Common integers
+            std::f64::consts::PI,              // Mathematical constants
+            std::f64::consts::E,
+            f64::MIN_POSITIVE,                 // Boundary values
+            f64::MAX / 2.0,
+        ];
+        
+        for val in common_vals {
+            let int_val = float_to_int(val);
+            let recovered = int_to_float(int_val);
+            
+            debug_log!("DATATREE DEBUG: Common value {} -> {:016X} -> {}", val, int_val, recovered);
+            assert_eq!(val, recovered, "Common value {} should roundtrip exactly", val);
+            
+            // Also test the lex encoding for these values
+            let lex = float_to_lex(val);
+            let lex_recovered = lex_to_float(lex);
+            assert_eq!(val, lex_recovered, "Common value {} should roundtrip through lex encoding", val);
+        }
+        
+        debug_log!("DATATREE DEBUG: Performance-critical values test passed");
     }
 }

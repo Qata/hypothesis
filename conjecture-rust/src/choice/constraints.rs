@@ -76,6 +76,14 @@ impl IntervalSet {
     }
 }
 
+impl Default for IntervalSet {
+    fn default() -> Self {
+        Self {
+            intervals: vec![(0, 0x10FFFF)], // All valid Unicode
+        }
+    }
+}
+
 /// Constraints for string choices
 #[derive(Debug, Clone, PartialEq)]
 pub struct StringConstraints {

@@ -44,14 +44,27 @@ mod performance_benchmarks {
         // Test float indexing performance with various values
         let test_values: Vec<f64> = (0..1000).map(|i| i as f64 * 0.1).collect();
         
-        for val in test_values {
-            let value = ChoiceValue::Float(val);
+        // First run (cold cache)
+        for val in &test_values {
+            let value = ChoiceValue::Float(*val);
             let index = choice_to_index(&value, &constraints);
             let _recovered = choice_from_index(index, "float", &constraints);
         }
         
-        let duration = start.elapsed();
-        println!("PERFORMANCE_TEST DEBUG: 1000 float indexing operations took {:?}", duration);
+        let first_duration = start.elapsed();
+        println!("PERFORMANCE_TEST DEBUG: 1000 float indexing operations (cold cache) took {:?}", first_duration);
+        
+        // Second run (warm cache) 
+        let warm_start = Instant::now();
+        for val in &test_values {
+            let value = ChoiceValue::Float(*val);
+            let index = choice_to_index(&value, &constraints);
+            let _recovered = choice_from_index(index, "float", &constraints);
+        }
+        let warm_duration = warm_start.elapsed();
+        println!("PERFORMANCE_TEST DEBUG: 1000 float indexing operations (warm cache) took {:?}", warm_duration);
+        
+        let duration = first_duration;
         
         // Float operations may be slower due to complex encoding
         assert!(duration.as_millis() < 500, 

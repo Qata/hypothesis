@@ -3,8 +3,35 @@
 //! This module contains failing tests that drive our implementation of ConjectureData
 //! and other missing functionality. Following TDD methodology: RED -> GREEN -> REFACTOR
 
-use crate::data::{ConjectureData, ConjectureResult, Status, DrawError};
-use crate::choice::{ChoiceValue, ChoiceType, ChoiceNode, Constraints};
+use crate::data::{ConjectureData, ConjectureResult, Status, DrawError, ExtraInformation, Example, Span};
+use crate::choice::{ChoiceValue, Constraints, ChoiceNode, ChoiceType, BooleanConstraints};
+use std::collections::{HashMap, HashSet};
+
+/// Helper function to create a minimal ConjectureResult for testing
+fn create_test_result(nodes: Vec<ChoiceNode>) -> ConjectureResult {
+    let length = nodes.len();
+    ConjectureResult {
+        status: Status::Valid,
+        nodes,
+        length,
+        events: HashMap::new(),
+        buffer: Vec::new(),
+        examples: Vec::new(),
+        interesting_origin: None,
+        output: Vec::new(),
+        extra_information: ExtraInformation::default(),
+        expected_exception: None,
+        expected_traceback: None,
+        has_discards: false,
+        target_observations: HashMap::new(),
+        tags: HashSet::new(),
+        spans: Vec::new(),
+        arg_slices: Vec::new(),
+        slice_comments: HashMap::new(),
+        misaligned_at: None,
+        cannot_proceed_scope: None,
+    }
+}
 
 /// Test ConjectureData creation and basic properties
 #[test]
@@ -39,7 +66,7 @@ fn test_draw_integer_basic() {
     assert_eq!(choices.len(), 1);
     
     if let ChoiceValue::Integer(recorded_value) = &choices[0].value {
-        assert_eq!(*recorded_value, value);
+        assert_eq!(recorded_value, &value);
     } else {
         panic!("Expected integer choice");
     }
@@ -62,7 +89,7 @@ fn test_draw_boolean_basic() {
     assert_eq!(choices.len(), 1);
     
     if let ChoiceValue::Boolean(recorded_value) = &choices[0].value {
-        assert_eq!(*recorded_value, value);
+        assert_eq!(recorded_value, &value);
     } else {
         panic!("Expected boolean choice");
     }
@@ -89,7 +116,7 @@ fn test_draw_float_basic() {
         if value.is_nan() {
             assert!(recorded_value.is_nan());
         } else {
-            assert_eq!(*recorded_value, value);
+            assert_eq!(recorded_value, &value);
         }
     } else {
         panic!("Expected float choice");
@@ -114,7 +141,7 @@ fn test_draw_string_basic() {
     assert_eq!(choices.len(), 1);
     
     if let ChoiceValue::String(recorded_value) = &choices[0].value {
-        assert_eq!(*recorded_value, value);
+        assert_eq!(recorded_value, &value);
     } else {
         panic!("Expected string choice");
     }
@@ -137,7 +164,7 @@ fn test_draw_bytes_basic() {
     assert_eq!(choices.len(), 1);
     
     if let ChoiceValue::Bytes(recorded_value) = &choices[0].value {
-        assert_eq!(*recorded_value, value);
+        assert_eq!(recorded_value, &value);
     } else {
         panic!("Expected bytes choice");
     }
@@ -214,12 +241,12 @@ fn test_multiple_draws_accumulate() {
     // Verify choice types and values
     match (&choices[0].value, &choices[1].value, &choices[2].value) {
         (ChoiceValue::Integer(i), ChoiceValue::Boolean(b), ChoiceValue::Float(f)) => {
-            assert_eq!(*i, int_val);
-            assert_eq!(*b, bool_val);
+            assert_eq!(i, &int_val);
+            assert_eq!(b, &bool_val);
             if float_val.is_nan() {
                 assert!(f.is_nan());
             } else {
-                assert_eq!(*f, float_val);
+                assert_eq!(f, &float_val);
             }
         },
         _ => panic!("Unexpected choice sequence"),
@@ -401,7 +428,7 @@ fn test_conjecture_result_creation() {
     
     // Verify result properties
     assert_eq!(result.status, Status::Valid);
-    assert_eq!(result.choices.len(), 2);
+    assert_eq!(result.nodes.len(), 2);
     assert_eq!(result.length, 3); // 2 + 1 bytes
     assert!(result.events.is_empty()); // No observations yet
     
@@ -430,7 +457,7 @@ fn test_conjecture_result_with_observations() {
     assert_eq!(result.events.get("iteration"), Some(&"1".to_string()));
     
     // Verify choices
-    assert_eq!(result.choices.len(), 2);
+    assert_eq!(result.nodes.len(), 2);
     assert_eq!(result.status, Status::Valid);
 }
 
@@ -448,7 +475,7 @@ fn test_conjecture_result_immutability() {
     let result2 = data.as_result();
     
     assert_eq!(result1.status, result2.status);
-    assert_eq!(result1.choices.len(), result2.choices.len());
+    assert_eq!(result1.nodes.len(), result2.nodes.len());
     assert_eq!(result1.length, result2.length);
     assert_eq!(result1.events.len(), result2.events.len());
 }
@@ -491,26 +518,26 @@ fn test_conjecture_result_choice_preservation() {
     let result = data.as_result();
     
     // Verify choices are preserved exactly
-    assert_eq!(result.choices.len(), 3);
+    assert_eq!(result.nodes.len(), 3);
     
     // Check values match
-    if let ChoiceValue::Integer(val) = &result.choices[0].value {
-        assert_eq!(*val, int_val);
+    if let ChoiceValue::Integer(val) = &result.nodes[0].value {
+        assert_eq!(val, &int_val);
     } else {
         panic!("Expected integer choice");
     }
     
-    if let ChoiceValue::Boolean(val) = &result.choices[1].value {
-        assert_eq!(*val, bool_val);
+    if let ChoiceValue::Boolean(val) = &result.nodes[1].value {
+        assert_eq!(val, &bool_val);
     } else {
         panic!("Expected boolean choice");
     }
     
-    if let ChoiceValue::Float(val) = &result.choices[2].value {
+    if let ChoiceValue::Float(val) = &result.nodes[2].value {
         if float_val.is_nan() {
             assert!(val.is_nan());
         } else {
-            assert_eq!(*val, float_val);
+            assert_eq!(val, &float_val);
         }
     } else {
         panic!("Expected float choice");
@@ -533,7 +560,7 @@ fn test_conjecture_result_reproduction() {
     let mut replay_data = ConjectureData::new(999); // Different seed
     
     // Extract choices and replay them
-    for choice in &result.choices {
+    for choice in &result.nodes {
         match &choice.value {
             ChoiceValue::Integer(val) => {
                 if let Constraints::Integer(constraints) = &choice.constraints {
@@ -554,22 +581,22 @@ fn test_conjecture_result_reproduction() {
     }
     
     // Verify reproduction
-    assert_eq!(replay_data.choice_count(), result.choices.len());
+    assert_eq!(replay_data.choice_count(), result.nodes.len());
     
     // The reproduced values should match original
     let replay_choices = replay_data.choices();
     assert_eq!(replay_choices.len(), 2);
     
     if let (ChoiceValue::Integer(orig), ChoiceValue::Integer(replay)) = 
-        (&result.choices[0].value, &replay_choices[0].value) {
+        (&result.nodes[0].value, &replay_choices[0].value) {
         assert_eq!(orig, replay);
-        assert_eq!(*orig, original_int);
+        assert_eq!(orig, &original_int);
     }
     
     if let (ChoiceValue::Boolean(orig), ChoiceValue::Boolean(replay)) = 
-        (&result.choices[1].value, &replay_choices[1].value) {
+        (&result.nodes[1].value, &replay_choices[1].value) {
         assert_eq!(orig, replay);
-        assert_eq!(*orig, original_bool);
+        assert_eq!(orig, &original_bool);
     }
 }
 
@@ -598,7 +625,7 @@ fn test_buffer_byte_serialization() {
 /// Test overrun protection
 #[test]
 fn test_overrun_protection() {
-    let mut data = ConjectureData::new(42);
+    let data = ConjectureData::new(42);
     
     // Test that we don't exceed max_length
     assert_eq!(data.max_length, 8192);
@@ -629,11 +656,11 @@ fn test_choice_shrinker_creation() {
     let shrinker = crate::shrinking::ChoiceShrinker::new(result.clone());
     
     // Verify initial state
-    assert_eq!(shrinker.original_result.choices.len(), result.choices.len());
-    assert_eq!(shrinker.best_result.choices.len(), result.choices.len());
+    assert_eq!(shrinker.original_result.nodes.len(), result.nodes.len());
+    assert_eq!(shrinker.best_result.nodes.len(), result.nodes.len());
     assert_eq!(shrinker.attempts, 0);
     assert_eq!(shrinker.max_attempts, 10000);
-    assert_eq!(shrinker.transformations.len(), 3); // Default transformations
+    assert_eq!(shrinker.transformations.len(), 16); // Default transformations
 }
 
 /// Test integer value minimization
@@ -654,11 +681,11 @@ fn test_shrink_integer_values() {
     // Shrinking test: "fails" only if we have choices (prevents deleting all choices)
     let shrunk_result = shrinker.shrink(|result| {
         // "Fail" only if we have at least one choice - this prevents deletion
-        !result.choices.is_empty()
+        !result.nodes.is_empty()
     });
     
     // Should have shrunk the integer towards 0 (the shrink_towards default)
-    if let ChoiceValue::Integer(shrunk_value) = &shrunk_result.choices[0].value {
+    if let ChoiceValue::Integer(shrunk_value) = &shrunk_result.nodes[0].value {
         println!("Shrunk integer value: {}", shrunk_value);
         assert!(*shrunk_value < large_value, "Value should have shrunk");
     } else {
@@ -681,19 +708,12 @@ fn test_shrink_boolean_to_false() {
         false, // not forced
     );
     
-    let result = ConjectureResult {
-        status: Status::Valid,
-        choices: vec![true_choice],
-        length: 1,
-        events: std::collections::HashMap::new(),
-        buffer: Vec::new(),
-        examples: Vec::new(),
-    };
+    let result = create_test_result(vec![true_choice]);
     
     // Verify we start with true and it's not forced
-    if let ChoiceValue::Boolean(value) = &result.choices[0].value {
+    if let ChoiceValue::Boolean(value) = &result.nodes[0].value {
         assert_eq!(*value, true);
-        assert!(!result.choices[0].was_forced, "Choice should not be forced");
+        assert!(!result.nodes[0].was_forced, "Choice should not be forced");
     }
     
     let mut shrinker = ChoiceShrinker::new(result);
@@ -701,12 +721,12 @@ fn test_shrink_boolean_to_false() {
     let shrunk_result = shrinker.shrink(|result| {
         // "Fail" if we have choices (prevents deletion)
         // This allows boolean minimization while preventing total deletion
-        !result.choices.is_empty()
+        !result.nodes.is_empty()
     });
     
     // Should have shrunk to false (and still have choices)
-    assert!(!shrunk_result.choices.is_empty(), "Should still have choices after shrinking");
-    if let ChoiceValue::Boolean(shrunk_value) = &shrunk_result.choices[0].value {
+    assert!(!shrunk_result.nodes.is_empty(), "Should still have choices after shrinking");
+    if let ChoiceValue::Boolean(shrunk_value) = &shrunk_result.nodes[0].value {
         assert_eq!(*shrunk_value, false, "Boolean should shrink to false");
     } else {
         panic!("Expected boolean choice");
@@ -726,18 +746,18 @@ fn test_shrink_by_deletion() {
     data.freeze();
     let result = data.as_result();
     
-    assert_eq!(result.choices.len(), 3);
+    assert_eq!(result.nodes.len(), 3);
     
     let mut shrinker = ChoiceShrinker::new(result);
     
     let shrunk_result = shrinker.shrink(|result| {
         // "Fail" only if we have at least 2 choices
         // This should allow deletion of the third choice
-        result.choices.len() >= 2
+        result.nodes.len() >= 2
     });
     
     // Should have removed at least one choice
-    assert!(shrunk_result.choices.len() < 3, "Should have deleted some choices");
+    assert!(shrunk_result.nodes.len() < 3, "Should have deleted some choices");
 }
 
 /// Test shrinking with conditional failure
@@ -758,8 +778,8 @@ fn test_shrinking_with_conditions() {
     let shrunk_result = shrinker.shrink(|result| {
         // "Fail" only if we have choices AND integer value is >= 15
         // This should shrink down to 15 (minimum failing value)
-        !result.choices.is_empty() && {
-            if let ChoiceValue::Integer(value) = &result.choices[0].value {
+        !result.nodes.is_empty() && {
+            if let ChoiceValue::Integer(value) = &result.nodes[0].value {
                 *value >= 15
             } else {
                 false
@@ -768,8 +788,8 @@ fn test_shrinking_with_conditions() {
     });
     
     // Should have shrunk to the minimum failing value (and still have choices)
-    assert!(!shrunk_result.choices.is_empty(), "Should still have choices after shrinking");
-    if let ChoiceValue::Integer(final_value) = &shrunk_result.choices[0].value {
+    assert!(!shrunk_result.nodes.is_empty(), "Should still have choices after shrinking");
+    if let ChoiceValue::Integer(final_value) = &shrunk_result.nodes[0].value {
         println!("Final value after conditional shrinking: {}", final_value);
         assert!(*final_value >= 15, "Should not shrink below the failing threshold");
         assert!(*final_value < large_int, "Should have shrunk from original");
@@ -802,7 +822,7 @@ fn test_complex_shrinking_scenario() {
         let mut sum = 0i128;
         let mut has_true_bool = false;
         
-        for choice in &result.choices {
+        for choice in &result.nodes {
             match &choice.value {
                 ChoiceValue::Integer(val) => sum += val,
                 ChoiceValue::Boolean(val) => if *val { has_true_bool = true; },
@@ -813,17 +833,17 @@ fn test_complex_shrinking_scenario() {
         sum > 25 || has_true_bool
     });
     
-    println!("Complex scenario shrunk to {} choices", shrunk_result.choices.len());
+    println!("Complex scenario shrunk to {} choices", shrunk_result.nodes.len());
     
     // Should have improved from original
-    assert!(shrunk_result.choices.len() <= result.choices.len(), 
+    assert!(shrunk_result.nodes.len() <= result.nodes.len(), 
             "Should not have more choices than original");
     
     // Verify the result still satisfies the failure condition
     let mut sum = 0i128;
     let mut has_true_bool = false;
     
-    for choice in &shrunk_result.choices {
+    for choice in &shrunk_result.nodes {
         match &choice.value {
             ChoiceValue::Integer(val) => {
                 sum += val;

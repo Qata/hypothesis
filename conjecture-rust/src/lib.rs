@@ -7,12 +7,19 @@
 
 pub mod choice;
 pub mod data;
+pub mod datatree;
 pub mod shrinking;
+pub mod engine;
+pub mod providers;
+pub mod float_performance_test;
 
 // Re-export core types for easy access
 pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints};
-pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError};
+pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
+pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
 pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
+pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
+pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
 
 #[cfg(test)]
 mod tests {
@@ -32,3 +39,15 @@ mod shrinking_parity_tests;
 
 #[cfg(test)]
 mod python_interop_tests;
+
+#[cfg(test)]
+mod datatree_integration_tests;
+
+#[cfg(test)]
+mod status_tests;
+
+#[cfg(test)]
+mod status_integration_test;
+
+#[cfg(test)]
+mod status_verification_test;

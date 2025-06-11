@@ -16,10 +16,13 @@ name = "conjecture"
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"
+sha2 = "0.10"
 # Other core dependencies
 rand = "0.8"
 rand_chacha = "0.3"
 byteorder = "1.4"
+lazy_static = "1.4"
+once_cell = "1.19"
 
 [dev-dependencies]
 # For property-based testing of our implementation

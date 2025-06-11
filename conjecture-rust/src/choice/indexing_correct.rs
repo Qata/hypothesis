@@ -3,6 +3,7 @@
 use super::{ChoiceValue, Constraints, IntegerConstraints};
 
 /// Generate all possible integer values in the order Python uses
+#[allow(dead_code)]
 fn generate_integer_sequence(constraints: &IntegerConstraints) -> Vec<i128> {
     println!("INDEXING_CORRECT DEBUG: Generating integer sequence for constraints: {:?}", constraints);
     
@@ -69,6 +70,7 @@ fn generate_integer_sequence(constraints: &IntegerConstraints) -> Vec<i128> {
 }
 
 /// Convert a choice value to its index using correct enumeration
+#[allow(dead_code)]
 pub fn choice_to_index_correct(value: &ChoiceValue, constraints: &Constraints) -> u64 {
     println!("INDEXING_CORRECT DEBUG: Converting choice to index");
     println!("INDEXING_CORRECT DEBUG: value={:?}", value);
@@ -110,6 +112,7 @@ pub fn choice_to_index_correct(value: &ChoiceValue, constraints: &Constraints) -
 }
 
 /// Convert an index back to a choice value using correct enumeration
+#[allow(dead_code)]
 pub fn choice_from_index_correct(index: u64, choice_type: &str, constraints: &Constraints) -> ChoiceValue {
     println!("INDEXING_CORRECT DEBUG: Converting index {} to choice", index);
     
