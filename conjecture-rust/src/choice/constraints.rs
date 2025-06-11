@@ -11,6 +11,26 @@ pub struct IntegerConstraints {
     pub shrink_towards: Option<i128>,
 }
 
+impl Eq for IntegerConstraints {}
+
+impl std::hash::Hash for IntegerConstraints {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.min_value.hash(state);
+        self.max_value.hash(state);
+        self.shrink_towards.hash(state);
+        // Skip weights for hash as f64 doesn't implement Hash
+        if let Some(ref weights) = self.weights {
+            weights.len().hash(state);
+            for (k, v) in weights {
+                k.hash(state);
+                v.to_bits().hash(state); // Hash the bit representation of f64
+            }
+        } else {
+            0usize.hash(state);
+        }
+    }
+}
+
 impl Default for IntegerConstraints {
     fn default() -> Self {
         Self {
@@ -22,15 +42,40 @@ impl Default for IntegerConstraints {
     }
 }
 
+impl IntegerConstraints {
+    pub fn new(min_value: Option<i128>, max_value: Option<i128>, shrink_towards: Option<i128>) -> Self {
+        Self {
+            min_value,
+            max_value,
+            weights: None,
+            shrink_towards,
+        }
+    }
+}
+
 /// Constraints for boolean choices  
 #[derive(Debug, Clone, PartialEq)]
 pub struct BooleanConstraints {
     pub p: f64, // Probability of True
 }
 
+impl Eq for BooleanConstraints {}
+
+impl std::hash::Hash for BooleanConstraints {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.p.to_bits().hash(state); // Hash the bit representation of f64
+    }
+}
+
 impl Default for BooleanConstraints {
     fn default() -> Self {
         Self { p: 0.5 }
+    }
+}
+
+impl BooleanConstraints {
+    pub fn new() -> Self {
+        Self::default()
     }
 }
 
@@ -41,6 +86,17 @@ pub struct FloatConstraints {
     pub max_value: f64,
     pub allow_nan: bool,
     pub smallest_nonzero_magnitude: f64,
+}
+
+impl Eq for FloatConstraints {}
+
+impl std::hash::Hash for FloatConstraints {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.min_value.to_bits().hash(state);
+        self.max_value.to_bits().hash(state);
+        self.allow_nan.hash(state);
+        self.smallest_nonzero_magnitude.to_bits().hash(state);
+    }
 }
 
 impl Default for FloatConstraints {
@@ -54,8 +110,19 @@ impl Default for FloatConstraints {
     }
 }
 
+impl FloatConstraints {
+    pub fn new(min_value: Option<f64>, max_value: Option<f64>) -> Self {
+        Self {
+            min_value: min_value.unwrap_or(f64::NEG_INFINITY),
+            max_value: max_value.unwrap_or(f64::INFINITY),
+            allow_nan: true,
+            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        }
+    }
+}
+
 /// Interval set for character ranges (simplified version of Python's IntervalSet)
-#[derive(Debug, Clone, PartialEq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct IntervalSet {
     pub intervals: Vec<(u32, u32)>, // (start, end) inclusive ranges of codepoints
 }
@@ -85,7 +152,7 @@ impl Default for IntervalSet {
 }
 
 /// Constraints for string choices
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct StringConstraints {
     pub min_size: usize,
     pub max_size: usize,
@@ -104,8 +171,18 @@ impl Default for StringConstraints {
     }
 }
 
+impl StringConstraints {
+    pub fn new(min_size: Option<usize>, max_size: Option<usize>) -> Self {
+        Self {
+            min_size: min_size.unwrap_or(0),
+            max_size: max_size.unwrap_or(8192),
+            intervals: IntervalSet::default(),
+        }
+    }
+}
+
 /// Constraints for bytes choices
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BytesConstraints {
     pub min_size: usize,
     pub max_size: usize,
@@ -116,6 +193,15 @@ impl Default for BytesConstraints {
         Self {
             min_size: 0,
             max_size: 8192, // COLLECTION_DEFAULT_MAX_SIZE equivalent
+        }
+    }
+}
+
+impl BytesConstraints {
+    pub fn new(min_size: Option<usize>, max_size: Option<usize>) -> Self {
+        Self {
+            min_size: min_size.unwrap_or(0),
+            max_size: max_size.unwrap_or(8192),
         }
     }
 }

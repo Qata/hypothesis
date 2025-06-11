@@ -946,7 +946,7 @@ impl ConjectureData {
             }
             
             // Create and record choice node
-            let node = ChoiceNode::new_with_index(
+            let node = ChoiceNode::with_index(
                 choice_type,
                 value.clone(),
                 *constraints,
@@ -2580,9 +2580,10 @@ impl<'a> Iterator for SpanIterator<'a> {
 impl Spans {
     /// Create a new spans collection from a SpanRecord
     pub fn from_record(record: &SpanRecord) -> Self {
-        // Count span creation events to determine length
+        // Count span start events to determine length (includes active spans)
+        // StartSpan events are encoded as StartSpan + label_index, and Choice events are at 1000
         let length = record.trail.iter()
-            .filter(|&&x| x == TrailType::StopSpanDiscard as u64 || x == TrailType::StopSpanNoDiscard as u64)
+            .filter(|&&x| x >= TrailType::StartSpan as u64 && x < TrailType::Choice as u64)
             .count();
         
         Self {
@@ -3880,7 +3881,7 @@ mod tests {
         
         // Test 2: for_choices constructor
         let choices = vec![
-            ChoiceNode::new_with_index(
+            ChoiceNode::with_index(
                 ChoiceType::Integer,
                 ChoiceValue::Integer(42),
                 Constraints::Integer(IntegerConstraints {

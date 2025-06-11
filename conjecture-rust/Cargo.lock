@@ -142,6 +142,7 @@ dependencies = [
  "byteorder",
  "criterion",
  "lazy_static",
+ "log",
  "once_cell",
  "proptest",
  "pyo3",

@@ -3,10 +3,14 @@
 //! This module implements Python's choice-based architecture where all randomness
 //! flows through strongly-typed choices with associated constraints.
 
+pub mod advanced_shrinking;
 mod constraints;
 pub mod indexing;
 mod indexing_correct;
+mod navigation;
 mod node;
+pub mod shrinking_system;
+pub mod shrinking_demo;
 mod values;
 
 #[cfg(test)]
@@ -18,10 +22,26 @@ mod choice_debug;
 #[cfg(test)]
 mod organized_tests;
 
-pub use constraints::*;
-pub use indexing::*;
-pub use node::*;
-pub use values::*;
+#[cfg(test)]
+mod navigation_integration_tests;
+
+#[cfg(test)]
+mod navigation_comprehensive_tests;
+
+#[cfg(test)]
+mod navigation_system_comprehensive_tests;
+
+#[cfg(test)]
+mod navigation_capability_ffi_tests;
+
+pub use self::advanced_shrinking::*;
+pub use self::constraints::*;
+pub use self::indexing::*;
+pub use self::navigation::*;
+pub use self::node::*;
+pub use self::shrinking_system::*;
+pub use self::shrinking_demo::*;
+pub use self::values::*;
 
 /// Choice types that can be drawn
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,7 +105,7 @@ impl std::hash::Hash for ChoiceValue {
 }
 
 /// Constraints for different choice types
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Constraints {
     Integer(IntegerConstraints),
     Boolean(BooleanConstraints),
@@ -100,23 +120,19 @@ mod tests {
 
     #[test]
     fn test_choice_type_display() {
-        println!("CHOICE DEBUG: Testing ChoiceType display formatting");
         assert_eq!(format!("{}", ChoiceType::Integer), "integer");
         assert_eq!(format!("{}", ChoiceType::Boolean), "boolean");
         assert_eq!(format!("{}", ChoiceType::Float), "float");
         assert_eq!(format!("{}", ChoiceType::String), "string");
         assert_eq!(format!("{}", ChoiceType::Bytes), "bytes");
-        println!("CHOICE DEBUG: All ChoiceType display tests passed");
     }
 
     #[test]
     fn test_choice_value_variants() {
-        println!("CHOICE DEBUG: Testing ChoiceValue variant creation");
         let _int_val = ChoiceValue::Integer(42);
         let _bool_val = ChoiceValue::Boolean(true);
         let _float_val = ChoiceValue::Float(3.14);
         let _string_val = ChoiceValue::String("hello".to_string());
         let _bytes_val = ChoiceValue::Bytes(vec![1, 2, 3]);
-        println!("CHOICE DEBUG: All ChoiceValue variants created successfully");
     }
 }

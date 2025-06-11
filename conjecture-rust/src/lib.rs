@@ -10,6 +10,8 @@ pub mod data;
 pub mod datatree;
 pub mod shrinking;
 pub mod engine;
+pub mod engine_orchestrator;
+pub mod provider_integration_demo;
 pub mod providers;
 pub mod float_performance_test;
 
@@ -19,6 +21,7 @@ pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, Dat
 pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
 pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
+pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionPhase, ExecutionStatistics, OrchestrationError};
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
 
 #[cfg(test)]

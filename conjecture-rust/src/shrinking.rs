@@ -1528,6 +1528,234 @@ fn constraint_repair_shrinking(nodes: &[ChoiceNode]) -> Vec<ChoiceNode> {
     }
 }
 
+/// Individual choice targeting - minimize a specific choice at given index
+/// This is a fundamental building block for more sophisticated shrinking algorithms
+pub fn minimize_individual_choice_at(nodes: &[ChoiceNode], target_index: usize) -> Vec<ChoiceNode> {
+        if nodes.is_empty() || target_index >= nodes.len() {
+            return nodes.to_vec();
+        }
+        
+        let mut result = nodes.to_vec();
+        let target_node = &nodes[target_index];
+        
+        // Skip forced nodes to maintain test reproducibility
+        if target_node.was_forced {
+            return result;
+        }
+        
+        // Apply type-specific minimization to the target choice
+        let minimized_value = match (&target_node.value, &target_node.constraints) {
+            (ChoiceValue::Integer(value), Constraints::Integer(constraints)) => {
+                let shrink_target = constraints.shrink_towards.unwrap_or(0);
+                let min_val = constraints.min_value.unwrap_or(i128::MIN);
+                let max_val = constraints.max_value.unwrap_or(i128::MAX);
+                
+                if *value != shrink_target {
+                    // Move one step toward shrink target
+                    let new_value = if *value > shrink_target {
+                        std::cmp::max(shrink_target, *value - 1)
+                    } else {
+                        std::cmp::min(shrink_target, *value + 1)
+                    };
+                    
+                    if new_value >= min_val && new_value <= max_val {
+                        Some(ChoiceValue::Integer(new_value))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            },
+            (ChoiceValue::Boolean(true), Constraints::Boolean(_)) => {
+                // Always try to minimize true to false
+                Some(ChoiceValue::Boolean(false))
+            },
+            (ChoiceValue::Float(value), Constraints::Float(constraints)) => {
+                if value.abs() > f64::EPSILON {
+                    // Try moving toward 0.0 while respecting bounds
+                    let candidates = [0.0, *value / 2.0, *value * 0.9];
+                    candidates.iter()
+                        .find(|&&candidate| {
+                            candidate.abs() < value.abs() 
+                                && candidate >= constraints.min_value 
+                                && candidate <= constraints.max_value
+                        })
+                        .map(|&candidate| ChoiceValue::Float(candidate))
+                } else {
+                    None
+                }
+            },
+            (ChoiceValue::String(s), Constraints::String(constraints)) => {
+                if s.len() > constraints.min_size {
+                    // Try removing last character
+                    let mut new_string = s.clone();
+                    new_string.pop();
+                    Some(ChoiceValue::String(new_string))
+                } else {
+                    None
+                }
+            },
+            (ChoiceValue::Bytes(b), Constraints::Bytes(constraints)) => {
+                if b.len() > constraints.min_size {
+                    // Try removing last byte
+                    let mut new_bytes = b.clone();
+                    new_bytes.pop();
+                    Some(ChoiceValue::Bytes(new_bytes))
+                } else {
+                    None
+                }
+            },
+            _ => None,
+        };
+        
+        if let Some(new_value) = minimized_value {
+            println!("SHRINKING DEBUG: Minimizing choice at index {} from {:?} to {:?}", 
+                   target_index, target_node.value, new_value);
+            result[target_index].value = new_value;
+        }
+        
+        result
+    }
+    
+    /// Shrink a specific choice toward a custom target value
+    /// More flexible than standard minimization - allows custom shrink targets
+    pub fn shrink_choice_towards_target(nodes: &[ChoiceNode], target_index: usize, target_value: ChoiceValue) -> Vec<ChoiceNode> {
+        if nodes.is_empty() || target_index >= nodes.len() {
+            return nodes.to_vec();
+        }
+        
+        let mut result = nodes.to_vec();
+        let target_node = &nodes[target_index];
+        
+        // Skip forced nodes and mismatched types
+        if target_node.was_forced || !choice_values_compatible(&target_node.value, &target_value) {
+            return result;
+        }
+        
+        let shrunk_value = match (&target_node.value, &target_value, &target_node.constraints) {
+            (ChoiceValue::Integer(current), ChoiceValue::Integer(target), Constraints::Integer(constraints)) => {
+                let min_val = constraints.min_value.unwrap_or(i128::MIN);
+                let max_val = constraints.max_value.unwrap_or(i128::MAX);
+                
+                if current != target && *target >= min_val && *target <= max_val {
+                    // Move toward target, but don't overshoot
+                    let distance = (*current - *target).abs();
+                    let step_size = std::cmp::max(1, distance / 4);
+                    
+                    let new_value = if *current > *target {
+                        std::cmp::max(*target, *current - step_size)
+                    } else {
+                        std::cmp::min(*target, *current + step_size)
+                    };
+                    
+                    Some(ChoiceValue::Integer(new_value))
+                } else {
+                    None
+                }
+            },
+            (ChoiceValue::Float(current), ChoiceValue::Float(target), Constraints::Float(constraints)) => {
+                if (current - target).abs() > f64::EPSILON 
+                    && *target >= constraints.min_value 
+                    && *target <= constraints.max_value {
+                    // Move 50% of the way toward target
+                    let new_value = *current + (*target - *current) * 0.5;
+                    Some(ChoiceValue::Float(new_value))
+                } else {
+                    None
+                }
+            },
+            _ => None,
+        };
+        
+        if let Some(new_value) = shrunk_value {
+            println!("SHRINKING DEBUG: Shrinking choice at index {} toward target {:?} from {:?} to {:?}", 
+                   target_index, target_value, target_node.value, new_value);
+            result[target_index].value = new_value;
+        }
+        
+        result
+    }
+    
+    /// Minimize a choice within custom bounds (override constraint bounds)
+    /// Useful for targeted exploration of specific value ranges
+    pub fn minimize_choice_with_bounds(nodes: &[ChoiceNode], target_index: usize, min_bound: ChoiceValue, max_bound: ChoiceValue) -> Vec<ChoiceNode> {
+        if nodes.is_empty() || target_index >= nodes.len() {
+            return nodes.to_vec();
+        }
+        
+        let mut result = nodes.to_vec();
+        let target_node = &nodes[target_index];
+        
+        // Skip forced nodes and incompatible bounds
+        if target_node.was_forced 
+            || !choice_values_compatible(&target_node.value, &min_bound)
+            || !choice_values_compatible(&target_node.value, &max_bound) {
+            return result;
+        }
+        
+        let shrunk_value = match (&target_node.value, &min_bound, &max_bound) {
+            (ChoiceValue::Integer(current), ChoiceValue::Integer(min_val), ChoiceValue::Integer(max_val)) => {
+                if *current >= *min_val && *current <= *max_val {
+                    // Try to move toward the minimum bound
+                    if *current > *min_val {
+                        let new_value = std::cmp::max(*min_val, *current - 1);
+                        Some(ChoiceValue::Integer(new_value))
+                    } else {
+                        None
+                    }
+                } else {
+                    // Clamp to bounds if outside
+                    let clamped = (*current).clamp(*min_val, *max_val);
+                    if clamped != *current {
+                        Some(ChoiceValue::Integer(clamped))
+                    } else {
+                        None
+                    }
+                }
+            },
+            (ChoiceValue::Float(current), ChoiceValue::Float(min_val), ChoiceValue::Float(max_val)) => {
+                if *current >= *min_val && *current <= *max_val {
+                    // Try to move toward minimum bound
+                    if *current > *min_val {
+                        let new_value = *min_val + (*current - *min_val) * 0.5;
+                        Some(ChoiceValue::Float(new_value))
+                    } else {
+                        None
+                    }
+                } else {
+                    // Clamp to bounds if outside
+                    let clamped = current.clamp(*min_val, *max_val);
+                    if (clamped - *current).abs() > f64::EPSILON {
+                        Some(ChoiceValue::Float(clamped))
+                    } else {
+                        None
+                    }
+                }
+            },
+            _ => None,
+        };
+        
+        if let Some(new_value) = shrunk_value {
+            println!("SHRINKING DEBUG: Minimizing choice at index {} within bounds [{:?}, {:?}] from {:?} to {:?}", 
+                   target_index, min_bound, max_bound, target_node.value, new_value);
+            result[target_index].value = new_value;
+        }
+        
+        result
+    }
+/// Helper function to check if two ChoiceValues are type-compatible
+fn choice_values_compatible(a: &ChoiceValue, b: &ChoiceValue) -> bool {
+    match (a, b) {
+        (ChoiceValue::Integer(_), ChoiceValue::Integer(_)) => true,
+        (ChoiceValue::Boolean(_), ChoiceValue::Boolean(_)) => true,
+        (ChoiceValue::Float(_), ChoiceValue::Float(_)) => true,
+        (ChoiceValue::String(_), ChoiceValue::String(_)) => true,
+        (ChoiceValue::Bytes(_), ChoiceValue::Bytes(_)) => true,
+        _ => false,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

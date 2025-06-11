@@ -17,6 +17,8 @@ name = "conjecture"
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"
 sha2 = "0.10"
+# Logging support
+log = "0.4"
 # Other core dependencies
 rand = "0.8"
 rand_chacha = "0.3"
