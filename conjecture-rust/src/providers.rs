@@ -9,7 +9,7 @@
 //! - Plugin architecture for extensibility
 //! - Observability and instrumentation hooks
 
-use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints, IntegerConstraints, BooleanConstraints, IntervalSet};
+use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints, IntegerConstraints, BooleanConstraints, IntervalSet, templating::TemplateError};
 use crate::data::DrawError;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -89,6 +89,8 @@ pub enum ProviderError {
     PluginError(String),
     /// Configuration error
     ConfigError(String),
+    /// Template processing failed
+    ProcessingFailed(String),
     /// Legacy draw error for compatibility
     DrawError(DrawError),
 }
@@ -96,6 +98,18 @@ pub enum ProviderError {
 impl From<DrawError> for ProviderError {
     fn from(err: DrawError) -> Self {
         ProviderError::DrawError(err)
+    }
+}
+
+impl From<TemplateError> for ProviderError {
+    fn from(err: TemplateError) -> Self {
+        match err {
+            TemplateError::ExhaustedTemplate => ProviderError::BackendExhausted("Template exhausted".to_string()),
+            TemplateError::ConstraintMismatch => ProviderError::InvalidChoice("Template constraint mismatch".to_string()),
+            TemplateError::TypeMismatch => ProviderError::InvalidChoice("Template type mismatch".to_string()),
+            TemplateError::UnknownCustomTemplate(name) => ProviderError::ConfigError(format!("Unknown custom template: {}", name)),
+            TemplateError::ProcessingFailed(msg) => ProviderError::ProcessingFailed(msg),
+        }
     }
 }
 
@@ -122,6 +136,7 @@ impl fmt::Display for ProviderError {
             ProviderError::BackendExhausted(msg) => write!(f, "Backend exhausted: {}", msg),
             ProviderError::PluginError(msg) => write!(f, "Plugin error: {}", msg),
             ProviderError::ConfigError(msg) => write!(f, "Configuration error: {}", msg),
+            ProviderError::ProcessingFailed(msg) => write!(f, "Template processing failed: {}", msg),
             ProviderError::DrawError(err) => write!(f, "Draw error: {:?}", err),
         }
     }

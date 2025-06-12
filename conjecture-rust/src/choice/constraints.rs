@@ -302,6 +302,12 @@ impl IntervalSet {
     pub fn contains(&self, codepoint: u32) -> bool {
         self.intervals.iter().any(|(start, end)| codepoint >= *start && codepoint <= *end)
     }
+    
+    pub fn all_characters() -> Self {
+        Self {
+            intervals: vec![(0, 0x10FFFF)], // All valid Unicode
+        }
+    }
 }
 
 impl Default for IntervalSet {
