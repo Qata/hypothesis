@@ -12,12 +12,11 @@
 //! - Debug logging with uppercase hex notation
 
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::fmt::Debug;
 
-use crate::choice::{ChoiceType, ChoiceValue, Constraints, IntegerConstraints, BooleanConstraints, FloatConstraints};
-use crate::data::{ConjectureData, DrawError};
-use crate::providers::{ProviderRegistry, get_provider_registry};
+use crate::choice::{ChoiceType, ChoiceValue, Constraints};
+use crate::data::DrawError;
+use crate::providers::{ProviderLifetime, GlobalConstants};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 
@@ -68,16 +67,7 @@ pub trait EnhancedPrimitiveProvider: Debug + Send + Sync {
     }
 }
 
-/// Provider lifetime management
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProviderLifetime {
-    /// Provider lives for a single test case
-    TestCase,
-    /// Provider lives for a test run
-    TestRun,
-    /// Provider lives for the entire session
-    Session,
-}
+// ProviderLifetime is imported from crate::providers
 
 /// Provider context for dynamic dispatch and lifecycle management
 #[derive(Debug, Clone)]
@@ -509,49 +499,7 @@ impl EnhancedPrimitiveProvider for EnhancedRandomProvider {
     }
 }
 
-/// Global constants for hypothesis provider
-#[derive(Debug)]
-pub struct GlobalConstants {
-    pub integers: Vec<i128>,
-    pub floats: Vec<f64>,
-    pub strings: Vec<String>,
-    pub bytes: Vec<Vec<u8>>,
-}
-
-impl GlobalConstants {
-    pub fn new() -> Self {
-        Self {
-            integers: vec![
-                0, 1, -1, 2, -2, 10, -10, 100, -100, 1000, -1000,
-                i8::MIN as i128, i8::MAX as i128,
-                i16::MIN as i128, i16::MAX as i128,
-                i32::MIN as i128, i32::MAX as i128,
-                i64::MIN as i128, i64::MAX as i128,
-            ],
-            floats: vec![
-                0.0, 1.0, -1.0, 0.5, -0.5,
-                f64::NAN, f64::INFINITY, f64::NEG_INFINITY,
-                f64::MIN, f64::MAX, f64::MIN_POSITIVE, f64::EPSILON,
-            ],
-            strings: vec![
-                String::new(),
-                " ".to_string(),
-                "a".to_string(),
-                "test".to_string(),
-                "\n".to_string(),
-                "\t".to_string(),
-                "🦀".to_string(),
-            ],
-            bytes: vec![
-                vec![],
-                vec![0],
-                vec![255],
-                vec![0, 255],
-                b"test".to_vec(),
-            ],
-        }
-    }
-}
+// GlobalConstants is imported from crate::providers
 
 /// Provider type system integration errors
 #[derive(Debug, Clone)]

@@ -50,6 +50,10 @@ name = "test_lifecycle_implementation"
 path = "test_lifecycle_implementation.rs"
 
 [[bin]]
+name = "test_provider_system_capability"
+path = "test_provider_system_capability.rs"
+
+[[bin]]
 name = "test_datatree_capability"
 path = "test_datatree_capability.rs"
 
