@@ -141,6 +141,7 @@ version = "2.0.0"
 dependencies = [
  "byteorder",
  "criterion",
+ "half",
  "hex",
  "lazy_static",
  "log",

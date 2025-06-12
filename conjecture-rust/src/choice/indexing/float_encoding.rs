@@ -1,10 +1,44 @@
-//! Python-compatible float encoding implementation
-//! 
-//! This module implements Python Hypothesis's sophisticated float-to-lexicographic
-//! encoding algorithm with proper bit manipulation for optimal shrinking behavior.
+//! Advanced Float Encoding/Decoding System - Complete Module Capability
+//!
+//! This module provides a sophisticated float representation system with lexical shrinking properties,
+//! tagged union encoding for optimal shrinking behavior, and comprehensive float-to-integer conversion
+//! algorithms. It implements Python Hypothesis's complete float encoding architecture with
+//! full multi-width support and advanced shrinking optimizations.
+//!
+//! ## Core Features
+//!
+//! ### Tagged Union Encoding
+//! - 64-bit tagged union format with sophisticated encoding strategies
+//! - Tag bit (63): 0 = Simple integer encoding, 1 = Complex IEEE 754 encoding
+//! - Payload (bits 0-62): Contains the encoded value with lexicographic properties
+//!
+//! ### Lexical Shrinking Properties
+//! - Ensures lexicographically smaller encodings represent "simpler" values
+//! - Sophisticated mantissa bit reversal for optimal shrinking behavior
+//! - Exponent reordering for shrink-friendly ordering
+//!
+//! ### Multi-Width Float Support
+//! - Complete IEEE 754 format support: f16, f32, f64
+//! - Width-specific constants and specialized encoding algorithms
+//! - Generic encoding functions parameterized by float width
+//!
+//! ### Advanced Algorithms
+//! - Fast bit reversal using pre-computed lookup tables
+//! - Cached complex float conversions for performance
+//! - Special value handling (NaN, infinity, subnormals, signed zeros)
+//! - Float-to-integer conversion for tree storage
+//!
+//! ## Architecture
+//!
+//! The system follows Python Hypothesis's proven architecture:
+//! 1. **Simple Path**: Direct encoding for small integers (fast path)
+//! 2. **Complex Path**: Full IEEE 754 manipulation with lexicographic ordering
+//! 3. **Multi-Width Support**: Generic algorithms for all standard float widths
+//! 4. **Provider Integration**: Clean interfaces for choice system integration
 
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
+use half;
 
 // Conditional debug logging - disabled during tests for performance
 macro_rules! debug_log {
@@ -21,12 +55,91 @@ fn get_cache() -> &'static Mutex<HashMap<u64, u64>> {
     FLOAT_TO_LEX_CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
+/// Tagged Union Encoding Strategy
+/// 
+/// Defines the encoding strategy for different float value types to optimize shrinking behavior.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FloatEncodingStrategy {
+    /// Simple integer encoding (tag bit 0) - direct integer-to-float conversion
+    Simple,
+    /// Complex IEEE 754 encoding (tag bit 1) - full lexicographic transformation
+    Complex,
+    /// Special value encoding - handles NaN, infinity, subnormals with dedicated strategies
+    Special,
+}
+
+/// Float encoding result with tagged union structure
+/// 
+/// Provides a complete encoding result with strategy information and debug metadata.
+#[derive(Debug, Clone)]
+pub struct FloatEncodingResult {
+    /// The encoded 64-bit value with tag bit and payload
+    pub encoded_value: u64,
+    /// The encoding strategy used for this value
+    pub strategy: FloatEncodingStrategy,
+    /// Debug information about the encoding process
+    pub debug_info: EncodingDebugInfo,
+}
+
+/// Debug information for float encoding operations
+/// 
+/// Comprehensive metadata about the encoding process for debugging and analysis.
+#[derive(Debug, Clone)]
+pub struct EncodingDebugInfo {
+    /// Original float value
+    pub original_value: f64,
+    /// IEEE 754 bit representation
+    pub ieee_bits: u64,
+    /// Whether the value uses simple or complex encoding
+    pub is_simple: bool,
+    /// Exponent value (for complex encoding)
+    pub exponent: Option<u64>,
+    /// Mantissa value (for complex encoding)
+    pub mantissa: Option<u64>,
+    /// Final lexicographic encoding
+    pub lex_encoding: u64,
+}
+
 /// Float width enumeration for multi-width support
+/// 
+/// Supports all standard IEEE 754 float formats with width-specific optimizations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FloatWidth {
+    /// IEEE 754 half precision (binary16)
     Width16,
+    /// IEEE 754 single precision (binary32)
     Width32, 
+    /// IEEE 754 double precision (binary64)
     Width64,
+}
+
+/// Advanced float encoding configuration
+/// 
+/// Provides fine-grained control over encoding behavior and optimization strategies.
+#[derive(Debug, Clone)]
+pub struct FloatEncodingConfig {
+    /// Target float width for encoding
+    pub width: FloatWidth,
+    /// Enable aggressive caching for performance
+    pub enable_caching: bool,
+    /// Use fast path optimizations for simple values
+    pub enable_fast_path: bool,
+    /// Preserve special value bit patterns exactly
+    pub preserve_special_bits: bool,
+    /// Maximum cache size for complex encodings
+    pub max_cache_size: usize,
+}
+
+impl Default for FloatEncodingConfig {
+    fn default() -> Self {
+        Self {
+            width: FloatWidth::Width64,
+            enable_caching: true,
+            enable_fast_path: true,
+            preserve_special_bits: true,
+            max_cache_size: 1024,
+        }
+    }
 }
 
 impl FloatWidth {
@@ -100,38 +213,117 @@ static REVERSE_BITS_TABLE: [u8; 256] = [
     0x0F, 0x8F, 0x4F, 0xCF, 0x2F, 0xAF, 0x6F, 0xEF, 0x1F, 0x9F, 0x5F, 0xDF, 0x3F, 0xBF, 0x7F, 0xFF,
 ];
 
-/// Generate exponent ordering key for lexicographic encoding (matches Python's logic)
-fn exponent_key(e: u32) -> f64 {
-    let max_exp = 2047; // f64 max exponent
+/// Advanced exponent ordering key generation for lexicographic encoding
+/// 
+/// Implements Python Hypothesis's sophisticated exponent reordering algorithm that ensures
+/// optimal shrinking behavior by placing values in the following order:
+/// 1. Positive exponents (values ≥ 1.0) in ascending order
+/// 2. Negative exponents (values < 1.0) in descending order
+/// 3. Special values (NaN, ∞) come last
+/// 
+/// This ordering ensures that "simpler" values (closer to common integer values)
+/// have smaller lexicographic encodings, leading to better shrinking behavior.
+fn exponent_key(e: u32, width: FloatWidth) -> f64 {
+    let max_exp = width.max_exponent();
+    let bias = width.bias() as i32;
+    
+    debug_log!("FLOAT_ENCODING DEBUG: Computing exponent key for {} (width {:?}, max_exp {}, bias {})", 
+             e, width, max_exp, bias);
+    
     if e == max_exp {
-        // Special values (infinity, NaN) come last
+        // Special values (infinity, NaN) come last in ordering
+        debug_log!("FLOAT_ENCODING DEBUG: Special value exponent {} -> INFINITY key", e);
         f64::INFINITY
     } else {
-        let unbiased = e as i32 - BIAS as i32;
-        if unbiased < 0 {
+        let unbiased = e as i32 - bias;
+        let key = if unbiased < 0 {
             // Negative exponents (values < 1.0) come after positive exponents
-            // Map to range [10001, 10001 + max_negative_exp]
-            10000.0 - unbiased as f64
+            // Map to range [10000 + |unbiased|] to ensure they sort after positive exponents
+            10000.0 + (-unbiased) as f64
         } else {
-            // Positive exponents (values >= 1.0) come first
-            // Map to range [0, max_positive_exp]
+            // Positive exponents (values ≥ 1.0) come first
+            // Map to range [0, max_positive_exp] for natural ascending order
             unbiased as f64
+        };
+        
+        debug_log!("FLOAT_ENCODING DEBUG: Exponent {} (unbiased {}) -> key {}", e, unbiased, key);
+        key
+    }
+}
+
+/// Advanced exponent ordering with width-specific optimization
+/// 
+/// Generates optimized exponent ordering that takes advantage of width-specific
+/// characteristics for better performance and smaller encodings.
+fn exponent_key_optimized(e: u32, width: FloatWidth) -> f64 {
+    match width {
+        FloatWidth::Width16 => {
+            // f16 has limited exponent range, use specialized ordering
+            let bias = 15i32;
+            let unbiased = e as i32 - bias;
+            if e == 31 { // f16 max exponent
+                f64::INFINITY
+            } else if unbiased < 0 {
+                100.0 + (-unbiased) as f64
+            } else {
+                unbiased as f64
+            }
+        },
+        FloatWidth::Width32 => {
+            // f32 optimization - reduced range for faster computation
+            let bias = 127i32;
+            let unbiased = e as i32 - bias;
+            if e == 255 { // f32 max exponent
+                f64::INFINITY
+            } else if unbiased < 0 {
+                1000.0 + (-unbiased) as f64
+            } else {
+                unbiased as f64
+            }
+        },
+        FloatWidth::Width64 => {
+            // f64 uses full algorithm as reference implementation
+            exponent_key(e, width)
         }
     }
 }
 
-/// Build encoding/decoding tables for exponents (matches original implementation)
-pub fn build_exponent_tables() -> (Vec<u32>, Vec<u32>) {
-    let max_exp = 2047;
-    let mut exponents: Vec<u32> = (0..=max_exp).collect();
-    exponents.sort_by(|&a, &b| exponent_key(a).partial_cmp(&exponent_key(b)).unwrap());
+/// Advanced exponent table generation with multi-width support
+/// 
+/// Builds optimized encoding/decoding lookup tables for exponents that provide
+/// O(1) exponent encoding/decoding with shrink-aware ordering. Tables are generated
+/// specifically for each float width to maximize performance and minimize memory usage.
+/// 
+/// Returns (encoding_table, decoding_table) where:
+/// - encoding_table[encoded_position] = original_exponent
+/// - decoding_table[original_exponent] = encoded_position
+pub fn build_exponent_tables_for_width(width: FloatWidth) -> (Vec<u32>, Vec<u32>) {
+    let max_exp = width.max_exponent() as usize;
+    debug_log!("FLOAT_ENCODING DEBUG: Building exponent tables for {:?} (max_exp: {})", width, max_exp);
     
-    let mut decoding_table = vec![0u32; (max_exp + 1) as usize];
-    for (i, &exp) in exponents.iter().enumerate() {
-        decoding_table[exp as usize] = i as u32;
+    // Generate all possible exponents for this width
+    let mut exponents: Vec<u32> = (0..=max_exp as u32).collect();
+    
+    // Sort exponents by their shrink-friendly ordering key
+    exponents.sort_by(|&a, &b| {
+        exponent_key_optimized(a, width)
+            .partial_cmp(&exponent_key_optimized(b, width))
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    
+    // Build inverse lookup table for fast decoding
+    let mut decoding_table = vec![0u32; max_exp + 1];
+    for (encoded_position, &original_exponent) in exponents.iter().enumerate() {
+        decoding_table[original_exponent as usize] = encoded_position as u32;
     }
     
+    debug_log!("FLOAT_ENCODING DEBUG: Built exponent tables with {} entries", exponents.len());
     (exponents, decoding_table)
+}
+
+/// Build encoding/decoding tables for exponents (matches original implementation)
+pub fn build_exponent_tables() -> (Vec<u32>, Vec<u32>) {
+    build_exponent_tables_for_width(FloatWidth::Width64)
 }
 
 /// Reverse bits in a 64-bit integer using lookup table
