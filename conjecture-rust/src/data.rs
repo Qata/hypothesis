@@ -44,18 +44,17 @@ impl<'a> PrimitiveProvider for RngProvider<'a> {
         crate::providers::ProviderLifetime::TestCase
     }
     
-    fn generate_integer(&mut self, _rng: &mut ChaCha8Rng, constraints: &IntegerConstraints) -> Result<i128, DrawError> {
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, crate::providers::ProviderError> {
+        Ok(self.rng.gen::<f64>() < p)
+    }
+    
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, crate::providers::ProviderError> {
         let min = constraints.min_value.unwrap_or(i128::MIN);
         let max = constraints.max_value.unwrap_or(i128::MAX);
         Ok(self.rng.gen_range(min..=max))
     }
     
-    fn generate_boolean(&mut self, _rng: &mut ChaCha8Rng, constraints: &BooleanConstraints) -> Result<bool, DrawError> {
-        Ok(self.rng.gen::<f64>() < constraints.p)
-    }
-    
-    fn generate_float(&mut self, _rng: &mut ChaCha8Rng, constraints: &FloatConstraints) -> Result<f64, DrawError> {
-        // Basic float generation for the wrapper
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, crate::providers::ProviderError> {
         let value = self.rng.gen::<f64>();
         if constraints.validate(value) {
             Ok(value)
@@ -64,7 +63,9 @@ impl<'a> PrimitiveProvider for RngProvider<'a> {
         }
     }
     
-    fn generate_string(&mut self, _rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError> {
+    fn draw_string(&mut self, intervals: &crate::choice::IntervalSet, min_size: usize, max_size: usize) -> Result<String, crate::providers::ProviderError> {
+        use crate::data_helper::intervals_to_alphabet_static;
+        let alphabet = intervals_to_alphabet_static(intervals);
         let len = self.rng.gen_range(min_size..=max_size);
         let chars: Vec<char> = alphabet.chars().collect();
         if chars.is_empty() {
@@ -78,8 +79,31 @@ impl<'a> PrimitiveProvider for RngProvider<'a> {
         Ok(result)
     }
     
-    fn generate_bytes(&mut self, _rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError> {
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, crate::providers::ProviderError> {
+        let size = self.rng.gen_range(min_size..=max_size);
         Ok((0..size).map(|_| self.rng.gen()).collect())
+    }
+    
+    // Legacy compatibility methods 
+    fn generate_integer(&mut self, _rng: &mut ChaCha8Rng, constraints: &IntegerConstraints) -> Result<i128, DrawError> {
+        self.draw_integer(constraints).map_err(|e| e.into())
+    }
+    
+    fn generate_boolean(&mut self, _rng: &mut ChaCha8Rng, constraints: &BooleanConstraints) -> Result<bool, DrawError> {
+        self.draw_boolean(constraints.p).map_err(|e| e.into())
+    }
+    
+    fn generate_float(&mut self, _rng: &mut ChaCha8Rng, constraints: &FloatConstraints) -> Result<f64, DrawError> {
+        self.draw_float(constraints).map_err(|e| e.into())
+    }
+    
+    fn generate_string(&mut self, _rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError> {
+        let interval_set = crate::choice::IntervalSet::from_string(alphabet);
+        self.draw_string(&interval_set, min_size, max_size).map_err(|e| e.into())
+    }
+    
+    fn generate_bytes(&mut self, _rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError> {
+        self.draw_bytes(size, size).map_err(|e| e.into())
     }
 }
 

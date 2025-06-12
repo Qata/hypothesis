@@ -1,14 +1,23 @@
-//! Provider system for advanced generation algorithms
+//! Enhanced Provider Backend Registry System
 //! 
-//! This module implements the Rust equivalent of Python's provider system,
-//! which abstracts different generation backends and enables sophisticated
-//! generation strategies like constant injection and coverage-guided generation.
+//! This module implements a comprehensive provider system with dynamic backend discovery,
+//! capability negotiation, and specialized backend support including SMT solvers.
+//! It extends beyond the basic random and hypothesis providers to support:
+//! - Dynamic provider registration and discovery
+//! - Backend capability negotiation
+//! - Specialized backends (SMT solvers, fuzzing backends, etc.)
+//! - Plugin architecture for extensibility
+//! - Observability and instrumentation hooks
 
-use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints};
+use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints, IntegerConstraints, BooleanConstraints, IntervalSet};
 use crate::data::DrawError;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::fmt;
+use serde_json;
+use serde::{Serialize, Deserialize};
 
 /// Lifetime management for providers
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -19,100 +28,558 @@ pub enum ProviderLifetime {
     TestRun,
     /// Provider lives for the entire session
     Session,
+    /// Provider lives for the entire test function execution
+    TestFunction,
 }
 
-/// Abstract provider trait for generation backends
+/// Backend capability flags for provider negotiation
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct BackendCapabilities {
+    /// Avoid forcing symbolic values to concrete ones
+    pub avoid_realization: bool,
+    /// Add observability callback support
+    pub add_observability_callback: bool,
+    /// Support for structural span tracking
+    pub structural_awareness: bool,
+    /// Support for choice sequence replay
+    pub replay_support: bool,
+    /// Can handle symbolic constraints
+    pub symbolic_constraints: bool,
+}
+
+impl Default for BackendCapabilities {
+    fn default() -> Self {
+        Self {
+            avoid_realization: false,
+            add_observability_callback: false,
+            structural_awareness: false,
+            replay_support: false,
+            symbolic_constraints: false,
+        }
+    }
+}
+
+/// Enhanced error types for backend negotiation
+#[derive(Debug, Clone)]
+pub enum ProviderError {
+    /// Backend cannot proceed with the current operation
+    CannotProceed { scope: ProviderScope, reason: String },
+    /// Invalid choice or constraint provided
+    InvalidChoice(String),
+    /// Error in symbolic value operations
+    SymbolicValueError(String),
+    /// Backend has exhausted its search space
+    BackendExhausted(String),
+    /// Plugin loading error
+    PluginError(String),
+    /// Configuration error
+    ConfigError(String),
+    /// Legacy draw error for compatibility
+    DrawError(DrawError),
+}
+
+impl From<DrawError> for ProviderError {
+    fn from(err: DrawError) -> Self {
+        ProviderError::DrawError(err)
+    }
+}
+
+impl From<ProviderError> for DrawError {
+    fn from(err: ProviderError) -> Self {
+        match err {
+            ProviderError::DrawError(draw_err) => draw_err,
+            ProviderError::InvalidChoice(_) => DrawError::InvalidChoice,
+            ProviderError::BackendExhausted(_) => DrawError::InvalidChoice,
+            ProviderError::CannotProceed { .. } => DrawError::InvalidChoice,
+            _ => DrawError::InvalidChoice,
+        }
+    }
+}
+
+impl fmt::Display for ProviderError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ProviderError::CannotProceed { scope, reason } => {
+                write!(f, "Backend cannot proceed in scope {:?}: {}", scope, reason)
+            },
+            ProviderError::InvalidChoice(msg) => write!(f, "Invalid choice: {}", msg),
+            ProviderError::SymbolicValueError(msg) => write!(f, "Symbolic value error: {}", msg),
+            ProviderError::BackendExhausted(msg) => write!(f, "Backend exhausted: {}", msg),
+            ProviderError::PluginError(msg) => write!(f, "Plugin error: {}", msg),
+            ProviderError::ConfigError(msg) => write!(f, "Configuration error: {}", msg),
+            ProviderError::DrawError(err) => write!(f, "Draw error: {:?}", err),
+        }
+    }
+}
+
+impl std::error::Error for ProviderError {}
+
+/// Scope of provider error for backend negotiation
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderScope {
+    /// Discard the current test case and try again
+    DiscardTestCase,
+    /// The condition has been verified
+    Verified,
+    /// Search space has been exhausted
+    Exhausted,
+    /// Configuration issue
+    Configuration,
+}
+
+/// Test case context for provider lifecycle management
+pub trait TestCaseContext: Send + Sync {
+    /// Called when entering a new test case
+    fn enter_test_case(&mut self) {}
+    /// Called when exiting a test case
+    fn exit_test_case(&mut self, success: bool) {}
+    /// Get context-specific data
+    fn get_context_data(&self) -> HashMap<String, serde_json::Value> { HashMap::new() }
+}
+
+/// Default implementation for simple contexts
+#[derive(Debug)]
+pub struct DefaultTestCaseContext;
+
+impl TestCaseContext for DefaultTestCaseContext {}
+
+/// Observability message types
+#[derive(Debug, Clone)]
+pub struct ObservationMessage {
+    pub message_type: ObservationType,
+    pub title: String,
+    pub content: serde_json::Value,
+    pub timestamp: std::time::SystemTime,
+}
+
+#[derive(Debug, Clone)]
+pub enum ObservationType {
+    Info,
+    Alert,
+    Error,
+    Debug,
+}
+
+/// Test case observation for provider instrumentation
+#[derive(Debug, Clone)]
+pub struct TestCaseObservation {
+    pub observation_type: String,
+    pub metadata: HashMap<String, serde_json::Value>,
+    pub test_case_data: Option<serde_json::Value>,
+    pub timestamp: std::time::SystemTime,
+}
+
+
+/// Enhanced abstract provider trait for generation backends
 /// 
-/// This is the Rust equivalent of Python's PrimitiveProvider class.
-/// Providers encapsulate different generation strategies and can be
-/// swapped to enable different testing approaches.
+/// This trait provides comprehensive backend capabilities including:
+/// - Dynamic capability negotiation
+/// - Symbolic value handling
+/// - Observability hooks
+/// - Structural awareness
+/// - Choice sequence replay
 pub trait PrimitiveProvider: std::fmt::Debug + Send + Sync {
     /// Get the lifetime of this provider
     fn lifetime(&self) -> ProviderLifetime;
     
-    /// Draw a choice of the given type with constraints (central dispatch method)
-    fn draw_choice(&mut self, choice_type: ChoiceType, constraints: &Constraints) -> Result<ChoiceValue, DrawError> {
-        // Default implementation dispatches to specific methods - this matches Python's approach
+    /// Get the capabilities of this provider
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities::default()
+    }
+    
+    /// Get provider metadata for debugging and introspection
+    fn metadata(&self) -> HashMap<String, serde_json::Value> {
+        let mut meta = HashMap::new();
+        meta.insert("provider_type".to_string(), 
+                   serde_json::Value::String(format!("{:?}", self)));
+        meta.insert("lifetime".to_string(), 
+                   serde_json::Value::String(format!("{:?}", self.lifetime())));
+        meta.insert("capabilities".to_string(), 
+                   serde_json::to_value(self.capabilities()).unwrap_or_default());
+        meta
+    }
+    
+    /// Central choice dispatch with enhanced error handling
+    fn draw_choice(&mut self, choice_type: ChoiceType, constraints: &Constraints) -> Result<ChoiceValue, ProviderError> {
         match (choice_type, constraints) {
             (ChoiceType::Integer, Constraints::Integer(int_constraints)) => {
-                let mut rng = ChaCha8Rng::from_entropy(); // This should be passed in but we'll use temp for now
-                self.generate_integer(&mut rng, int_constraints).map(ChoiceValue::Integer)
+                self.draw_integer(int_constraints).map(ChoiceValue::Integer)
             },
             (ChoiceType::Boolean, Constraints::Boolean(bool_constraints)) => {
-                let mut rng = ChaCha8Rng::from_entropy(); 
-                self.generate_boolean(&mut rng, bool_constraints).map(ChoiceValue::Boolean)
+                self.draw_boolean(bool_constraints.p).map(ChoiceValue::Boolean)
             },
             (ChoiceType::Float, Constraints::Float(float_constraints)) => {
-                let mut rng = ChaCha8Rng::from_entropy(); 
-                self.generate_float(&mut rng, float_constraints).map(ChoiceValue::Float)
+                self.draw_float(float_constraints).map(ChoiceValue::Float)
             },
-            _ => Err(DrawError::InvalidChoice),
+            _ => Err(ProviderError::InvalidChoice(format!("Unsupported choice type: {:?}", choice_type))),
         }
     }
     
-    /// Generate an integer within the given constraints
-    fn generate_integer(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::IntegerConstraints) -> Result<i128, DrawError>;
+    // Core generation methods with enhanced signatures
+    /// Draw a boolean with the given probability
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, ProviderError>;
     
-    /// Generate a boolean with the given probability
-    fn generate_boolean(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::BooleanConstraints) -> Result<bool, DrawError>;
+    /// Draw an integer within the given constraints
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError>;
     
-    /// Generate a float within the given constraints
-    fn generate_float(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::FloatConstraints) -> Result<f64, DrawError>;
+    /// Draw a float within the given constraints
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError>;
     
-    /// Generate a string with the given constraints
-    fn generate_string(&mut self, rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError>;
+    /// Draw a string from the given character intervals
+    fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError>;
     
-    /// Generate bytes with the given size
-    fn generate_bytes(&mut self, rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError>;
+    /// Draw bytes with the given size constraints
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, ProviderError>;
     
-    /// Notify provider of span start (for structure awareness)
-    fn span_start(&mut self, _label: &str) {
-        // Default implementation does nothing
+    // Observability and instrumentation hooks
+    /// Observe the current test case state
+    fn observe_test_case(&mut self) -> HashMap<String, serde_json::Value> {
+        HashMap::new()
     }
     
-    /// Notify provider of span end (for structure awareness)
-    fn span_end(&mut self, _discard: bool) {
-        // Default implementation does nothing
+    /// Get information messages for the given lifetime
+    fn observe_information_messages(&mut self, _lifetime: ProviderLifetime) -> Vec<ObservationMessage> {
+        Vec::new()
+    }
+    
+    /// Handle an observation event
+    fn on_observation(&mut self, _observation: &TestCaseObservation) {}
+    
+    // Structural awareness for sophisticated backends
+    /// Notify provider of span start with numeric label
+    fn span_start(&mut self, _label: u32) {}
+    
+    /// Notify provider of span end
+    fn span_end(&mut self, _discard: bool) {}
+    
+    // Backend lifecycle management
+    /// Get a test case context for this provider
+    fn per_test_case_context(&mut self) -> Box<dyn TestCaseContext> {
+        Box::new(DefaultTestCaseContext)
+    }
+    
+    /// Check if this provider can realize symbolic values
+    fn can_realize(&self) -> bool {
+        false // Default: most providers don't support symbolic values
+    }
+    
+    /// Replay a sequence of choices (for corpus-based backends)
+    fn replay_choices(&mut self, _choices: &[ChoiceValue]) -> Result<(), ProviderError> {
+        Ok(()) // Default: no-op for non-replay backends
+    }
+    
+    /// Validate backend configuration
+    fn validate_config(&self, _config: &HashMap<String, serde_json::Value>) -> Result<(), ProviderError> {
+        Ok(()) // Default: accept any config
+    }
+    
+    // Legacy compatibility methods (deprecated but maintained for backward compatibility)
+    /// Generate an integer (legacy method)
+    fn generate_integer(&mut self, rng: &mut ChaCha8Rng, constraints: &IntegerConstraints) -> Result<i128, DrawError> {
+        // Default implementation delegates to new interface
+        match self.draw_integer(constraints) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                // Fallback to random generation
+                let min = constraints.min_value.unwrap_or(i128::MIN);
+                let max = constraints.max_value.unwrap_or(i128::MAX);
+                if min > max {
+                    return Err(DrawError::InvalidRange);
+                }
+                Ok(if min == max { min } else { rng.gen_range(min..=max) })
+            }
+        }
+    }
+    
+    /// Generate a boolean (legacy method)
+    fn generate_boolean(&mut self, rng: &mut ChaCha8Rng, constraints: &BooleanConstraints) -> Result<bool, DrawError> {
+        match self.draw_boolean(constraints.p) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                if constraints.p < 0.0 || constraints.p > 1.0 {
+                    return Err(DrawError::InvalidProbability);
+                }
+                Ok(rng.gen::<f64>() < constraints.p)
+            }
+        }
+    }
+    
+    /// Generate a float (legacy method)
+    fn generate_float(&mut self, rng: &mut ChaCha8Rng, constraints: &FloatConstraints) -> Result<f64, DrawError> {
+        match self.draw_float(constraints) {
+            Ok(value) => Ok(value),
+            Err(_) => Ok(rng.gen::<f64>())
+        }
+    }
+    
+    /// Generate a string (legacy method)
+    fn generate_string(&mut self, rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError> {
+        let intervals = IntervalSet::from_string(alphabet);
+        match self.draw_string(&intervals, min_size, max_size) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                // Fallback implementation
+                if min_size > max_size {
+                    return Err(DrawError::InvalidRange);
+                }
+                let alphabet_chars: Vec<char> = alphabet.chars().collect();
+                if alphabet_chars.is_empty() {
+                    return Err(DrawError::EmptyAlphabet);
+                }
+                let size = if min_size == max_size {
+                    min_size
+                } else {
+                    rng.gen_range(min_size..=max_size)
+                };
+                let mut result = String::new();
+                for _ in 0..size {
+                    let char_index = rng.gen_range(0..alphabet_chars.len());
+                    result.push(alphabet_chars[char_index]);
+                }
+                Ok(result)
+            }
+        }
+    }
+    
+    /// Generate bytes (legacy method)
+    fn generate_bytes(&mut self, rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError> {
+        match self.draw_bytes(size, size) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                let mut bytes = vec![0u8; size];
+                rng.fill_bytes(&mut bytes[..]);
+                Ok(bytes)
+            }
+        }
     }
 }
 
-/// Registry of available providers
-/// 
-/// This corresponds to Python's AVAILABLE_PROVIDERS dictionary
+/// Provider factory trait for dynamic provider creation
+pub trait ProviderFactory: Send + Sync {
+    /// Create a new provider instance
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider>;
+    
+    /// Get the name of this provider
+    fn name(&self) -> &str;
+    
+    /// Get provider dependencies (other providers that must be available)
+    fn dependencies(&self) -> Vec<&str> { Vec::new() }
+    
+    /// Get provider metadata for discovery
+    fn factory_metadata(&self) -> HashMap<String, serde_json::Value> {
+        let mut meta = HashMap::new();
+        meta.insert("name".to_string(), serde_json::Value::String(self.name().to_string()));
+        meta.insert("dependencies".to_string(), 
+                   serde_json::Value::Array(self.dependencies().iter().map(|s| serde_json::Value::String(s.to_string())).collect()));
+        meta
+    }
+    
+    /// Validate that this factory can create providers in the current environment
+    fn validate_environment(&self) -> Result<(), ProviderError> {
+        Ok(()) // Default: always valid
+    }
+}
+
+/// Enhanced registry with dynamic discovery and capability negotiation
 pub struct ProviderRegistry {
-    providers: HashMap<String, Box<dyn Fn() -> Box<dyn PrimitiveProvider> + Send + Sync>>,
+    /// Registered provider factories
+    factories: HashMap<String, Arc<dyn ProviderFactory>>,
+    /// Provider configurations
+    configs: HashMap<String, HashMap<String, serde_json::Value>>,
+    /// Cached provider instances for session-lifetime providers
+    session_cache: HashMap<String, Arc<Mutex<dyn PrimitiveProvider>>>,
+    /// Registry metadata
+    metadata: HashMap<String, serde_json::Value>,
 }
 
 impl ProviderRegistry {
-    /// Create a new provider registry
+    /// Create a new enhanced provider registry
     pub fn new() -> Self {
         let mut registry = Self {
-            providers: HashMap::new(),
+            factories: HashMap::new(),
+            configs: HashMap::new(),
+            session_cache: HashMap::new(),
+            metadata: HashMap::new(),
         };
         
         // Register default providers
-        registry.register("hypothesis", || Box::new(HypothesisProvider::new()));
-        registry.register("random", || Box::new(RandomProvider::new()));
+        registry.register_factory(Arc::new(RandomProviderFactory));
+        registry.register_factory(Arc::new(HypothesisProviderFactory));
+        
+        // Initialize registry metadata
+        registry.metadata.insert("version".to_string(), 
+                               serde_json::Value::String("1.0.0".to_string()));
+        registry.metadata.insert("created_at".to_string(), 
+                               serde_json::Value::String(format!("{:?}", std::time::SystemTime::now())));
         
         registry
     }
     
-    /// Register a new provider
-    pub fn register<F>(&mut self, name: &str, factory: F)
-    where
-        F: Fn() -> Box<dyn PrimitiveProvider> + Send + Sync + 'static,
-    {
-        self.providers.insert(name.to_string(), Box::new(factory));
+    /// Register a provider factory
+    pub fn register_factory(&mut self, factory: Arc<dyn ProviderFactory>) {
+        let name = factory.name().to_string();
+        println!("PROVIDER_REGISTRY DEBUG: Registering factory for provider '{}'", name);
+        
+        // Validate environment before registration
+        if let Err(e) = factory.validate_environment() {
+            println!("PROVIDER_REGISTRY WARNING: Factory '{}' failed environment validation: {}", name, e);
+            return;
+        }
+        
+        self.factories.insert(name, factory);
     }
     
-    /// Create a provider by name
-    pub fn create(&self, name: &str) -> Option<Box<dyn PrimitiveProvider>> {
-        self.providers.get(name).map(|factory| factory())
+    /// Register a simple closure-based provider (legacy compatibility)
+    pub fn register<F>(&mut self, name: &str, factory: F)
+    where F: Fn() -> Box<dyn PrimitiveProvider> + Send + Sync + 'static,
+    {
+        self.register_factory(Arc::new(ClosureProviderFactory {
+            name: name.to_string(),
+            factory: Arc::new(factory),
+        }));
+    }
+    
+    /// Create a provider by name with configuration
+    pub fn create_with_config(&mut self, name: &str, config: Option<HashMap<String, serde_json::Value>>) -> Result<Box<dyn PrimitiveProvider>, ProviderError> {
+        let factory = self.factories.get(name)
+            .ok_or_else(|| ProviderError::ConfigError(format!("Provider '{}' not found", name)))?;
+        
+        // Validate configuration
+        if let Some(ref cfg) = config {
+            let test_provider = factory.create_provider();
+            test_provider.validate_config(cfg)?;
+            self.configs.insert(name.to_string(), cfg.clone());
+        }
+        
+        // Check dependencies
+        for dep in factory.dependencies() {
+            if !self.factories.contains_key(dep) {
+                return Err(ProviderError::ConfigError(format!("Dependency '{}' not available for provider '{}'", dep, name)));
+            }
+        }
+        
+        let provider = factory.create_provider();
+        println!("PROVIDER_REGISTRY DEBUG: Created provider '{}' with lifetime {:?}", name, provider.lifetime());
+        
+        Ok(provider)
+    }
+    
+    /// Create a provider by name (simplified interface)
+    pub fn create(&mut self, name: &str) -> Result<Box<dyn PrimitiveProvider>, ProviderError> {
+        self.create_with_config(name, None)
     }
     
     /// Get list of available provider names
     pub fn available_providers(&self) -> Vec<String> {
-        self.providers.keys().cloned().collect()
+        self.factories.keys().cloned().collect()
+    }
+    
+    /// Get detailed information about available providers
+    pub fn provider_info(&self) -> HashMap<String, serde_json::Value> {
+        let mut info = HashMap::new();
+        
+        for (name, factory) in &self.factories {
+            let mut provider_info = factory.factory_metadata();
+            
+            // Add capability information
+            let test_provider = factory.create_provider();
+            provider_info.insert("capabilities".to_string(), 
+                               serde_json::to_value(test_provider.capabilities()).unwrap_or_default());
+            provider_info.insert("lifetime".to_string(), 
+                               serde_json::Value::String(format!("{:?}", test_provider.lifetime())));
+            
+            info.insert(name.clone(), serde_json::Value::Object(
+                provider_info.into_iter().map(|(k, v)| (k, v)).collect()
+            ));
+        }
+        
+        info
+    }
+    
+    /// Validate a provider backend name
+    pub fn validate_backend(&self, backend: &str) -> Result<String, ProviderError> {
+        if !self.factories.contains_key(backend) {
+            let available: Vec<_> = self.available_providers();
+            return Err(ProviderError::ConfigError(format!(
+                "Backend '{}' is not available - maybe you need to install a plugin?\nInstalled backends: {:?}", 
+                backend, available
+            )));
+        }
+        Ok(backend.to_string())
+    }
+    
+    /// Auto-discover providers from environment (for future plugin support)
+    pub fn discover_providers(&mut self) -> Result<usize, ProviderError> {
+        // Placeholder for future plugin discovery mechanism
+        // This would scan for dynamic libraries, check environment variables, etc.
+        println!("PROVIDER_REGISTRY DEBUG: Provider discovery not yet implemented");
+        Ok(0)
+    }
+    
+    /// Set configuration for a provider
+    pub fn set_provider_config(&mut self, provider_name: &str, config: HashMap<String, serde_json::Value>) -> Result<(), ProviderError> {
+        // Validate the provider exists
+        self.validate_backend(provider_name)?;
+        
+        // Validate configuration with a test provider
+        if let Ok(test_provider) = self.create(provider_name) {
+            test_provider.validate_config(&config)?;
+        }
+        
+        self.configs.insert(provider_name.to_string(), config);
+        Ok(())
+    }
+    
+    /// Get configuration for a provider
+    pub fn get_provider_config(&self, provider_name: &str) -> Option<&HashMap<String, serde_json::Value>> {
+        self.configs.get(provider_name)
+    }
+    
+    /// Get registry metadata
+    pub fn registry_metadata(&self) -> &HashMap<String, serde_json::Value> {
+        &self.metadata
+    }
+}
+
+/// Closure-based provider factory for backward compatibility
+struct ClosureProviderFactory {
+    name: String,
+    factory: Arc<dyn Fn() -> Box<dyn PrimitiveProvider> + Send + Sync>,
+}
+
+impl ProviderFactory for ClosureProviderFactory {
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+        (self.factory)()
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+/// Factory for RandomProvider
+struct RandomProviderFactory;
+
+impl ProviderFactory for RandomProviderFactory {
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+        Box::new(RandomProvider::new())
+    }
+    
+    fn name(&self) -> &str {
+        "random"
+    }
+}
+
+/// Factory for HypothesisProvider
+struct HypothesisProviderFactory;
+
+impl ProviderFactory for HypothesisProviderFactory {
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+        Box::new(HypothesisProvider::new())
+    }
+    
+    fn name(&self) -> &str {
+        "hypothesis"
     }
 }
 
@@ -125,6 +592,24 @@ lazy_static::lazy_static! {
 /// Get the global provider registry
 pub fn get_provider_registry() -> std::sync::MutexGuard<'static, ProviderRegistry> {
     PROVIDER_REGISTRY.lock().unwrap()
+}
+
+/// Register a provider factory globally
+pub fn register_global_provider_factory(factory: Arc<dyn ProviderFactory>) {
+    let mut registry = get_provider_registry();
+    registry.register_factory(factory);
+}
+
+/// Create a provider from the global registry
+pub fn create_global_provider(name: &str) -> Result<Box<dyn PrimitiveProvider>, ProviderError> {
+    let mut registry = get_provider_registry();
+    registry.create(name)
+}
+
+/// Get information about all available providers
+pub fn get_global_provider_info() -> HashMap<String, serde_json::Value> {
+    let registry = get_provider_registry();
+    registry.provider_info()
 }
 
 /// Basic random provider that uses ConjectureData's internal RNG
@@ -147,14 +632,33 @@ impl PrimitiveProvider for RandomProvider {
         ProviderLifetime::TestCase
     }
     
-    fn generate_integer(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::IntegerConstraints) -> Result<i128, DrawError> {
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            avoid_realization: false,
+            add_observability_callback: false,
+            structural_awareness: false,
+            replay_support: false,
+            symbolic_constraints: false,
+        }
+    }
+    
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, ProviderError> {
+        if p < 0.0 || p > 1.0 {
+            return Err(ProviderError::InvalidChoice(format!("Invalid probability: {}", p)));
+        }
+        let mut rng = ChaCha8Rng::from_entropy();
+        Ok(rng.gen::<f64>() < p)
+    }
+    
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError> {
         let min = constraints.min_value.unwrap_or(i128::MIN);
         let max = constraints.max_value.unwrap_or(i128::MAX);
         
         if min > max {
-            return Err(DrawError::InvalidRange);
+            return Err(ProviderError::InvalidChoice(format!("Invalid range: {} > {}", min, max)));
         }
         
+        let mut rng = ChaCha8Rng::from_entropy();
         if min == max {
             Ok(min)
         } else {
@@ -162,27 +666,34 @@ impl PrimitiveProvider for RandomProvider {
         }
     }
     
-    fn generate_boolean(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::BooleanConstraints) -> Result<bool, DrawError> {
-        if constraints.p < 0.0 || constraints.p > 1.0 {
-            return Err(DrawError::InvalidProbability);
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError> {
+        let mut rng = ChaCha8Rng::from_entropy();
+        let value = rng.gen::<f64>();
+        
+        // Apply constraints if specified
+        let constrained_value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
+            constraints.min_value + value * (constraints.max_value - constraints.min_value)
+        } else {
+            value
+        };
+        
+        if !constraints.allow_nan && constrained_value.is_nan() {
+            return self.draw_float(constraints); // Retry
         }
-        Ok(rng.gen::<f64>() < constraints.p)
+        
+        Ok(constrained_value)
     }
     
-    fn generate_float(&mut self, rng: &mut ChaCha8Rng, _constraints: &crate::choice::FloatConstraints) -> Result<f64, DrawError> {
-        Ok(rng.gen::<f64>())
-    }
-    
-    fn generate_string(&mut self, rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError> {
+    fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
         if min_size > max_size {
-            return Err(DrawError::InvalidRange);
+            return Err(ProviderError::InvalidChoice(format!("Invalid size range: {} > {}", min_size, max_size)));
         }
         
-        let alphabet_chars: Vec<char> = alphabet.chars().collect();
-        if alphabet_chars.is_empty() {
-            return Err(DrawError::EmptyAlphabet);
+        if intervals.intervals.is_empty() {
+            return Err(ProviderError::InvalidChoice("Empty character set".to_string()));
         }
         
+        let mut rng = ChaCha8Rng::from_entropy();
         let size = if min_size == max_size {
             min_size
         } else {
@@ -191,14 +702,36 @@ impl PrimitiveProvider for RandomProvider {
         
         let mut result = String::new();
         for _ in 0..size {
-            let char_index = rng.gen_range(0..alphabet_chars.len());
-            result.push(alphabet_chars[char_index]);
+            // Pick a random interval
+            let interval_idx = rng.gen_range(0..intervals.intervals.len());
+            let (start, end) = intervals.intervals[interval_idx];
+            
+            // Pick a random code point in that interval
+            let code_point = rng.gen_range(start..=end);
+            
+            // Convert to char (with fallback for invalid code points)
+            if let Some(ch) = char::from_u32(code_point) {
+                result.push(ch);
+            } else {
+                result.push('?'); // Fallback character
+            }
         }
         
         Ok(result)
     }
     
-    fn generate_bytes(&mut self, rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError> {
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, ProviderError> {
+        if min_size > max_size {
+            return Err(ProviderError::InvalidChoice(format!("Invalid size range: {} > {}", min_size, max_size)));
+        }
+        
+        let mut rng = ChaCha8Rng::from_entropy();
+        let size = if min_size == max_size {
+            min_size
+        } else {
+            rng.gen_range(min_size..=max_size)
+        };
+        
         let mut bytes = vec![0u8; size];
         rng.fill_bytes(&mut bytes[..]);
         Ok(bytes)
@@ -333,22 +866,51 @@ impl PrimitiveProvider for HypothesisProvider {
         ProviderLifetime::TestCase
     }
     
-    fn generate_integer(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::IntegerConstraints) -> Result<i128, DrawError> {
-        let constraints_obj = Constraints::Integer(constraints.clone());
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            avoid_realization: false,
+            add_observability_callback: true,
+            structural_awareness: true,
+            replay_support: false,
+            symbolic_constraints: false,
+        }
+    }
+    
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, ProviderError> {
+        if p < 0.0 || p > 1.0 {
+            return Err(ProviderError::InvalidChoice(format!("Invalid probability: {}", p)));
+        }
         
-        // Try to draw a constant first
-        if let Some(ChoiceValue::Integer(constant)) = self.maybe_draw_constant(rng, "integer", &constraints_obj) {
+        let constraints = BooleanConstraints { p };
+        let constraints_obj = Constraints::Boolean(constraints.clone());
+        let mut rng = ChaCha8Rng::from_entropy();
+        
+        // Try to draw a constant first (5% probability)
+        if let Some(ChoiceValue::Boolean(constant)) = self.maybe_draw_constant(&mut rng, "boolean", &constraints_obj) {
             return Ok(constant);
         }
         
         // Fall back to random generation
+        Ok(rng.gen::<f64>() < p)
+    }
+    
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError> {
         let min = constraints.min_value.unwrap_or(i128::MIN);
         let max = constraints.max_value.unwrap_or(i128::MAX);
         
         if min > max {
-            return Err(DrawError::InvalidRange);
+            return Err(ProviderError::InvalidChoice(format!("Invalid range: {} > {}", min, max)));
         }
         
+        let constraints_obj = Constraints::Integer(constraints.clone());
+        let mut rng = ChaCha8Rng::from_entropy();
+        
+        // Try to draw a constant first (5% probability)
+        if let Some(ChoiceValue::Integer(constant)) = self.maybe_draw_constant(&mut rng, "integer", &constraints_obj) {
+            return Ok(constant);
+        }
+        
+        // Fall back to random generation
         if min == max {
             Ok(min)
         } else {
@@ -356,44 +918,55 @@ impl PrimitiveProvider for HypothesisProvider {
         }
     }
     
-    fn generate_boolean(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::BooleanConstraints) -> Result<bool, DrawError> {
-        let constraints_obj = Constraints::Boolean(constraints.clone());
-        
-        // Try to draw a constant first
-        if let Some(ChoiceValue::Boolean(constant)) = self.maybe_draw_constant(rng, "boolean", &constraints_obj) {
-            return Ok(constant);
-        }
-        
-        // Fall back to random generation
-        if constraints.p < 0.0 || constraints.p > 1.0 {
-            return Err(DrawError::InvalidProbability);
-        }
-        Ok(rng.gen::<f64>() < constraints.p)
-    }
-    
-    fn generate_float(&mut self, rng: &mut ChaCha8Rng, constraints: &crate::choice::FloatConstraints) -> Result<f64, DrawError> {
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError> {
         let constraints_obj = Constraints::Float(constraints.clone());
+        let mut rng = ChaCha8Rng::from_entropy();
         
-        // Try to draw a constant first
-        if let Some(ChoiceValue::Float(constant)) = self.maybe_draw_constant(rng, "float", &constraints_obj) {
+        // Try to draw a constant first (5% probability)
+        if let Some(ChoiceValue::Float(constant)) = self.maybe_draw_constant(&mut rng, "float", &constraints_obj) {
             return Ok(constant);
         }
         
-        // Fall back to random generation
-        Ok(rng.gen::<f64>())
+        // Fall back to random generation with constraints
+        let value = rng.gen::<f64>();
+        let constrained_value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
+            constraints.min_value + value * (constraints.max_value - constraints.min_value)
+        } else {
+            value
+        };
+        
+        if !constraints.allow_nan && constrained_value.is_nan() {
+            return self.draw_float(constraints); // Retry
+        }
+        
+        Ok(constrained_value)
     }
     
-    fn generate_string(&mut self, rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError> {
-        // For now, just use random generation - constant injection for strings needs more work
+    fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
         if min_size > max_size {
-            return Err(DrawError::InvalidRange);
+            return Err(ProviderError::InvalidChoice(format!("Invalid size range: {} > {}", min_size, max_size)));
         }
         
-        let alphabet_chars: Vec<char> = alphabet.chars().collect();
-        if alphabet_chars.is_empty() {
-            return Err(DrawError::EmptyAlphabet);
+        if intervals.intervals.is_empty() {
+            return Err(ProviderError::InvalidChoice("Empty character set".to_string()));
         }
         
+        let mut rng = ChaCha8Rng::from_entropy();
+        
+        // Try to draw a constant string first (simplified)
+        if rng.gen::<f64>() < 0.05 {
+            for constant in &self.global_constants.strings {
+                if constant.len() >= min_size && constant.len() <= max_size {
+                    // Check if all characters are in the intervals
+                    if constant.chars().all(|c| intervals.contains(c as u32)) {
+                        println!("PROVIDER DEBUG: Drew constant string: {:?}", constant);
+                        return Ok(constant.clone());
+                    }
+                }
+            }
+        }
+        
+        // Fall back to random generation
         let size = if min_size == max_size {
             min_size
         } else {
@@ -402,22 +975,87 @@ impl PrimitiveProvider for HypothesisProvider {
         
         let mut result = String::new();
         for _ in 0..size {
-            let char_index = rng.gen_range(0..alphabet_chars.len());
-            result.push(alphabet_chars[char_index]);
+            // Pick a random interval
+            let interval_idx = rng.gen_range(0..intervals.intervals.len());
+            let (start, end) = intervals.intervals[interval_idx];
+            
+            // Pick a random code point in that interval
+            let code_point = rng.gen_range(start..=end);
+            
+            // Convert to char (with fallback for invalid code points)
+            if let Some(ch) = char::from_u32(code_point) {
+                result.push(ch);
+            } else {
+                result.push('?'); // Fallback character
+            }
         }
         
         Ok(result)
     }
     
-    fn generate_bytes(&mut self, rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError> {
-        // For now, just use random generation - constant injection for bytes needs more work
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, ProviderError> {
+        if min_size > max_size {
+            return Err(ProviderError::InvalidChoice(format!("Invalid size range: {} > {}", min_size, max_size)));
+        }
+        
+        let mut rng = ChaCha8Rng::from_entropy();
+        
+        // Try to draw a constant byte sequence first
+        if rng.gen::<f64>() < 0.05 {
+            for constant in &self.global_constants.bytes {
+                if constant.len() >= min_size && constant.len() <= max_size {
+                    println!("PROVIDER DEBUG: Drew constant bytes: {:?}", constant);
+                    return Ok(constant.clone());
+                }
+            }
+        }
+        
+        // Fall back to random generation
+        let size = if min_size == max_size {
+            min_size
+        } else {
+            rng.gen_range(min_size..=max_size)
+        };
+        
         let mut bytes = vec![0u8; size];
         rng.fill_bytes(&mut bytes[..]);
         Ok(bytes)
     }
     
-    fn span_start(&mut self, label: &str) {
-        println!("PROVIDER DEBUG: Span started: {}", label);
+    fn observe_test_case(&mut self) -> HashMap<String, serde_json::Value> {
+        let mut observation = HashMap::new();
+        observation.insert("constant_cache_size".to_string(), 
+                         serde_json::Value::Number(serde_json::Number::from(self.constant_cache.len())));
+        observation.insert("global_constants_count".to_string(), 
+                         serde_json::Value::Number(serde_json::Number::from(
+                             self.global_constants.integers.len() + 
+                             self.global_constants.floats.len() + 
+                             self.global_constants.strings.len() + 
+                             self.global_constants.bytes.len()
+                         )));
+        observation
+    }
+    
+    fn observe_information_messages(&mut self, lifetime: ProviderLifetime) -> Vec<ObservationMessage> {
+        let mut messages = Vec::new();
+        
+        if lifetime == ProviderLifetime::TestCase {
+            messages.push(ObservationMessage {
+                message_type: ObservationType::Info,
+                title: "Constant Injection Status".to_string(),
+                content: serde_json::json!({
+                    "cache_size": self.constant_cache.len(),
+                    "injection_rate": "5%"
+                }),
+                timestamp: std::time::SystemTime::now(),
+            });
+        }
+        
+        messages
+    }
+    
+    fn span_start(&mut self, label: u32) {
+        println!("PROVIDER DEBUG: Span started: {:#08X}", label);
     }
     
     fn span_end(&mut self, discard: bool) {
@@ -510,14 +1148,647 @@ impl GlobalConstants {
     }
 }
 
+// ==================== SPECIALIZED BACKEND IMPLEMENTATIONS ====================
+
+/// SMT Solver Provider for symbolic execution and constraint solving
+/// 
+/// This provider integrates with SMT solvers to enable symbolic test generation,
+/// constraint solving, and advanced property verification. It maintains symbolic
+/// values throughout test execution and only realizes them when necessary.
+#[derive(Debug)]
+pub struct SmtSolverProvider {
+    /// Mock SMT solver interface (in real implementation this would be z3, cvc4, etc.)
+    solver_state: SmtSolverState,
+    /// Symbolic value tracking
+    symbolic_values: HashMap<u64, SymbolicValue>,
+    /// Solver constraints accumulated during execution
+    constraints: Vec<SymbolicConstraint>,
+    /// Whether the search space has been exhausted
+    space_exhausted: bool,
+    /// Analysis context for test case execution
+    analysis_context: Option<String>,
+    /// Unique ID counter for symbolic values
+    next_value_id: u64,
+}
+
+#[derive(Debug)]
+pub struct SmtSolverState {
+    /// Mock solver status
+    status: SolverStatus,
+    /// Solution cache for performance
+    solution_cache: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SolverStatus {
+    Ready,
+    Solving,
+    Satisfied,
+    Unsatisfied,
+    Unknown,
+}
+
+#[derive(Debug, Clone)]
+pub struct SymbolicValue {
+    id: u64,
+    value_type: SymbolicType,
+    constraints: Vec<SymbolicConstraint>,
+    concrete_value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub enum SymbolicType {
+    Integer { min: Option<i128>, max: Option<i128> },
+    Boolean,
+    Float { min: f64, max: f64, allow_nan: bool },
+    String { char_set: IntervalSet, min_len: usize, max_len: usize },
+    Bytes { min_len: usize, max_len: usize },
+}
+
+#[derive(Debug, Clone)]
+pub struct SymbolicConstraint {
+    constraint_type: ConstraintType,
+    operands: Vec<u64>, // References to symbolic value IDs
+    operator: ConstraintOperator,
+    target_value: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConstraintType {
+    Comparison,
+    Logical,
+    Arithmetic,
+    StringLength,
+    BytesLength,
+}
+
+#[derive(Debug, Clone)]
+pub enum ConstraintOperator {
+    Equal,
+    NotEqual,
+    LessThan,
+    LessThanOrEqual,
+    GreaterThan,
+    GreaterThanOrEqual,
+    And,
+    Or,
+    Not,
+    Plus,
+    Minus,
+    Multiply,
+    Divide,
+}
+
+impl SmtSolverProvider {
+    pub fn new() -> Self {
+        Self {
+            solver_state: SmtSolverState {
+                status: SolverStatus::Ready,
+                solution_cache: HashMap::new(),
+            },
+            symbolic_values: HashMap::new(),
+            constraints: Vec::new(),
+            space_exhausted: false,
+            analysis_context: None,
+            next_value_id: 1,
+        }
+    }
+    
+    fn create_symbolic_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError> {
+        let value_id = self.next_value_id;
+        self.next_value_id += 1;
+        
+        let symbolic_value = SymbolicValue {
+            id: value_id,
+            value_type: SymbolicType::Integer {
+                min: constraints.min_value,
+                max: constraints.max_value,
+            },
+            constraints: Vec::new(),
+            concrete_value: None,
+        };
+        
+        self.symbolic_values.insert(value_id, symbolic_value);
+        
+        println!("SMT_SOLVER DEBUG: Created symbolic integer #{} with constraints {:?}", value_id, constraints);
+        
+        // For demonstration, return a heuristic value
+        let heuristic_value = constraints.shrink_towards.unwrap_or(0);
+        if let Some(min) = constraints.min_value {
+            if heuristic_value < min {
+                return Ok(min);
+            }
+        }
+        if let Some(max) = constraints.max_value {
+            if heuristic_value > max {
+                return Ok(max);
+            }
+        }
+        
+        Ok(heuristic_value)
+    }
+    
+    fn solve_constraints(&mut self) -> Result<(), ProviderError> {
+        println!("SMT_SOLVER DEBUG: Solving {} constraints", self.constraints.len());
+        
+        // Mock solver logic - in real implementation this would call z3/cvc4
+        self.solver_state.status = SolverStatus::Solving;
+        
+        // Simulate constraint solving
+        std::thread::sleep(std::time::Duration::from_millis(1));
+        
+        if self.constraints.len() > 100 {
+            self.space_exhausted = true;
+            return Err(ProviderError::BackendExhausted("Too many constraints".to_string()));
+        }
+        
+        self.solver_state.status = SolverStatus::Satisfied;
+        Ok(())
+    }
+}
+
+impl PrimitiveProvider for SmtSolverProvider {
+    fn lifetime(&self) -> ProviderLifetime {
+        ProviderLifetime::TestFunction // SMT solver contexts usually span entire test functions
+    }
+    
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            avoid_realization: true,  // Keep symbolic values as long as possible
+            add_observability_callback: true,
+            structural_awareness: true,
+            replay_support: false,   // SMT solvers generate new solutions
+            symbolic_constraints: true,
+        }
+    }
+    
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, ProviderError> {
+        if self.space_exhausted {
+            return Err(ProviderError::CannotProceed {
+                scope: ProviderScope::Exhausted,
+                reason: "SMT solver search space exhausted".to_string(),
+            });
+        }
+        
+        // For symbolic execution, we might want to explore both paths
+        // For now, return a heuristic value
+        Ok(p >= 0.5)
+    }
+    
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError> {
+        if self.space_exhausted {
+            return Err(ProviderError::CannotProceed {
+                scope: ProviderScope::Exhausted,
+                reason: "SMT solver search space exhausted".to_string(),
+            });
+        }
+        
+        self.create_symbolic_integer(constraints)
+    }
+    
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError> {
+        if self.space_exhausted {
+            return Err(ProviderError::CannotProceed {
+                scope: ProviderScope::Exhausted,
+                reason: "SMT solver search space exhausted".to_string(),
+            });
+        }
+        
+        // For floats, return a value within constraints
+        let value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
+            (constraints.min_value + constraints.max_value) / 2.0
+        } else {
+            0.0
+        };
+        
+        println!("SMT_SOLVER DEBUG: Generated symbolic float: {}", value);
+        Ok(value)
+    }
+    
+    fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
+        if self.space_exhausted {
+            return Err(ProviderError::CannotProceed {
+                scope: ProviderScope::Exhausted,
+                reason: "SMT solver search space exhausted".to_string(),
+            });
+        }
+        
+        // For demonstration, return a minimal string
+        let size = min_size;
+        if size == 0 {
+            return Ok(String::new());
+        }
+        
+        // Use first available character from intervals
+        if let Some((start, _)) = intervals.intervals.first() {
+            if let Some(ch) = char::from_u32(*start) {
+                return Ok(ch.to_string().repeat(size));
+            }
+        }
+        
+        Ok("a".repeat(size)) // Fallback
+    }
+    
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, ProviderError> {
+        if self.space_exhausted {
+            return Err(ProviderError::CannotProceed {
+                scope: ProviderScope::Exhausted,
+                reason: "SMT solver search space exhausted".to_string(),
+            });
+        }
+        
+        // For demonstration, return minimal bytes
+        Ok(vec![0u8; min_size])
+    }
+    
+    fn observe_test_case(&mut self) -> HashMap<String, serde_json::Value> {
+        let mut observation = HashMap::new();
+        observation.insert("solver_status".to_string(), 
+                         serde_json::Value::String(format!("{:?}", self.solver_state.status)));
+        observation.insert("symbolic_values_count".to_string(),
+                         serde_json::Value::Number(serde_json::Number::from(self.symbolic_values.len())));
+        observation.insert("constraints_count".to_string(),
+                         serde_json::Value::Number(serde_json::Number::from(self.constraints.len())));
+        observation.insert("space_exhausted".to_string(),
+                         serde_json::Value::Bool(self.space_exhausted));
+        observation
+    }
+    
+    fn can_realize(&self) -> bool {
+        true // SMT solver can handle symbolic values
+    }
+    
+    fn per_test_case_context(&mut self) -> Box<dyn TestCaseContext> {
+        Box::new(SmtTestCaseContext {
+            provider_id: format!("smt_{}", std::process::id()),
+            start_time: std::time::SystemTime::now(),
+        })
+    }
+    
+    fn span_start(&mut self, label: u32) {
+        println!("SMT_SOLVER DEBUG: Entering span {:#08X}", label);
+        // In real implementation, this could push constraint contexts
+    }
+    
+    fn span_end(&mut self, discard: bool) {
+        println!("SMT_SOLVER DEBUG: Exiting span, discard: {}", discard);
+        if discard {
+            // In real implementation, this could pop constraint contexts
+        }
+    }
+}
+
+/// Test case context for SMT solver provider
+#[derive(Debug)]
+pub struct SmtTestCaseContext {
+    provider_id: String,
+    start_time: std::time::SystemTime,
+}
+
+impl TestCaseContext for SmtTestCaseContext {
+    fn enter_test_case(&mut self) {
+        println!("SMT_CONTEXT DEBUG: Entering test case for provider {}", self.provider_id);
+    }
+    
+    fn exit_test_case(&mut self, success: bool) {
+        let duration = self.start_time.elapsed().unwrap_or_default();
+        println!("SMT_CONTEXT DEBUG: Exiting test case for provider {}, success: {}, duration: {:?}", 
+                self.provider_id, success, duration);
+    }
+    
+    fn get_context_data(&self) -> HashMap<String, serde_json::Value> {
+        let mut data = HashMap::new();
+        data.insert("provider_id".to_string(), serde_json::Value::String(self.provider_id.clone()));
+        data.insert("start_time".to_string(), 
+                   serde_json::Value::String(format!("{:?}", self.start_time)));
+        data
+    }
+}
+
+/// Factory for SMT Solver Provider
+pub struct SmtSolverProviderFactory;
+
+impl ProviderFactory for SmtSolverProviderFactory {
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+        Box::new(SmtSolverProvider::new())
+    }
+    
+    fn name(&self) -> &str {
+        "smt"
+    }
+    
+    fn dependencies(&self) -> Vec<&str> {
+        vec![] // No dependencies for this demo implementation
+    }
+    
+    fn validate_environment(&self) -> Result<(), ProviderError> {
+        // In real implementation, this would check for SMT solver availability
+        println!("SMT_FACTORY DEBUG: Validating SMT solver environment");
+        Ok(())
+    }
+}
+
+/// Fuzzing-based provider for coverage-guided generation
+/// 
+/// This provider uses fuzzing techniques to guide generation towards
+/// increased code coverage and interesting program states.
+#[derive(Debug)]
+pub struct FuzzingProvider {
+    /// Coverage information from previous runs
+    coverage_data: HashMap<String, u64>,
+    /// Corpus of interesting inputs
+    corpus: Vec<Vec<u8>>,
+    /// Mutation strategies
+    mutation_strategies: Vec<MutationStrategy>,
+    /// Current generation strategy
+    current_strategy: usize,
+}
+
+#[derive(Debug, Clone)]
+pub enum MutationStrategy {
+    BitFlip,
+    ByteFlip,
+    ArithmeticIncrement,
+    ArithmeticDecrement,
+    InterestingValues,
+    Dictionary,
+    Splice,
+}
+
+impl FuzzingProvider {
+    pub fn new() -> Self {
+        Self {
+            coverage_data: HashMap::new(),
+            corpus: Vec::new(),
+            mutation_strategies: vec![
+                MutationStrategy::BitFlip,
+                MutationStrategy::ByteFlip,
+                MutationStrategy::ArithmeticIncrement,
+                MutationStrategy::InterestingValues,
+            ],
+            current_strategy: 0,
+        }
+    }
+    
+    fn mutate_corpus_entry(&mut self, entry: &[u8]) -> Vec<u8> {
+        let strategy = &self.mutation_strategies[self.current_strategy % self.mutation_strategies.len()];
+        self.current_strategy += 1;
+        
+        match strategy {
+            MutationStrategy::BitFlip => {
+                let mut result = entry.to_vec();
+                if !result.is_empty() {
+                    let bit_index = self.current_strategy % (result.len() * 8);
+                    let byte_index = bit_index / 8;
+                    let bit_offset = bit_index % 8;
+                    result[byte_index] ^= 1 << bit_offset;
+                }
+                result
+            },
+            MutationStrategy::ByteFlip => {
+                let mut result = entry.to_vec();
+                if !result.is_empty() {
+                    let byte_index = self.current_strategy % result.len();
+                    result[byte_index] = result[byte_index].wrapping_add(1);
+                }
+                result
+            },
+            MutationStrategy::InterestingValues => {
+                // Use some interesting byte values
+                let interesting_bytes = [0, 1, 255, 127, 128];
+                let mut result = entry.to_vec();
+                if !result.is_empty() {
+                    let byte_index = self.current_strategy % result.len();
+                    let value_index = self.current_strategy % interesting_bytes.len();
+                    result[byte_index] = interesting_bytes[value_index];
+                }
+                result
+            },
+            _ => entry.to_vec(), // Other strategies not implemented in this demo
+        }
+    }
+}
+
+impl PrimitiveProvider for FuzzingProvider {
+    fn lifetime(&self) -> ProviderLifetime {
+        ProviderLifetime::TestRun // Fuzzing benefits from accumulating corpus across test cases
+    }
+    
+    fn capabilities(&self) -> BackendCapabilities {
+        BackendCapabilities {
+            avoid_realization: false,
+            add_observability_callback: true,
+            structural_awareness: true,
+            replay_support: true,  // Fuzzing can replay interesting corpus entries
+            symbolic_constraints: false,
+        }
+    }
+    
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, ProviderError> {
+        // For fuzzing, we might want to bias towards edge cases
+        if p < 0.1 {
+            Ok(false)
+        } else if p > 0.9 {
+            Ok(true)
+        } else {
+            Ok(self.current_strategy % 2 == 0)
+        }
+    }
+    
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError> {
+        let min = constraints.min_value.unwrap_or(i128::MIN);
+        let max = constraints.max_value.unwrap_or(i128::MAX);
+        
+        // Fuzzing strategy: prefer edge cases and interesting values
+        let interesting_values = [
+            min, max, 0, 1, -1, 
+            i8::MIN as i128, i8::MAX as i128,
+            i16::MIN as i128, i16::MAX as i128,
+            i32::MIN as i128, i32::MAX as i128,
+        ];
+        
+        for &value in &interesting_values {
+            if value >= min && value <= max {
+                println!("FUZZING DEBUG: Selected interesting integer value: {}", value);
+                return Ok(value);
+            }
+        }
+        
+        // Fallback to constraint bounds
+        Ok(if self.current_strategy % 2 == 0 { min } else { max })
+    }
+    
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError> {
+        // Fuzzing strategy: use interesting float values
+        let interesting_floats = [
+            0.0, 1.0, -1.0, f64::INFINITY, f64::NEG_INFINITY,
+            f64::MIN, f64::MAX, f64::MIN_POSITIVE, f64::EPSILON,
+        ];
+        
+        for &value in &interesting_floats {
+            if value >= constraints.min_value && value <= constraints.max_value {
+                if constraints.allow_nan || !value.is_nan() {
+                    println!("FUZZING DEBUG: Selected interesting float value: {}", value);
+                    return Ok(value);
+                }
+            }
+        }
+        
+        // Include NaN if allowed
+        if constraints.allow_nan && self.current_strategy % 10 == 0 {
+            return Ok(f64::NAN);
+        }
+        
+        Ok(constraints.min_value)
+    }
+    
+    fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
+        // For fuzzing, try to use corpus entries if available
+        if !self.corpus.is_empty() && self.current_strategy % 3 == 0 {
+            let corpus_index = self.current_strategy % self.corpus.len();
+            let corpus_entry = self.corpus[corpus_index].clone(); // Clone to avoid borrow issues
+            let mutated = self.mutate_corpus_entry(&corpus_entry);
+            
+            // Try to convert bytes to string
+            if let Ok(string) = String::from_utf8(mutated) {
+                if string.len() >= min_size && string.len() <= max_size {
+                    if string.chars().all(|c| intervals.contains(c as u32)) {
+                        println!("FUZZING DEBUG: Using mutated corpus string: {:?}", string);
+                        return Ok(string);
+                    }
+                }
+            }
+        }
+        
+        // Fallback to interesting strings
+        let interesting_strings = ["", "\0", "\n", "\r\n", "\\", "\"", "'"];
+        for &s in &interesting_strings {
+            if s.len() >= min_size && s.len() <= max_size {
+                if s.chars().all(|c| intervals.contains(c as u32)) {
+                    return Ok(s.to_string());
+                }
+            }
+        }
+        
+        // Generate minimal valid string
+        if min_size == 0 {
+            Ok(String::new())
+        } else {
+            if let Some((start, _)) = intervals.intervals.first() {
+                if let Some(ch) = char::from_u32(*start) {
+                    return Ok(ch.to_string().repeat(min_size));
+                }
+            }
+            Ok("a".repeat(min_size))
+        }
+    }
+    
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, ProviderError> {
+        // For fuzzing, prefer corpus mutations
+        if !self.corpus.is_empty() {
+            let corpus_index = self.current_strategy % self.corpus.len();
+            let corpus_entry = self.corpus[corpus_index].clone(); // Clone to avoid borrow issues
+            let mutated = self.mutate_corpus_entry(&corpus_entry);
+            
+            if mutated.len() >= min_size && mutated.len() <= max_size {
+                println!("FUZZING DEBUG: Using mutated corpus bytes of length {}", mutated.len());
+                return Ok(mutated);
+            }
+        }
+        
+        // Interesting byte patterns
+        let interesting_patterns = [
+            vec![0u8; min_size],
+            vec![255u8; min_size],
+            (0..min_size).map(|i| i as u8).collect(),
+        ];
+        
+        for pattern in &interesting_patterns {
+            if pattern.len() >= min_size && pattern.len() <= max_size {
+                return Ok(pattern.clone());
+            }
+        }
+        
+        Ok(vec![0u8; min_size])
+    }
+    
+    fn observe_test_case(&mut self) -> HashMap<String, serde_json::Value> {
+        let mut observation = HashMap::new();
+        observation.insert("corpus_size".to_string(),
+                         serde_json::Value::Number(serde_json::Number::from(self.corpus.len())));
+        observation.insert("coverage_entries".to_string(),
+                         serde_json::Value::Number(serde_json::Number::from(self.coverage_data.len())));
+        observation.insert("current_strategy".to_string(),
+                         serde_json::Value::String(format!("{:?}", 
+                             self.mutation_strategies[self.current_strategy % self.mutation_strategies.len()])));
+        observation
+    }
+    
+    fn replay_choices(&mut self, choices: &[ChoiceValue]) -> Result<(), ProviderError> {
+        // Convert interesting choices to corpus entries
+        for choice in choices {
+            match choice {
+                ChoiceValue::Bytes(bytes) => {
+                    if !self.corpus.contains(bytes) {
+                        self.corpus.push(bytes.clone());
+                        println!("FUZZING DEBUG: Added bytes to corpus: {:?}", bytes);
+                    }
+                },
+                ChoiceValue::String(s) => {
+                    let bytes = s.as_bytes().to_vec();
+                    if !self.corpus.contains(&bytes) {
+                        self.corpus.push(bytes);
+                        println!("FUZZING DEBUG: Added string bytes to corpus: {:?}", s);
+                    }
+                },
+                _ => {}, // Other types could be converted to bytes as well
+            }
+        }
+        Ok(())
+    }
+    
+    fn span_start(&mut self, label: u32) {
+        // For fuzzing, track coverage information
+        let coverage_key = format!("span_{:#08X}", label);
+        let current_count = self.coverage_data.get(&coverage_key).unwrap_or(&0);
+        self.coverage_data.insert(coverage_key, current_count + 1);
+    }
+}
+
+/// Factory for Fuzzing Provider
+pub struct FuzzingProviderFactory;
+
+impl ProviderFactory for FuzzingProviderFactory {
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+        Box::new(FuzzingProvider::new())
+    }
+    
+    fn name(&self) -> &str {
+        "fuzzing"
+    }
+}
+
+/// Register all specialized backends with the global registry
+pub fn register_specialized_backends() {
+    let mut registry = get_provider_registry();
+    
+    println!("SPECIALIZED_BACKENDS DEBUG: Registering SMT solver backend");
+    registry.register_factory(Arc::new(SmtSolverProviderFactory));
+    
+    println!("SPECIALIZED_BACKENDS DEBUG: Registering fuzzing backend");
+    registry.register_factory(Arc::new(FuzzingProviderFactory));
+    
+    println!("SPECIALIZED_BACKENDS DEBUG: Registered {} specialized backends", 2);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::choice::IntegerConstraints;
 
     #[test]
-    fn test_provider_registry() {
-        let registry = ProviderRegistry::new();
+    fn test_enhanced_provider_registry() {
+        let mut registry = ProviderRegistry::new();
         let available = registry.available_providers();
         
         assert!(available.contains(&"hypothesis".to_string()));
@@ -525,9 +1796,272 @@ mod tests {
         
         let hypothesis_provider = registry.create("hypothesis").unwrap();
         assert_eq!(hypothesis_provider.lifetime(), ProviderLifetime::TestCase);
+        assert!(hypothesis_provider.capabilities().add_observability_callback);
+        assert!(hypothesis_provider.capabilities().structural_awareness);
         
         let random_provider = registry.create("random").unwrap();
         assert_eq!(random_provider.lifetime(), ProviderLifetime::TestCase);
+        assert!(!random_provider.capabilities().avoid_realization);
+    }
+    
+    #[test]
+    fn test_provider_factory_registration() {
+        let mut registry = ProviderRegistry::new();
+        
+        // Test custom factory registration
+        struct TestProviderFactory;
+        impl ProviderFactory for TestProviderFactory {
+            fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+                Box::new(RandomProvider::new())
+            }
+            fn name(&self) -> &str { "test_provider" }
+        }
+        
+        registry.register_factory(Arc::new(TestProviderFactory));
+        
+        let available = registry.available_providers();
+        assert!(available.contains(&"test_provider".to_string()));
+        
+        let test_provider = registry.create("test_provider").unwrap();
+        assert_eq!(test_provider.lifetime(), ProviderLifetime::TestCase);
+    }
+    
+    #[test]
+    fn test_provider_configuration() {
+        let mut registry = ProviderRegistry::new();
+        
+        // Test configuration setting and retrieval
+        let mut config = HashMap::new();
+        config.insert("test_param".to_string(), serde_json::Value::String("test_value".to_string()));
+        
+        assert!(registry.set_provider_config("random", config.clone()).is_ok());
+        
+        let retrieved_config = registry.get_provider_config("random");
+        assert!(retrieved_config.is_some());
+        assert_eq!(retrieved_config.unwrap().get("test_param").unwrap(), &serde_json::Value::String("test_value".to_string()));
+    }
+    
+    #[test]
+    fn test_backend_validation() {
+        let registry = ProviderRegistry::new();
+        
+        // Test valid backend
+        assert!(registry.validate_backend("random").is_ok());
+        assert!(registry.validate_backend("hypothesis").is_ok());
+        
+        // Test invalid backend
+        let result = registry.validate_backend("nonexistent");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not available"));
+    }
+    
+    #[test]
+    fn test_provider_info() {
+        let registry = ProviderRegistry::new();
+        let info = registry.provider_info();
+        
+        assert!(info.contains_key("random"));
+        assert!(info.contains_key("hypothesis"));
+        
+        let random_info = &info["random"];
+        assert!(random_info.get("name").is_some());
+        assert!(random_info.get("capabilities").is_some());
+        assert!(random_info.get("lifetime").is_some());
+    }
+    
+    #[test]
+    fn test_specialized_backends() {
+        // Register specialized backends
+        register_specialized_backends();
+        
+        let mut registry = get_provider_registry();
+        let available = registry.available_providers();
+        
+        assert!(available.contains(&"smt".to_string()));
+        assert!(available.contains(&"fuzzing".to_string()));
+        
+        // Test SMT provider
+        let smt_provider = registry.create("smt").unwrap();
+        assert_eq!(smt_provider.lifetime(), ProviderLifetime::TestFunction);
+        assert!(smt_provider.capabilities().avoid_realization);
+        assert!(smt_provider.capabilities().symbolic_constraints);
+        
+        // Test Fuzzing provider
+        let fuzzing_provider = registry.create("fuzzing").unwrap();
+        assert_eq!(fuzzing_provider.lifetime(), ProviderLifetime::TestRun);
+        assert!(fuzzing_provider.capabilities().replay_support);
+        assert!(!fuzzing_provider.capabilities().symbolic_constraints);
+    }
+    
+    #[test]
+    fn test_smt_solver_provider() {
+        let mut provider = SmtSolverProvider::new();
+        
+        // Test integer generation
+        let constraints = IntegerConstraints {
+            min_value: Some(0),
+            max_value: Some(100),
+            weights: None,
+            shrink_towards: Some(50),
+        };
+        
+        let value = provider.draw_integer(&constraints).unwrap();
+        assert!(value >= 0 && value <= 100);
+        
+        // Test observability
+        let observation = provider.observe_test_case();
+        assert!(observation.contains_key("solver_status"));
+        assert!(observation.contains_key("symbolic_values_count"));
+        
+        // Test span tracking
+        provider.span_start(0x12345678);
+        provider.span_end(false);
+    }
+    
+    #[test]
+    fn test_fuzzing_provider() {
+        let mut provider = FuzzingProvider::new();
+        
+        // Test integer generation with interesting values
+        let constraints = IntegerConstraints {
+            min_value: Some(-100),
+            max_value: Some(100),
+            weights: None,
+            shrink_towards: Some(0),
+        };
+        
+        let value = provider.draw_integer(&constraints).unwrap();
+        assert!(value >= -100 && value <= 100);
+        
+        // Test corpus replay
+        let choices = vec![
+            ChoiceValue::Bytes(vec![1, 2, 3, 4]),
+            ChoiceValue::String("test".to_string()),
+        ];
+        
+        assert!(provider.replay_choices(&choices).is_ok());
+        
+        let observation = provider.observe_test_case();
+        assert!(observation.contains_key("corpus_size"));
+        assert_eq!(observation["corpus_size"], serde_json::Value::Number(serde_json::Number::from(2)));
+    }
+    
+    #[test]
+    fn test_provider_error_handling() {
+        let mut provider = SmtSolverProvider::new();
+        
+        // Simulate space exhausted condition
+        provider.space_exhausted = true;
+        
+        let constraints = IntegerConstraints {
+            min_value: Some(0),
+            max_value: Some(100),
+            weights: None,
+            shrink_towards: Some(0),
+        };
+        
+        let result = provider.draw_integer(&constraints);
+        assert!(result.is_err());
+        
+        match result.unwrap_err() {
+            ProviderError::CannotProceed { scope, .. } => {
+                assert_eq!(scope, ProviderScope::Exhausted);
+            },
+            _ => panic!("Expected CannotProceed error"),
+        }
+    }
+    
+    #[test]
+    fn test_interval_set() {
+        let ascii_set = IntervalSet::ascii();
+        assert!(ascii_set.contains(65)); // 'A'
+        assert!(ascii_set.contains(97)); // 'a'
+        assert!(!ascii_set.contains(1));  // Control character
+        
+        let char_set = IntervalSet::from_chars("abc");
+        assert!(char_set.contains(97)); // 'a'
+        assert!(char_set.contains(98)); // 'b'
+        assert!(char_set.contains(99)); // 'c'
+        assert!(!char_set.contains(100)); // 'd'
+    }
+    
+    #[test]
+    fn test_provider_capabilities() {
+        let default_caps = BackendCapabilities::default();
+        assert!(!default_caps.avoid_realization);
+        assert!(!default_caps.add_observability_callback);
+        assert!(!default_caps.structural_awareness);
+        assert!(!default_caps.replay_support);
+        assert!(!default_caps.symbolic_constraints);
+        
+        let enhanced_caps = BackendCapabilities {
+            avoid_realization: true,
+            add_observability_callback: true,
+            structural_awareness: true,
+            replay_support: true,
+            symbolic_constraints: true,
+        };
+        
+        assert!(enhanced_caps.avoid_realization);
+        assert!(enhanced_caps.add_observability_callback);
+        assert!(enhanced_caps.structural_awareness);
+        assert!(enhanced_caps.replay_support);
+        assert!(enhanced_caps.symbolic_constraints);
+    }
+    
+    #[test]
+    fn test_test_case_context() {
+        let mut context = SmtTestCaseContext {
+            provider_id: "test_id".to_string(),
+            start_time: std::time::SystemTime::now(),
+        };
+        
+        context.enter_test_case();
+        context.exit_test_case(true);
+        
+        let data = context.get_context_data();
+        assert!(data.contains_key("provider_id"));
+        assert_eq!(data["provider_id"], serde_json::Value::String("test_id".to_string()));
+    }
+    
+    #[test]
+    fn test_global_provider_functions() {
+        // Test global registry functions
+        register_specialized_backends();
+        
+        let provider_info = get_global_provider_info();
+        assert!(provider_info.contains_key("random"));
+        assert!(provider_info.contains_key("hypothesis"));
+        assert!(provider_info.contains_key("smt"));
+        assert!(provider_info.contains_key("fuzzing"));
+        
+        // Test global provider creation
+        let random_provider = create_global_provider("random");
+        assert!(random_provider.is_ok());
+        
+        let invalid_provider = create_global_provider("nonexistent");
+        assert!(invalid_provider.is_err());
+    }
+    
+    #[test]
+    fn test_legacy_compatibility() {
+        let mut provider = RandomProvider::new();
+        let mut rng = ChaCha8Rng::seed_from_u64(42);
+        
+        let constraints = IntegerConstraints {
+            min_value: Some(0),
+            max_value: Some(100),
+            weights: None,
+            shrink_towards: Some(0),
+        };
+        
+        // Test legacy methods still work
+        let value = provider.generate_integer(&mut rng, &constraints).unwrap();
+        assert!(value >= 0 && value <= 100);
+        
+        let bool_constraints = BooleanConstraints { p: 0.5 };
+        let bool_value = provider.generate_boolean(&mut rng, &bool_constraints).unwrap();
+        assert!(bool_value == true || bool_value == false);
     }
 
     #[test]

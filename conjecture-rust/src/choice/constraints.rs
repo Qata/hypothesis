@@ -288,6 +288,10 @@ impl IntervalSet {
     pub fn is_empty(&self) -> bool {
         self.intervals.is_empty()
     }
+    
+    pub fn contains(&self, codepoint: u32) -> bool {
+        self.intervals.iter().any(|(start, end)| codepoint >= *start && codepoint <= *end)
+    }
 }
 
 impl Default for IntervalSet {

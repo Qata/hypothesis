@@ -92,6 +92,71 @@ impl PrimitiveProvider for LifecycleTestProvider {
         crate::providers::ProviderLifetime::TestCase
     }
     
+    fn draw_boolean(&mut self, _p: f64) -> Result<bool, crate::providers::ProviderError> {
+        if self.index < self.values.len() {
+            if let ChoiceValue::Boolean(val) = &self.values[self.index] {
+                self.index += 1;
+                Ok(*val)
+            } else {
+                Err(crate::providers::ProviderError::InvalidChoice("Type mismatch".to_string()))
+            }
+        } else {
+            Ok(true)
+        }
+    }
+    
+    fn draw_integer(&mut self, _constraints: &IntegerConstraints) -> Result<i128, crate::providers::ProviderError> {
+        if self.index < self.values.len() {
+            if let ChoiceValue::Integer(val) = &self.values[self.index] {
+                self.index += 1;
+                Ok(*val)
+            } else {
+                Err(crate::providers::ProviderError::InvalidChoice("Type mismatch".to_string()))
+            }
+        } else {
+            Ok(42)
+        }
+    }
+    
+    fn draw_float(&mut self, _constraints: &FloatConstraints) -> Result<f64, crate::providers::ProviderError> {
+        if self.index < self.values.len() {
+            if let ChoiceValue::Float(val) = &self.values[self.index] {
+                self.index += 1;
+                Ok(*val)
+            } else {
+                Err(crate::providers::ProviderError::InvalidChoice("Type mismatch".to_string()))
+            }
+        } else {
+            Ok(3.14)
+        }
+    }
+    
+    fn draw_string(&mut self, _intervals: &crate::choice::IntervalSet, _min_size: usize, _max_size: usize) -> Result<String, crate::providers::ProviderError> {
+        if self.index < self.values.len() {
+            if let ChoiceValue::String(val) = &self.values[self.index] {
+                self.index += 1;
+                Ok(val.clone())
+            } else {
+                Err(crate::providers::ProviderError::InvalidChoice("Type mismatch".to_string()))
+            }
+        } else {
+            Ok("test".to_string())
+        }
+    }
+    
+    fn draw_bytes(&mut self, _min_size: usize, _max_size: usize) -> Result<Vec<u8>, crate::providers::ProviderError> {
+        if self.index < self.values.len() {
+            if let ChoiceValue::Bytes(val) = &self.values[self.index] {
+                self.index += 1;
+                Ok(val.clone())
+            } else {
+                Err(crate::providers::ProviderError::InvalidChoice("Type mismatch".to_string()))
+            }
+        } else {
+            Ok(vec![1, 2, 3])
+        }
+    }
+    
     fn generate_integer(&mut self, _rng: &mut rand_chacha::ChaCha8Rng, _constraints: &IntegerConstraints) -> Result<i128, DrawError> {
         if self.index < self.values.len() {
             if let ChoiceValue::Integer(val) = &self.values[self.index] {

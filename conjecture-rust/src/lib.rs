@@ -7,6 +7,7 @@
 
 pub mod choice;
 pub mod data;
+pub mod data_helper;
 pub mod datatree;
 pub mod datatree_enhanced_navigation;
 pub mod choice_sequence_management;
@@ -31,6 +32,9 @@ pub mod persistence;
 pub mod targeting;
 pub mod float_performance_test;
 pub mod float_encoding_export;
+
+#[cfg(test)]
+mod provider_verification_test;
 
 // Python FFI Integration modules (conditionally compiled)
 #[cfg(feature = "python-ffi")]
