@@ -14,6 +14,8 @@ pub mod shrinking;
 pub mod engine;
 pub mod engine_orchestrator;
 pub mod engine_orchestrator_provider_type_integration;
+pub mod conjecture_data_lifecycle_management;
+pub mod conjecture_data_lifecycle_comprehensive_capability_tests;
 pub mod provider_integration_demo;
 pub mod providers;
 pub mod persistence;

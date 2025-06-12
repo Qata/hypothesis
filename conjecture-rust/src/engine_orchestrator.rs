@@ -22,6 +22,9 @@ use crate::engine_orchestrator_provider_type_integration::{
     ProviderTypeManager, ProviderTypeError, EnhancedPrimitiveProvider
 };
 use crate::persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseIntegration};
+use crate::conjecture_data_lifecycle_management::{
+    ConjectureDataLifecycleManager, LifecycleConfig, LifecycleState, LifecycleError
+};
 
 /// Maximum number of examples to generate before stopping
 const DEFAULT_MAX_EXAMPLES: usize = 100;
@@ -329,6 +332,8 @@ pub struct EngineOrchestrator {
     provider_manager: ProviderTypeManager,
     /// Legacy provider context (deprecated)
     provider_context: ProviderContext,
+    /// ConjectureData lifecycle manager for comprehensive lifecycle management
+    lifecycle_manager: ConjectureDataLifecycleManager,
     /// Current execution phase
     current_phase: ExecutionPhase,
     /// Execution statistics
@@ -397,11 +402,23 @@ impl EngineOrchestrator {
             None
         };
         
+        // Initialize lifecycle manager with configuration
+        let lifecycle_config = LifecycleConfig {
+            debug_logging: config.debug_logging,
+            max_choices: Some(10000), // Default limit
+            execution_timeout_ms: Some(30000), // 30 second timeout
+            enable_forced_values: true,
+            enable_replay_validation: true,
+            use_hex_notation: true,
+        };
+        let lifecycle_manager = ConjectureDataLifecycleManager::new(lifecycle_config);
+        
         Self {
             config,
             test_function,
             provider_manager,
             provider_context,
+            lifecycle_manager,
             current_phase: ExecutionPhase::Initialize,
             statistics: ExecutionStatistics::default(),
             health_check_state: Some(HealthCheckState::default()),
@@ -611,31 +628,70 @@ impl EngineOrchestrator {
                 continue;
             }
             
-            // Create ConjectureData for replay
-            let mut replay_data = ConjectureData::for_choices(
+            // Create ConjectureData for replay using lifecycle manager
+            let replay_id = match self.lifecycle_manager.create_for_replay(
                 &choices,
                 None, // observer
                 None, // provider  
                 None, // random generator
-            );
+            ) {
+                Ok(id) => id,
+                Err(e) => {
+                    eprintln!("DEBUG: Failed to create replay instance: {}", e);
+                    failed_replays += 1;
+                    continue;
+                }
+            };
+            
+            // Transition to executing state
+            if let Err(e) = self.lifecycle_manager.transition_state(replay_id, LifecycleState::Executing) {
+                eprintln!("DEBUG: Failed to transition replay instance to executing: {}", e);
+                failed_replays += 1;
+                continue;
+            }
             
             // Execute the test function with the replay data
-            match (self.test_function)(&mut replay_data) {
+            let execution_result = if let Some(replay_data) = self.lifecycle_manager.get_instance_mut(replay_id) {
+                (self.test_function)(replay_data)
+            } else {
+                eprintln!("DEBUG: Failed to get replay instance {}", replay_id);
+                failed_replays += 1;
+                continue;
+            };
+            
+            match execution_result {
                 Ok(()) => {
                     eprintln!("DEBUG: Example {} replayed successfully", i);
                     successful_replays += 1;
                     
+                    // Transition to completed state
+                    if let Err(e) = self.lifecycle_manager.transition_state(replay_id, LifecycleState::Completed) {
+                        eprintln!("DEBUG: Failed to transition to completed state: {}", e);
+                    }
+                    
                     // If the example is interesting, save it
-                    if replay_data.status != Status::Valid {
-                        let example_key = format!("replay_{}", i);
-                        let result = replay_data.as_result();
-                        self.interesting_examples.insert(example_key, result);
+                    if let Some(replay_data) = self.lifecycle_manager.get_instance(replay_id) {
+                        if replay_data.status != Status::Valid {
+                            let example_key = format!("replay_{}", i);
+                            let result = replay_data.as_result();
+                            self.interesting_examples.insert(example_key, result);
+                        }
                     }
                 }
                 Err(e) => {
                     eprintln!("DEBUG: Example {} replay failed: {:?}", i, e);
                     failed_replays += 1;
+                    
+                    // Transition to failed state
+                    if let Err(transition_err) = self.lifecycle_manager.transition_state(replay_id, LifecycleState::ReplayFailed) {
+                        eprintln!("DEBUG: Failed to transition to failed state: {}", transition_err);
+                    }
                 }
+            }
+            
+            // Cleanup the replay instance
+            if let Err(e) = self.lifecycle_manager.cleanup_instance(replay_id) {
+                eprintln!("DEBUG: Failed to cleanup replay instance: {}", e);
             }
             
             self.call_count += 1;
@@ -936,6 +992,10 @@ impl EngineOrchestrator {
         // Provider Integration: Clean up provider context
         self.cleanup_provider_context();
 
+        // Lifecycle Management: Cleanup all ConjectureData instances
+        let cleaned_instances = self.lifecycle_manager.cleanup_all();
+        eprintln!("LIFECYCLE_MANAGER: Cleaned up {} ConjectureData instances during orchestrator cleanup", cleaned_instances);
+
         // Finalize statistics
         if let Some(reason) = &self.exit_reason {
             self.statistics.stopped_because = Some(reason.description(self.config.max_examples));
@@ -1171,6 +1231,107 @@ impl EngineOrchestrator {
         }
 
         eprintln!("PROVIDER TYPE SYSTEM: Provider context cleanup completed");
+    }
+
+    // =======================================
+    // ConjectureData Lifecycle Management Capability
+    // =======================================
+
+    /// Create a new ConjectureData instance with lifecycle management
+    pub fn create_conjecture_data(
+        &mut self,
+        seed: u64,
+        observer: Option<Box<dyn DataObserver>>,
+        provider: Option<Box<dyn PrimitiveProvider>>,
+    ) -> Result<u64, OrchestrationError> {
+        self.lifecycle_manager.create_instance(seed, observer, provider)
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Failed to create ConjectureData instance: {}", e),
+            })
+    }
+
+    /// Create ConjectureData for replay with comprehensive lifecycle management
+    pub fn create_conjecture_data_for_replay(
+        &mut self,
+        choices: &[ChoiceNode],
+        observer: Option<Box<dyn DataObserver>>,
+        provider: Option<Box<dyn PrimitiveProvider>>,
+        random: Option<rand_chacha::ChaCha8Rng>,
+    ) -> Result<u64, OrchestrationError> {
+        self.lifecycle_manager.create_for_replay(choices, observer, provider, random)
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Failed to create replay ConjectureData instance: {}", e),
+            })
+    }
+
+    /// Get mutable access to a ConjectureData instance
+    pub fn get_conjecture_data_mut(&mut self, instance_id: u64) -> Option<&mut ConjectureData> {
+        self.lifecycle_manager.get_instance_mut(instance_id)
+    }
+
+    /// Get immutable access to a ConjectureData instance
+    pub fn get_conjecture_data(&self, instance_id: u64) -> Option<&ConjectureData> {
+        self.lifecycle_manager.get_instance(instance_id)
+    }
+
+    /// Transition a ConjectureData instance to a new lifecycle state
+    pub fn transition_conjecture_data_state(&mut self, instance_id: u64, new_state: LifecycleState) -> Result<(), OrchestrationError> {
+        self.lifecycle_manager.transition_state(instance_id, new_state)
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Failed to transition lifecycle state: {}", e),
+            })
+    }
+
+    /// Integrate forced values into a ConjectureData instance
+    pub fn integrate_forced_values(
+        &mut self,
+        instance_id: u64,
+        forced_values: Vec<(usize, crate::choice::ChoiceValue)>,
+    ) -> Result<(), OrchestrationError> {
+        self.lifecycle_manager.integrate_forced_values(instance_id, forced_values)
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Failed to integrate forced values: {}", e),
+            })
+    }
+
+    /// Validate replay mechanism for a choice sequence
+    pub fn validate_replay_mechanism(
+        &mut self,
+        choices: &[ChoiceNode],
+    ) -> Result<bool, OrchestrationError> {
+        let test_function = &self.test_function;
+        self.lifecycle_manager.validate_replay(choices, test_function)
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Failed to validate replay mechanism: {}", e),
+            })
+    }
+
+    /// Cleanup a specific ConjectureData instance
+    pub fn cleanup_conjecture_data(&mut self, instance_id: u64) -> Result<(), OrchestrationError> {
+        self.lifecycle_manager.cleanup_instance(instance_id)
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Failed to cleanup ConjectureData instance: {}", e),
+            })
+    }
+
+    /// Get lifecycle management metrics
+    pub fn get_lifecycle_metrics(&self) -> &crate::conjecture_data_lifecycle_management::LifecycleMetrics {
+        self.lifecycle_manager.get_metrics()
+    }
+
+    /// Get active ConjectureData instance count
+    pub fn active_conjecture_data_count(&self) -> usize {
+        self.lifecycle_manager.active_instance_count()
+    }
+
+    /// Generate comprehensive lifecycle status report
+    pub fn generate_lifecycle_status_report(&self) -> String {
+        self.lifecycle_manager.generate_status_report()
+    }
+
+    /// Check if a ConjectureData instance is in a valid state
+    pub fn is_conjecture_data_valid(&self, instance_id: u64) -> bool {
+        self.lifecycle_manager.is_instance_valid(instance_id)
     }
 }
 

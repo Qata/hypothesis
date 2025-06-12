@@ -864,9 +864,19 @@ impl ConjectureData {
         self.index = 0; // Reset index for prefix replay
     }
     
+    /// Get the prefix choices for inspection
+    pub fn get_prefix(&self) -> &[ChoiceNode] {
+        &self.prefix
+    }
+    
     /// Set the provider for this ConjectureData
     pub fn set_provider(&mut self, provider: Box<dyn PrimitiveProvider>) {
         self.provider = Some(provider);
+    }
+    
+    /// Set the observer for this ConjectureData
+    pub fn set_observer(&mut self, observer: Box<dyn DataObserver>) {
+        self.observer = Some(observer);
     }
     
     /// Create ConjectureData with a specific provider
@@ -2000,12 +2010,6 @@ impl ConjectureData {
         self.depth -= 1;
     }
     
-    /// Set an observer for tracking choice draws
-    /// This enables DataTree integration and other observability features
-    pub fn set_observer(&mut self, observer: Box<dyn DataObserver>) {
-        println!("DATA DEBUG: Setting observer for choice tracking ");
-        self.observer = Some(observer);
-    }
     
     /// Set a TreeRecordingObserver specifically
     /// This provides additional integration methods for tree-based testing

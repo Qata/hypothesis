@@ -41,6 +41,14 @@ path = "simple_capability_test.rs"
 name = "provider_type_system_capability_demo"
 path = "provider_type_system_capability_demo.rs"
 
+[[bin]]
+name = "conjecture_data_lifecycle_capability_demo"
+path = "conjecture_data_lifecycle_capability_demo.rs"
+
+[[bin]]
+name = "test_lifecycle_implementation"
+path = "test_lifecycle_implementation.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"
