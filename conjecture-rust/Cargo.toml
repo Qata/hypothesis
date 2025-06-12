@@ -69,6 +69,10 @@ path = "test_enhanced_provider_system.rs"
 name = "provider_lifecycle_demo"
 path = "provider_lifecycle_demo.rs"
 
+[[bin]]
+name = "test_advanced_error_handling_standalone"
+path = "test_advanced_error_handling_standalone.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"

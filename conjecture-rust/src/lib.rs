@@ -42,6 +42,9 @@ pub mod provider_system_coverage_guided_generation_integration_comprehensive_cap
 pub mod provider_lifecycle_management_comprehensive_capability_tests;
 #[cfg(test)]
 pub mod provider_system_template_based_generation_comprehensive_capability_tests;
+pub mod provider_system_advanced_error_handling_and_fallback;
+#[cfg(test)]
+pub mod provider_system_advanced_error_handling_and_fallback_comprehensive_capability_tests;
 #[cfg(all(test, feature = "python-ffi"))]
 pub mod provider_lifecycle_management_comprehensive_pyo3_ffi_integration_tests;
 
