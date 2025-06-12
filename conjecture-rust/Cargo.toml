@@ -50,6 +50,10 @@ name = "test_lifecycle_implementation"
 path = "test_lifecycle_implementation.rs"
 
 [[bin]]
+name = "test_datatree_capability"
+path = "test_datatree_capability.rs"
+
+[[bin]]
 name = "test_datatree_integration_standalone"
 path = "test_datatree_integration_standalone.rs"
 
