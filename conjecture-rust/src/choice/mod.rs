@@ -75,6 +75,12 @@ mod field_access_system_tests;
 #[cfg(test)]
 mod dfa_basic_test;
 
+#[cfg(test)]
+mod choice_type_system_integration_capability_tests;
+
+#[cfg(test)]
+mod simple_choice_test;
+
 pub use self::advanced_shrinking::{AdvancedShrinkingEngine as NewAdvancedShrinkingEngine, ShrinkResult as NewShrinkResult, ShrinkingMetrics as NewShrinkingMetrics, ChoicePattern, StringPatternType, ShrinkingContext, shrink_duplicated_blocks, shrink_floats_to_integers, shrink_strings_to_more_structured, lexicographic_weight, minimize_individual_choice_at, constraint_repair_shrinking, calculate_sequence_quality};
 pub use self::constraints::*;
 pub use self::dfa_string_generation::{
