@@ -35,6 +35,8 @@ pub mod float_encoding_export;
 
 #[cfg(test)]
 mod provider_verification_test;
+#[cfg(test)]
+pub mod provider_system_coverage_guided_generation_integration_comprehensive_capability_tests;
 
 // Python FFI Integration modules (conditionally compiled)
 #[cfg(feature = "python-ffi")]
