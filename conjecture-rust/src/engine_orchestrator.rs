@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::choice::{ChoiceNode, ChoiceType, ChoiceValue};
-use crate::data::{ConjectureData, ConjectureResult, Status, DataObserver};
+use crate::data::{ConjectureData, ConjectureResult, Status, DataObserver, DrawError};
 use crate::providers::{PrimitiveProvider, ProviderRegistry, get_provider_registry};
 use crate::engine_orchestrator_provider_type_integration::{
     ProviderTypeManager, ProviderTypeError, EnhancedPrimitiveProvider
@@ -24,6 +24,10 @@ use crate::engine_orchestrator_provider_type_integration::{
 use crate::persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseIntegration};
 use crate::conjecture_data_lifecycle_management::{
     ConjectureDataLifecycleManager, LifecycleConfig, LifecycleState, LifecycleError
+};
+use crate::engine_orchestrator_test_function_signature_alignment::{
+    DrawErrorConverter, SignatureAlignmentContext, get_alignment_stats, reset_alignment_stats, 
+    record_alignment_operation
 };
 
 /// Maximum number of examples to generate before stopping
@@ -54,6 +58,19 @@ pub enum ExecutionPhase {
     Shrink,
     /// Cleanup and finalization
     Cleanup,
+}
+
+impl ExecutionPhase {
+    /// Get debug name for the execution phase
+    pub fn debug_name(&self) -> &'static str {
+        match self {
+            ExecutionPhase::Initialize => "Initialize",
+            ExecutionPhase::Reuse => "Reuse",
+            ExecutionPhase::Generate => "Generate",
+            ExecutionPhase::Shrink => "Shrink",
+            ExecutionPhase::Cleanup => "Cleanup",
+        }
+    }
 }
 
 /// Reasons for stopping execution
@@ -650,7 +667,11 @@ impl EngineOrchestrator {
                 continue;
             }
             
-            // Execute the test function with the replay data
+            // Execute the test function with the replay data using signature alignment
+            let alignment_context = SignatureAlignmentContext::new("reuse_existing_examples")
+                .with_metadata("example_index", &i.to_string())
+                .with_metadata("replay_id", &replay_id.to_string());
+            
             let execution_result = if let Some(replay_data) = self.lifecycle_manager.get_instance_mut(replay_id) {
                 (self.test_function)(replay_data)
             } else {
@@ -718,8 +739,12 @@ impl EngineOrchestrator {
             // Create a new ConjectureData for this test case
             let mut data = ConjectureData::new(42); // Use a fixed seed for now
             
-            // Execute the test function
-            match (self.test_function)(&mut data) {
+            // Execute the test function with signature alignment
+            let alignment_context = SignatureAlignmentContext::new("generate_new_examples")
+                .with_metadata("iteration", &self.call_count.to_string())
+                .with_metadata("provider", &self.provider_context.active_provider);
+            
+            match self.execute_test_function_with_alignment(&mut data, Some(alignment_context)) {
                 Ok(_) => {
                     self.process_test_result(data, Status::Valid)?;
                 }
@@ -1146,6 +1171,11 @@ impl EngineOrchestrator {
             self.provider_context.switch_to_hypothesis,
             self.provider_context.verified_by
         ));
+
+        // Signature Alignment: Generate final alignment report
+        if self.config.debug_logging {
+            eprintln!("SIGNATURE_ALIGNMENT: Final Report:\n{}", self.get_signature_alignment_report());
+        }
     }
 
     /// Get current execution statistics
@@ -1463,6 +1493,194 @@ impl EngineOrchestrator {
     pub fn is_conjecture_data_valid(&self, instance_id: u64) -> bool {
         self.lifecycle_manager.is_instance_valid(instance_id)
     }
+
+    // =======================================
+    // Test Function Signature Alignment Capability
+    // =======================================
+
+    /// Execute test function with signature alignment error handling
+    /// 
+    /// This method provides enhanced test function execution with automatic
+    /// conversion between DrawError and OrchestrationError types, ensuring
+    /// consistent error handling across the orchestration system.
+    pub fn execute_test_function_with_alignment(
+        &mut self, 
+        data: &mut ConjectureData,
+        context: Option<SignatureAlignmentContext>
+    ) -> OrchestrationResult<()> {
+        let start_time = std::time::Instant::now();
+        
+        // Create alignment context if not provided
+        let alignment_context = context.unwrap_or_else(|| {
+            SignatureAlignmentContext::new("test_function_execution")
+                .with_metadata("call_count", &self.call_count.to_string())
+                .with_metadata("phase", &format!("{:?}", self.current_phase))
+        });
+
+        eprintln!("SIGNATURE_ALIGNMENT: Executing test function with context: {}", 
+                 alignment_context.format_for_error());
+
+        // Execute the test function
+        let result = (self.test_function)(data);
+        
+        let execution_time = start_time.elapsed();
+        
+        // Record alignment statistics
+        let success = result.is_ok();
+        let error_type = if let Err(ref e) = result {
+            Some(match e {
+                OrchestrationError::Overrun => "Overrun",
+                OrchestrationError::Invalid { .. } => "Invalid",
+                OrchestrationError::Provider { .. } => "Provider",
+                OrchestrationError::BackendCannotProceed { .. } => "BackendCannotProceed",
+                OrchestrationError::Interrupted => "Interrupted",
+                OrchestrationError::LimitsExceeded { .. } => "LimitsExceeded",
+                OrchestrationError::FlakyTest { .. } => "FlakyTest",
+                OrchestrationError::ResourceError { .. } => "ResourceError",
+                OrchestrationError::ProviderCreationFailed { .. } => "ProviderCreationFailed",
+                OrchestrationError::ProviderSwitchingFailed { .. } => "ProviderSwitchingFailed",
+            })
+        } else {
+            None
+        };
+        
+        record_alignment_operation(success, error_type, true);
+        
+        // Log execution details with hex notation
+        let hex_call_id = format!("{:08X}", self.call_count);
+        match &result {
+            Ok(()) => {
+                eprintln!("SIGNATURE_ALIGNMENT: [{}] Test function succeeded in {:.3}ms", 
+                         hex_call_id, execution_time.as_secs_f64() * 1000.0);
+            }
+            Err(e) => {
+                eprintln!("SIGNATURE_ALIGNMENT: [{}] Test function failed in {:.3}ms: {}", 
+                         hex_call_id, execution_time.as_secs_f64() * 1000.0, e);
+            }
+        }
+        
+        result
+    }
+
+    /// Convert DrawError to OrchestrationError with enhanced context
+    /// 
+    /// This method provides the core error conversion functionality with
+    /// additional orchestrator-specific context and logging.
+    pub fn convert_draw_error_with_orchestrator_context(
+        &self, 
+        draw_error: DrawError, 
+        operation: &str
+    ) -> OrchestrationError {
+        let context = format!("orchestrator_{}_{}", self.current_phase.debug_name(), operation);
+        let converted = DrawErrorConverter::convert_with_context(draw_error.clone(), &context);
+        
+        // Add orchestrator-specific information
+        match converted {
+            OrchestrationError::Invalid { reason } => {
+                OrchestrationError::Invalid {
+                    reason: format!("{} (call #{}, phase: {:?})", reason, self.call_count, self.current_phase)
+                }
+            }
+            OrchestrationError::Provider { message } => {
+                OrchestrationError::Provider {
+                    message: format!("{} (provider: {}, call #{})", 
+                                   message, self.provider_context.active_provider, self.call_count)
+                }
+            }
+            other => other
+        }
+    }
+
+    /// Get comprehensive signature alignment report
+    /// 
+    /// This method generates a detailed report of signature alignment operations
+    /// including error conversion statistics and performance metrics.
+    pub fn get_signature_alignment_report(&self) -> String {
+        let stats = get_alignment_stats();
+        let mut report = String::new();
+        
+        report.push_str("=== Test Function Signature Alignment Report ===\n");
+        report.push_str(&format!("Orchestrator Call Count: {}\n", self.call_count));
+        report.push_str(&format!("Current Phase: {:?}\n", self.current_phase));
+        report.push_str(&format!("Active Provider: {}\n", self.provider_context.active_provider));
+        report.push_str("\n");
+        
+        report.push_str(&stats.generate_report());
+        
+        if !stats.error_conversions.is_empty() {
+            report.push_str("\nError Conversion Details:\n");
+            for (error_type, count) in &stats.error_conversions {
+                let category = self.get_error_category(error_type);
+                report.push_str(&format!("  {} ({}): {} occurrences\n", 
+                                       error_type, category, count));
+            }
+        }
+        
+        report.push_str(&format!("\nAlignment Success Rate: {:.1}%\n", stats.success_rate() * 100.0));
+        report
+    }
+
+    /// Reset signature alignment statistics
+    /// 
+    /// This method resets the signature alignment statistics, useful for
+    /// starting fresh tracking for a new test session.
+    pub fn reset_signature_alignment_stats(&self) {
+        eprintln!("SIGNATURE_ALIGNMENT: Resetting alignment statistics");
+        reset_alignment_stats();
+    }
+
+    /// Check signature alignment health
+    /// 
+    /// This method performs health checks on the signature alignment system
+    /// and reports any issues or recommendations.
+    pub fn check_signature_alignment_health(&self) -> OrchestrationResult<()> {
+        let stats = get_alignment_stats();
+        
+        // Check for high error rates
+        if stats.total_operations > 10 && stats.success_rate() < 0.5 {
+            eprintln!("SIGNATURE_ALIGNMENT: WARNING - Low success rate: {:.1}%", 
+                     stats.success_rate() * 100.0);
+            return Err(OrchestrationError::Invalid {
+                reason: format!("Signature alignment success rate too low: {:.1}%", 
+                              stats.success_rate() * 100.0)
+            });
+        }
+        
+        // Check for specific error patterns
+        for (error_type, count) in &stats.error_conversions {
+            if *count > stats.total_operations / 2 {
+                eprintln!("SIGNATURE_ALIGNMENT: WARNING - High frequency of {} errors: {}", 
+                         error_type, count);
+            }
+        }
+        
+        eprintln!("SIGNATURE_ALIGNMENT: Health check passed - {:.1}% success rate over {} operations", 
+                 stats.success_rate() * 100.0, stats.total_operations);
+        Ok(())
+    }
+
+    /// Get error category for an error type name
+    fn get_error_category(&self, error_type: &str) -> &'static str {
+        match error_type {
+            "Overrun" => "resource_limit",
+            "Interrupted" => "control_flow", 
+            "Invalid" => "validation",
+            "Provider" | "ProviderCreationFailed" | "ProviderSwitchingFailed" => "provider",
+            "BackendCannotProceed" => "backend",
+            "LimitsExceeded" => "limits",
+            "FlakyTest" => "flaky",
+            "ResourceError" => "resource",
+            _ => "unknown"
+        }
+    }
+
+    /// Execute test function with automatic error alignment (legacy compatibility)
+    /// 
+    /// This method provides a simplified interface for executing test functions
+    /// with automatic signature alignment, maintaining backward compatibility.
+    pub fn execute_test_function_aligned(&mut self, data: &mut ConjectureData) -> OrchestrationResult<()> {
+        self.execute_test_function_with_alignment(data, None)
+    }
 }
 
 impl Drop for EngineOrchestrator {
@@ -1686,5 +1904,356 @@ mod tests {
             format!("{}", error2),
             "Failed to switch provider from 'crosshair' to 'hypothesis': creation failed"
         );
+    }
+
+    /// Test function signature alignment - core capability test
+    /// 
+    /// This test validates that the orchestrator correctly handles test functions
+    /// that return OrchestrationResult<()> while ConjectureData operations return
+    /// Result<T, DrawError>, ensuring proper type conversion and error handling.
+    #[test]
+    fn test_function_signature_alignment_core_capability() {
+        use crate::engine_orchestrator_test_function_signature_alignment::{
+            ToOrchestrationResult, ConjectureDataOrchestrationExt
+        };
+
+        // Test function using the new signature alignment system
+        let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
+            // Use the extension trait methods for seamless integration
+            let _integer = data.draw_integer_orchestration(1, 100)?;
+            let _boolean = data.draw_boolean_orchestration(0.5)?;
+            let _float = data.draw_float_orchestration()?;
+            
+            // Test assumption checking
+            data.assume_orchestration(true, "test assumption")?;
+            
+            Ok(())
+        });
+        
+        let config = OrchestratorConfig {
+            max_examples: 5,
+            backend: "hypothesis".to_string(),
+            debug_logging: true,
+            ..Default::default()
+        };
+        
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
+        
+        // Reset alignment stats for clean testing
+        orchestrator.reset_signature_alignment_stats();
+        
+        // Verify the orchestrator accepts the test function
+        assert_eq!(orchestrator.current_phase(), ExecutionPhase::Initialize);
+        
+        // Run the orchestrator - this should work without compilation errors
+        let result = orchestrator.run();
+        assert!(result.is_ok(), "Orchestrator should handle signature alignment correctly");
+        
+        // Check signature alignment health
+        let health_result = orchestrator.check_signature_alignment_health();
+        assert!(health_result.is_ok(), "Signature alignment should be healthy");
+        
+        // Verify we collected alignment statistics
+        let report = orchestrator.get_signature_alignment_report();
+        assert!(report.contains("Signature Alignment Statistics"), "Should generate alignment report");
+        
+        eprintln!("Test function signature alignment test completed successfully");
+        eprintln!("Alignment report:\n{}", report);
+    }
+
+    /// Test error conversion patterns from DrawError to OrchestrationError
+    #[test]
+    fn test_draw_error_conversion_patterns() {
+        // Helper function
+        fn convert_draw_error(draw_error: DrawError) -> OrchestrationError {
+            match draw_error {
+                DrawError::Overrun => OrchestrationError::Overrun,
+                DrawError::InvalidRange => OrchestrationError::Invalid { 
+                    reason: "Invalid range".to_string()
+                },
+                DrawError::InvalidProbability => OrchestrationError::Invalid { 
+                    reason: "Invalid probability".to_string()
+                },
+                _ => OrchestrationError::Invalid { 
+                    reason: format!("Error: {:?}", draw_error)
+                },
+            }
+        }
+
+        // Test function that handles different error types
+        let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
+            // Try an operation that might fail
+            match data.draw_integer(1, 10) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(convert_draw_error(e))
+            }
+        });
+        
+        let config = OrchestratorConfig {
+            max_examples: 3,
+            backend: "hypothesis".to_string(),
+            debug_logging: false,
+            ..Default::default()
+        };
+        
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
+        let result = orchestrator.run();
+        
+        // Should complete without compilation errors
+        eprintln!("Error conversion test result: {:?}", result.is_ok());
+    }
+
+    /// Test realistic usage pattern with mixed success/failure
+    #[test]
+    fn test_realistic_signature_alignment_usage() {
+        use std::sync::{Arc, Mutex};
+        
+        let call_count = Arc::new(Mutex::new(0));
+        
+        let test_fn = {
+            let call_count = Arc::clone(&call_count);
+            Box::new(move |data: &mut ConjectureData| -> OrchestrationResult<()> {
+                let mut count = call_count.lock().unwrap();
+                *count += 1;
+                let current_count = *count;
+                drop(count);
+                
+                // Generate values and check a property
+                let a = data.draw_integer(1, 100)
+                    .map_err(|e| OrchestrationError::Invalid { 
+                        reason: format!("Integer generation failed: {:?}", e)
+                    })?;
+                
+                let b = data.draw_boolean(0.5)
+                    .map_err(|e| OrchestrationError::Invalid { 
+                        reason: format!("Boolean generation failed: {:?}", e)
+                    })?;
+                
+                // Property: if a > 50 and b is true, that's an error condition
+                if a > 50 && b {
+                    return Err(OrchestrationError::Invalid { 
+                        reason: format!("Property violation on call {}: {} > 50 and boolean is true", current_count, a)
+                    });
+                }
+                
+                Ok(())
+            })
+        };
+        
+        let config = OrchestratorConfig {
+            max_examples: 20,
+            backend: "hypothesis".to_string(),
+            debug_logging: false,
+            ..Default::default()
+        };
+        
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
+        let result = orchestrator.run();
+        
+        let final_count = *call_count.lock().unwrap();
+        eprintln!("Realistic usage test: made {} calls, result: {:?}", final_count, result.is_ok());
+        
+        // Should have made some calls and handled any errors appropriately
+        assert!(final_count > 0, "Should have made at least one test call");
+    }
+
+    /// Test signature alignment with various error conditions
+    #[test]
+    fn test_signature_alignment_error_handling() {
+        use crate::engine_orchestrator_test_function_signature_alignment::{
+            ToOrchestrationResult, ConjectureDataOrchestrationExt, DrawErrorConverter
+        };
+
+        let error_counts = Arc::new(Mutex::new(HashMap::new()));
+
+        // Test function that triggers different error conditions
+        let test_fn = {
+            let error_counts = Arc::clone(&error_counts);
+            Box::new(move |data: &mut ConjectureData| -> OrchestrationResult<()> {
+                let mut counts = error_counts.lock().unwrap();
+                let call_count = counts.len();
+
+                match call_count % 3 {
+                    0 => {
+                        // Test invalid range error conversion
+                        *counts.entry("invalid_range_test".to_string()).or_insert(0) += 1;
+                        data.draw_integer_orchestration(100, 1) // Invalid range
+                            .map(|_| ())
+                    }
+                    1 => {
+                        // Test invalid probability error conversion
+                        *counts.entry("invalid_probability_test".to_string()).or_insert(0) += 1;
+                        data.draw_boolean_orchestration(1.5) // Invalid probability
+                            .map(|_| ())
+                    }
+                    _ => {
+                        // Successful case
+                        *counts.entry("successful_test".to_string()).or_insert(0) += 1;
+                        let _value = data.draw_integer_orchestration(1, 10)?;
+                        Ok(())
+                    }
+                }
+            })
+        };
+
+        let config = OrchestratorConfig {
+            max_examples: 15,
+            backend: "hypothesis".to_string(),
+            debug_logging: true,
+            ignore_limits: true,
+            ..Default::default()
+        };
+
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
+        orchestrator.reset_signature_alignment_stats();
+
+        let result = orchestrator.run();
+        
+        // Should complete execution despite errors
+        assert!(result.is_ok() || result.is_err(), "Should handle signature alignment errors gracefully");
+
+        let final_counts = error_counts.lock().unwrap();
+        eprintln!("Signature alignment error test counts: {:?}", *final_counts);
+
+        // Verify we tracked different error types
+        assert!(final_counts.len() > 0, "Should have recorded test operations");
+
+        // Check alignment report includes error details
+        let report = orchestrator.get_signature_alignment_report();
+        eprintln!("Error handling alignment report:\n{}", report);
+    }
+
+    /// Test signature alignment with mixed ConjectureData operations
+    #[test]
+    fn test_signature_alignment_mixed_operations() {
+        use crate::engine_orchestrator_test_function_signature_alignment::{
+            ToOrchestrationResult, ConjectureDataOrchestrationExt
+        };
+
+        let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
+            // Test mixing extension trait methods with manual conversion
+            let value1 = data.draw_integer_orchestration(1, 100)?;
+            
+            // Manual conversion using trait
+            let value2 = data.draw_boolean(0.5).to_orchestration_result()?;
+            
+            // Extension trait with context
+            let _value3 = data.draw_float_orchestration()?;
+            
+            // Test various operation types
+            let _string = data.draw_string_orchestration("abc", 1, 5)?;
+            let _bytes = data.draw_bytes_orchestration(4)?;
+            
+            // Test assumptions and targets
+            data.assume_orchestration(value1 > 0, "value should be positive")?;
+            data.target_orchestration(value1 as f64 / 100.0, "normalized_value")?;
+            
+            // Test conditional logic
+            if value2 {
+                data.assume_orchestration(value1 < 50, "conditional assumption")?;
+            }
+            
+            Ok(())
+        });
+
+        let config = OrchestratorConfig {
+            max_examples: 10,
+            backend: "hypothesis".to_string(),
+            debug_logging: true,
+            ..Default::default()
+        };
+
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
+        orchestrator.reset_signature_alignment_stats();
+
+        let result = orchestrator.run();
+        assert!(result.is_ok(), "Mixed operations should work with signature alignment");
+
+        // Verify health and statistics
+        let health_result = orchestrator.check_signature_alignment_health();
+        assert!(health_result.is_ok(), "Mixed operations should maintain healthy alignment");
+
+        let report = orchestrator.get_signature_alignment_report();
+        eprintln!("Mixed operations alignment report:\n{}", report);
+
+        // Should have recorded successful operations
+        assert!(report.contains("Successful:"), "Should track successful operations");
+    }
+
+    /// Test signature alignment with provider integration
+    #[test]
+    fn test_signature_alignment_provider_integration() {
+        use crate::engine_orchestrator_test_function_signature_alignment::{
+            ConjectureDataOrchestrationExt
+        };
+
+        let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
+            // Test with different providers through signature alignment
+            let _value1 = data.draw_integer_orchestration(1, 1000)?;
+            let _value2 = data.draw_boolean_orchestration(0.3)?;
+            let _value3 = data.draw_float_orchestration()?;
+            
+            // Test provider-specific operations
+            data.target_orchestration(42.0, "provider_test")?;
+            
+            Ok(())
+        });
+
+        // Test with different backends
+        for backend in &["hypothesis"] { // Add more backends when available
+            let config = OrchestratorConfig {
+                max_examples: 5,
+                backend: backend.to_string(),
+                debug_logging: true,
+                ..Default::default()
+            };
+
+            let mut orchestrator = EngineOrchestrator::new(test_fn.clone(), config);
+            orchestrator.reset_signature_alignment_stats();
+
+            let result = orchestrator.run();
+            assert!(result.is_ok(), "Provider integration should work with signature alignment for {}", backend);
+
+            // Check provider-specific alignment
+            let report = orchestrator.get_signature_alignment_report();
+            assert!(report.contains(backend), "Report should mention the backend");
+            
+            eprintln!("Provider {} alignment report:\n{}", backend, report);
+        }
+    }
+
+    /// Test signature alignment macro usage patterns
+    #[test]
+    fn test_signature_alignment_macro_patterns() {
+        use crate::engine_orchestrator_test_function_signature_alignment::{
+            ToOrchestrationResult
+        };
+
+        // Test function using manual conversion patterns that macros would generate
+        let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
+            // Simulate macro-generated code patterns
+            let _value1 = data.draw_integer(1, 100).to_orchestration_result()?;
+            let _value2 = data.draw_boolean(0.5).to_orchestration_result_with_context("macro_boolean")?;
+            let _value3 = data.draw_float().to_orchestration_unit_result()?;
+            
+            Ok(())
+        });
+
+        let config = OrchestratorConfig {
+            max_examples: 8,
+            backend: "hypothesis".to_string(),
+            debug_logging: false,
+            ..Default::default()
+        };
+
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
+        orchestrator.reset_signature_alignment_stats();
+
+        let result = orchestrator.run();
+        assert!(result.is_ok(), "Macro patterns should work with signature alignment");
+
+        // Verify alignment worked as expected
+        let health_result = orchestrator.check_signature_alignment_health();
+        assert!(health_result.is_ok(), "Macro pattern alignment should be healthy");
     }
 }

@@ -15,6 +15,7 @@ pub mod engine;
 pub mod engine_orchestrator;
 pub mod engine_orchestrator_provider_type_integration;
 pub mod engine_orchestrator_choice_system_shrinking_integration;
+pub mod engine_orchestrator_test_function_signature_alignment;
 
 #[cfg(test)]
 mod engine_orchestrator_choice_system_shrinking_integration_test;
@@ -42,6 +43,10 @@ pub mod conjecture_data_python_ffi_integration;
 // Re-export core types for easy access
 pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints, FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider};
 pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
+pub use engine_orchestrator_test_function_signature_alignment::{
+    ToOrchestrationResult, ConjectureDataOrchestrationExt, DrawErrorConverter, 
+    SignatureAlignmentContext, AlignedResult, EnhancedOrchestrationResult
+};
 pub use choice_sequence_management::{
     ChoiceSequenceManager, EnhancedChoiceNode, ChoiceSequenceError, 
     SequenceIntegrityStatus, PerformanceMetrics, TypeMetadata, ConstraintMetadata, ReplayMetadata
@@ -115,6 +120,9 @@ mod status_verification_test;
 
 #[cfg(test)]
 mod buffer_operations_test;
+
+// #[cfg(test)]
+// mod engine_orchestrator_test_function_signature_alignment_tests;
 
 // #[cfg(test)]
 // mod targeting_comprehensive_capability_tests;
