@@ -8,6 +8,7 @@
 pub mod choice;
 pub mod data;
 pub mod datatree;
+pub mod datatree_enhanced_navigation;
 pub mod choice_sequence_management;
 pub mod choice_sequence_integration;
 pub mod shrinking;
@@ -53,6 +54,7 @@ pub use choice_sequence_management::{
     SequenceIntegrityStatus, PerformanceMetrics, TypeMetadata, ConstraintMetadata, ReplayMetadata
 };
 pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
+pub use datatree_enhanced_navigation::{TreeRecordingObserver as EnhancedTreeRecordingObserver, NavigationState, NavigationStats, ChildSelectionStrategy};
 pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
 pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionPhase, ExecutionStatistics, OrchestrationError};

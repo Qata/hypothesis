@@ -96,7 +96,7 @@ pub struct Killed {
 #[derive(Debug)]
 pub struct DataTree {
     /// Root node of the exploration tree
-    root: Arc<TreeNode>,
+    pub root: Arc<TreeNode>,
     
     /// Cache of recently accessed nodes for performance (LRU-style)
     node_cache: HashMap<u64, Arc<TreeNode>>,
@@ -105,7 +105,7 @@ pub struct DataTree {
     max_cache_size: usize,
     
     /// Counter for generating unique node IDs
-    next_node_id: u64,
+    pub next_node_id: u64,
     
     /// Statistics about tree exploration
     pub stats: TreeStats,
@@ -619,7 +619,7 @@ impl DataTree {
     }
     
     /// Calculate exploration weight for a child node
-    fn calculate_exploration_weight(&self, child: &Arc<TreeNode>, depth: usize) -> f64 {
+    pub fn calculate_exploration_weight(&self, child: &Arc<TreeNode>, depth: usize) -> f64 {
         let mut weight = 1.0;
         
         // Favor nodes with fewer children (less explored)
