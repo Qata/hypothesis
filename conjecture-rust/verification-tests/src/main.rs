@@ -9,6 +9,8 @@ use std::process;
 mod python_ffi;
 mod test_runner;
 mod test_cases;
+mod direct_type_test;
+mod float_constraint_python_parity_test;
 
 use test_runner::TestRunner;
 
@@ -36,6 +38,17 @@ fn main() {
 
     println!("🔍 Conjecture Python-Rust Verification Tool");
     println!("============================================");
+    
+    // First run direct Rust-only type tests
+    if let Err(e) = direct_type_test::run_direct_type_tests() {
+        eprintln!("\n❌ Direct type tests failed: {}", e);
+        process::exit(1);
+    }
+    
+    // Run float constraint Python parity verification
+    float_constraint_python_parity_test::verify_float_constraint_python_parity();
+    float_constraint_python_parity_test::verify_qa_issue_resolution();
+    println!();
     
     let mut runner = TestRunner::new(verbose);
     

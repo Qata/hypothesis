@@ -17,7 +17,7 @@ impl PythonInterface {
             // Add the hypothesis-python src directory to Python path
             let sys = PyModule::import(py, "sys")?;
             let path: Bound<'_, PyList> = sys.getattr("path")?.downcast_into()?;
-            path.insert(0, "/home/ch/Develop/hypothesis-conjecture-rust-enhancement/hypothesis-python/src")?;
+            path.insert(0, "/home/ch/Develop/hypothesis/hypothesis-python/src")?;
             
             // Import the choice module
             let choice_module = PyModule::import(py, "hypothesis.internal.conjecture.choice")?;
@@ -130,11 +130,7 @@ impl PythonInterface {
                 dict.set_item("max_value", c.max_value)?;
                 dict.set_item("allow_nan", c.allow_nan)?;
                 
-                if let Some(smallest) = c.smallest_nonzero_magnitude {
-                    dict.set_item("smallest_nonzero_magnitude", smallest)?;
-                } else {
-                    dict.set_item("smallest_nonzero_magnitude", 0.0)?;
-                }
+                dict.set_item("smallest_nonzero_magnitude", c.smallest_nonzero_magnitude)?;
                 
                 Ok(dict.into_any())
             },

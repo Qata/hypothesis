@@ -53,6 +53,11 @@ impl TestRunner {
     /// Run all verification tests
     pub fn run_all_tests(&mut self) -> Result<TestStats, Box<dyn std::error::Error>> {
         let mut stats = TestStats::default();
+        
+        // First run Float Constraint Type System Consistency tests
+        crate::test_cases::run_float_constraint_type_consistency_tests();
+        println!();
+        
         let test_suites = get_all_test_suites();
 
         println!("Running {} test suites...\n", test_suites.len());

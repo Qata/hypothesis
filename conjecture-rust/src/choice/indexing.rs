@@ -81,44 +81,8 @@ fn lex_to_float(lex: u64) -> f64 {
 fn clamp_float(f: f64, constraints: &FloatConstraints) -> f64 {
     debug_log!("FLOAT_CLAMP DEBUG: Clamping float {} with constraints {:?}", f, constraints);
     
-    // Check if value is already valid
-    if is_float_permitted(f, constraints) {
-        debug_log!("FLOAT_CLAMP DEBUG: Float {} already permitted, no clamping needed", f);
-        return f;
-    }
-    
-    // Handle NaN case
-    if f.is_nan() {
-        if constraints.allow_nan {
-            debug_log!("FLOAT_CLAMP DEBUG: NaN allowed, returning NaN");
-            return f;
-        } else {
-            // Map NaN to a valid value within constraints
-            let result = constraints.min_value;
-            debug_log!("FLOAT_CLAMP DEBUG: NaN not allowed, mapping to min_value {}", result);
-            return result;
-        }
-    }
-    
-    // Clamp to range [min_value, max_value]
-    let mut result = f.max(constraints.min_value).min(constraints.max_value);
-    
-    // Apply smallest_nonzero_magnitude constraint
-    let smallest = constraints.smallest_nonzero_magnitude;
-    if smallest > 0.0 {
-        let abs_result = result.abs();
-        if abs_result != 0.0 && abs_result < smallest {
-            // Value is too small, map to smallest allowed magnitude
-            result = if result >= 0.0 {
-                smallest
-            } else {
-                -smallest
-            };
-            
-            // Re-clamp to ensure we're still in range
-            result = result.max(constraints.min_value).min(constraints.max_value);
-        }
-    }
+    // Use the new constraint validation method
+    let result = constraints.clamp(f);
     
     debug_log!("FLOAT_CLAMP DEBUG: Clamped {} to {}", f, result);
     result
@@ -126,23 +90,8 @@ fn clamp_float(f: f64, constraints: &FloatConstraints) -> f64 {
 
 /// Check if a float value is permitted under constraints
 fn is_float_permitted(f: f64, constraints: &FloatConstraints) -> bool {
-    if f.is_nan() {
-        return constraints.allow_nan;
-    }
-    
-    if f < constraints.min_value || f > constraints.max_value {
-        return false;
-    }
-    
-    let smallest = constraints.smallest_nonzero_magnitude;
-    if smallest > 0.0 {
-        let abs_f = f.abs();
-        if abs_f != 0.0 && abs_f < smallest {
-            return false;
-        }
-    }
-    
-    true
+    // Use the new constraint validation method
+    constraints.validate(f)
 }
 
 /// Convert a choice value to its index in the ordering sequence

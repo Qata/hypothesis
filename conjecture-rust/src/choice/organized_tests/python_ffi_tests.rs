@@ -61,11 +61,8 @@ mod python_ffi_verification {
         dict.set_item("max_value", constraints.max_value)?;
         dict.set_item("allow_nan", constraints.allow_nan)?;
         
-        if let Some(smallest) = constraints.smallest_nonzero_magnitude {
-            dict.set_item("smallest_nonzero_magnitude", smallest)?;
-        } else {
-            dict.set_item("smallest_nonzero_magnitude", 0.0)?;
-        }
+        // smallest_nonzero_magnitude is f64, not Option<f64>
+        dict.set_item("smallest_nonzero_magnitude", constraints.smallest_nonzero_magnitude)?;
         
         Ok(dict)
     }
@@ -275,7 +272,7 @@ mod python_ffi_verification {
             min_value: f64::NEG_INFINITY,
             max_value: f64::INFINITY,
             allow_nan: true,
-            smallest_nonzero_magnitude: None,
+            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
         };
         
         Python::with_gil(|py| {
