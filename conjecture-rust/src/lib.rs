@@ -8,6 +8,8 @@
 pub mod choice;
 pub mod data;
 pub mod datatree;
+pub mod choice_sequence_management;
+pub mod choice_sequence_integration;
 pub mod shrinking;
 pub mod engine;
 pub mod engine_orchestrator;
@@ -21,6 +23,10 @@ pub mod float_encoding_export;
 // Re-export core types for easy access
 pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints};
 pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
+pub use choice_sequence_management::{
+    ChoiceSequenceManager, EnhancedChoiceNode, ChoiceSequenceError, 
+    SequenceIntegrityStatus, PerformanceMetrics, TypeMetadata, ConstraintMetadata, ReplayMetadata
+};
 pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
 pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
@@ -65,6 +71,9 @@ mod status_integration_test;
 
 #[cfg(test)]
 mod status_verification_test;
+
+#[cfg(test)]
+mod buffer_operations_test;
 
 // #[cfg(test)]
 // mod targeting_comprehensive_capability_tests;

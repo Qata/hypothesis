@@ -25,6 +25,18 @@ path = "test_dfa_verification.rs"
 name = "test_float_encoding_demo"
 path = "test_float_encoding_demo.rs"
 
+[[bin]]
+name = "choice_sequence_demo"
+path = "choice_sequence_demo.rs"
+
+[[bin]]
+name = "test_core_choice_sequence_capability"
+path = "test_core_choice_sequence_capability.rs"
+
+[[bin]]
+name = "simple_capability_test"
+path = "simple_capability_test.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"
