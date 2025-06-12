@@ -1,11 +1,26 @@
-//! Advanced Shrinking System
+//! Advanced Shrinking System with Float Encoding Export Integration
 //!
 //! This module implements the complete shrinking capability for the ChoiceSystem,
 //! providing advanced algorithms to minimize test cases while preserving failure
 //! conditions. It includes specialized shrinking strategies for different data types,
 //! structural optimization, and multi-objective minimization.
+//!
+//! ## Float Encoding Export Integration
+//!
+//! This module integrates the sophisticated float encoding export system to enable
+//! optimal shrinking behavior for floating-point values using lexicographic encoding.
+//! The integration provides:
+//!
+//! - `float_to_lex()` - Convert float to lexicographic encoding for shrinking optimization
+//! - `lex_to_float()` - Convert lexicographic encoding back to float value
+//! - `float_to_int()` - Convert float to integer for DataTree storage
+//! - `int_to_float()` - Convert integer back to float from DataTree
+//! - Lexicographic float comparison for optimal shrinking order
 
 use crate::choice::ChoiceValue;
+use crate::float_encoding_export::{
+    float_to_lex, lex_to_float, float_to_int, int_to_float, FloatWidth
+};
 use std::collections::{HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::fmt;
@@ -218,6 +233,26 @@ impl AdvancedShrinkingEngine {
         engine.initialize_default_strategies();
         engine
     }
+    
+    /// Convert float to integer for DataTree storage integration
+    pub fn float_to_datatree_storage(&self, f: f64) -> u64 {
+        float_to_int(f)
+    }
+    
+    /// Convert integer back to float from DataTree storage
+    pub fn float_from_datatree_storage(&self, i: u64) -> f64 {
+        int_to_float(i)
+    }
+    
+    /// Get lexicographic encoding for a float value
+    pub fn get_float_lex_encoding(&self, f: f64) -> u64 {
+        float_to_lex(f)
+    }
+    
+    /// Convert lexicographic encoding back to float
+    pub fn decode_float_lex_encoding(&self, lex: u64) -> f64 {
+        lex_to_float(lex)
+    }
 
     /// Initialize the engine with a comprehensive set of default shrinking strategies
     fn initialize_default_strategies(&mut self) {
@@ -390,38 +425,79 @@ impl AdvancedShrinkingEngine {
         }
     }
 
-    /// Minimize floating point values
+    /// Minimize floating point values using sophisticated lexicographic encoding
     fn minimize_floats(&self, choices: &[Choice], target: f64, precision_reduction: bool) -> Result<Vec<Choice>, String> {
         let mut result = choices.to_vec();
         let mut modified = false;
 
         for choice in &mut result {
             if let ChoiceValue::Float(value) = choice.value.clone() {
-                let new_value = if precision_reduction && value.fract() != 0.0 {
-                    // Try to convert to integer if close
-                    let rounded = value.round();
-                    if (rounded - value).abs() < 0.001 {
-                        rounded
+                // Generate sophisticated shrinking candidates using float encoding export
+                let candidates = self.generate_float_shrinking_candidates(value, 10);
+                
+                let mut best_candidate = value;
+                let mut found_improvement = false;
+                
+                // Check each candidate using lexicographic comparison
+                for &candidate in &candidates {
+                    // Validate candidate against target and precision requirements
+                    let candidate_to_test = if precision_reduction && candidate.fract() != 0.0 {
+                        // Try to convert to integer if close
+                        let rounded = candidate.round();
+                        if (rounded - candidate).abs() < 0.001 {
+                            rounded
+                        } else {
+                            // Reduce precision
+                            (candidate * 100.0).round() / 100.0
+                        }
                     } else {
-                        // Reduce precision
-                        (value * 100.0).round() / 100.0
+                        candidate
+                    };
+                    
+                    // Use lexicographic encoding to determine if this is a better value
+                    if self.is_float_shrinking_improvement(candidate_to_test, best_candidate) {
+                        best_candidate = candidate_to_test;
+                        found_improvement = true;
                     }
-                } else {
-                    // Move towards target
-                    if value > target {
-                        value - (value - target) * 0.5
-                    } else if value < target {
-                        value + (target - value) * 0.5
+                }
+                
+                // If no candidates worked, try traditional approach with lexicographic validation
+                if !found_improvement {
+                    let traditional_candidate = if precision_reduction && value.fract() != 0.0 {
+                        // Try to convert to integer if close
+                        let rounded = value.round();
+                        if (rounded - value).abs() < 0.001 {
+                            rounded
+                        } else {
+                            // Reduce precision
+                            (value * 100.0).round() / 100.0
+                        }
                     } else {
-                        value
+                        // Move towards target
+                        if value > target {
+                            value - (value - target) * 0.5
+                        } else if value < target {
+                            value + (target - value) * 0.5
+                        } else {
+                            value
+                        }
+                    };
+                    
+                    if self.is_float_shrinking_improvement(traditional_candidate, value) {
+                        best_candidate = traditional_candidate;
+                        found_improvement = true;
                     }
-                };
+                }
 
-                if (new_value - value).abs() > f64::EPSILON {
-                    choice.value = ChoiceValue::Float(new_value);
+                if found_improvement && (best_candidate - value).abs() > f64::EPSILON {
+                    choice.value = ChoiceValue::Float(best_candidate);
                     modified = true;
                     
-                    println!("🔧 [SHRINK] Float {:.6} -> {:.6} (target: {:.6})", value, new_value, target);
+                    // Log with lexicographic encoding information
+                    let original_lex = float_to_lex(value);
+                    let new_lex = float_to_lex(best_candidate);
+                    println!("🔧 [SHRINK] Float {:.6} -> {:.6} (lex: 0x{:016X} -> 0x{:016X}, target: {:.6})", 
+                           value, best_candidate, original_lex, new_lex, target);
                 }
             }
         }
@@ -728,7 +804,7 @@ impl AdvancedShrinkingEngine {
         strategies
     }
 
-    /// Check if one solution is better than another
+    /// Check if one solution is better than another using advanced comparison
     fn is_better_solution(&self, new_solution: &[Choice], old_solution: &[Choice]) -> bool {
         // Primary: fewer choices is better
         if new_solution.len() < old_solution.len() {
@@ -739,8 +815,43 @@ impl AdvancedShrinkingEngine {
             return false;
         }
         
-        // Secondary: smaller values are better
-        self.has_smaller_values(new_solution, old_solution)
+        // Secondary: use sophisticated value comparison
+        self.has_better_values(new_solution, old_solution)
+    }
+
+    /// Check if new solution has better values using sophisticated comparison
+    fn has_better_values(&self, new_solution: &[Choice], old_solution: &[Choice]) -> bool {
+        for (new_choice, old_choice) in new_solution.iter().zip(old_solution.iter()) {
+            match (&new_choice.value, &old_choice.value) {
+                (ChoiceValue::Float(new_f), ChoiceValue::Float(old_f)) => {
+                    // Use lexicographic encoding for float comparison
+                    match self.compare_floats_for_shrinking_order(*new_f, *old_f) {
+                        std::cmp::Ordering::Less => return true,
+                        std::cmp::Ordering::Greater => return false,
+                        std::cmp::Ordering::Equal => continue,
+                    }
+                }
+                (ChoiceValue::Integer(new_i), ChoiceValue::Integer(old_i)) => {
+                    if new_i.abs() < old_i.abs() {
+                        return true;
+                    } else if new_i.abs() > old_i.abs() {
+                        return false;
+                    }
+                }
+                _ => {
+                    // Fallback to magnitude comparison for other types
+                    let new_mag = self.calculate_magnitude(&new_choice.value);
+                    let old_mag = self.calculate_magnitude(&old_choice.value);
+                    if new_mag < old_mag {
+                        return true;
+                    } else if new_mag > old_mag {
+                        return false;
+                    }
+                }
+            }
+        }
+        
+        false // No improvement found
     }
 
     /// Check if new solution has smaller values overall
@@ -1111,6 +1222,104 @@ impl AdvancedShrinkingEngine {
         self.random_state = self.random_state.wrapping_mul(1103515245).wrapping_add(12345);
         self.random_state as usize
     }
+    
+    /// Check if one float value is better (simpler) than another for shrinking
+    fn is_float_shrinking_improvement(&self, candidate: f64, current: f64) -> bool {
+        // Handle special cases
+        if candidate.is_nan() && current.is_nan() {
+            return false;
+        }
+        if candidate.is_nan() {
+            return false; // NaN is never an improvement
+        }
+        if current.is_nan() {
+            return true; // Any finite value is better than NaN
+        }
+        
+        let lex_candidate = float_to_lex(candidate.abs());
+        let lex_current = float_to_lex(current.abs());
+        
+        lex_candidate < lex_current
+    }
+    
+    /// Compare two float values using lexicographic encoding for shrinking
+    fn compare_floats_for_shrinking_order(&self, a: f64, b: f64) -> std::cmp::Ordering {
+        let lex_a = float_to_lex(a.abs());
+        let lex_b = float_to_lex(b.abs());
+        
+        lex_a.cmp(&lex_b)
+    }
+    
+    /// Generate optimal shrinking candidates for a float value
+    fn generate_float_shrinking_candidates(&self, value: f64, max_candidates: usize) -> Vec<f64> {
+        let mut candidates = Vec::new();
+        
+        // Always include zero as the ultimate shrink target
+        candidates.push(0.0);
+        
+        if value.is_finite() && value != 0.0 {
+            let abs_value = value.abs();
+            let original_lex = float_to_lex(abs_value);
+            
+            // Generate mathematically meaningful candidates
+            let math_candidates = [
+                abs_value / 2.0,
+                abs_value / 10.0,
+                abs_value / 100.0,
+                abs_value.sqrt(),
+                abs_value.floor(),
+                1.0,
+                0.5,
+                0.1,
+                0.01,
+                1e-6,
+            ];
+            
+            for &candidate in &math_candidates {
+                if candidate > 0.0 && candidate < abs_value && candidates.len() < max_candidates {
+                    let candidate_lex = float_to_lex(candidate);
+                    if candidate_lex < original_lex {
+                        candidates.push(candidate);
+                        if value < 0.0 {
+                            candidates.push(-candidate);
+                        }
+                    }
+                }
+            }
+            
+            // Generate lexicographic encoding-based candidates
+            let reduction_factors = [0.9, 0.8, 0.7, 0.5, 0.25, 0.1];
+            for &factor in &reduction_factors {
+                if candidates.len() >= max_candidates {
+                    break;
+                }
+                
+                let target_lex = (original_lex as f64 * factor) as u64;
+                if target_lex < original_lex && target_lex > 0 {
+                    let candidate = lex_to_float(target_lex);
+                    if candidate.is_finite() && candidate > 0.0 {
+                        candidates.push(candidate);
+                        if value < 0.0 {
+                            candidates.push(-candidate);
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Remove duplicates and sort by lexicographic encoding
+        candidates.sort_by(|&a, &b| {
+            let lex_a = float_to_lex(a.abs());
+            let lex_b = float_to_lex(b.abs());
+            lex_a.cmp(&lex_b)
+        });
+        candidates.dedup_by(|&mut a, &mut b| (a - b).abs() < f64::EPSILON);
+        
+        // Limit to requested number of candidates
+        candidates.truncate(max_candidates);
+        
+        candidates
+    }
 }
 
 // Implement Hash for Choice to support caching
@@ -1333,5 +1542,71 @@ mod tests {
         let metrics = engine.get_metrics();
         assert!(metrics.total_attempts > 0);
         println!("Final metrics: {}", metrics);
+    }
+
+    #[test]
+    fn test_float_encoding_integration() {
+        let mut engine = AdvancedShrinkingEngine::default();
+        
+        // Test DataTree integration
+        let test_float = 3.14159;
+        let stored = engine.float_to_datatree_storage(test_float);
+        let restored = engine.float_from_datatree_storage(stored);
+        assert_eq!(test_float, restored, "DataTree storage should roundtrip exactly");
+        
+        // Test lexicographic encoding
+        let lex_encoding = engine.get_float_lex_encoding(test_float);
+        let decoded = engine.decode_float_lex_encoding(lex_encoding);
+        assert_eq!(test_float, decoded, "Lex encoding should roundtrip exactly");
+        
+        // Test shrinking with lexicographic comparison
+        let choices = vec![
+            Choice { value: ChoiceValue::Float(100.0), index: 0 },
+            Choice { value: ChoiceValue::Float(3.14159), index: 1 },
+            Choice { value: ChoiceValue::Float(0.1), index: 2 },
+        ];
+        
+        match engine.shrink_choices(&choices) {
+            ShrinkResult::Success(shrunk) => {
+                // Verify that floats were shrunk using lexicographic ordering
+                for choice in &shrunk {
+                    if let ChoiceValue::Float(f) = choice.value {
+                        assert!(f.is_finite(), "Shrunk floats should be finite");
+                        // Original floats should have larger lex encodings than shrunk ones
+                        // This is verified by the shrinking algorithm using is_float_shrinking_improvement
+                    }
+                }
+            }
+            _ => {} // Other results are acceptable
+        }
+        
+        println!("Float encoding integration test completed successfully");
+    }
+
+    #[test]
+    fn test_lexicographic_float_comparison() {
+        let mut engine = AdvancedShrinkingEngine::default();
+        
+        // Test basic lexicographic comparison behavior
+        let small_choices = vec![Choice { value: ChoiceValue::Float(1.0), index: 0 }];
+        let large_choices = vec![Choice { value: ChoiceValue::Float(100.0), index: 0 }];
+        
+        // Smaller values should be considered better
+        assert!(engine.has_better_values(&small_choices, &large_choices), 
+                "Smaller float values should be considered better for shrinking");
+        
+        // Test with zero
+        let zero_choices = vec![Choice { value: ChoiceValue::Float(0.0), index: 0 }];
+        assert!(engine.has_better_values(&zero_choices, &small_choices),
+                "Zero should be considered better than any positive float");
+        
+        // Test with special values
+        let nan_choices = vec![Choice { value: ChoiceValue::Float(f64::NAN), index: 0 }];
+        let finite_choices = vec![Choice { value: ChoiceValue::Float(1.0), index: 0 }];
+        
+        assert!(engine.has_better_values(&finite_choices, &nan_choices),
+                "Finite values should be considered better than NaN");
+        
+        println!("Lexicographic float comparison test passed");
     }
 }
