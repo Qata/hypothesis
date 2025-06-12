@@ -161,7 +161,7 @@ impl TemplatingCapabilityFFI {
                 min_value: 0.0,
                 max_value: 10.0,
                 allow_nan: false,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             })),
         ];
 
@@ -287,7 +287,7 @@ impl TemplatingCapabilityFFI {
                         min_value,
                         max_value,
                         allow_nan: false,
-                        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                     }))
                 } else {
                     Ok(Constraints::Float(FloatConstraints::default()))

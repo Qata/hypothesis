@@ -90,14 +90,14 @@ mod field_access_tests {
             min_value: -1.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 1e-10,
+            smallest_nonzero_magnitude: Some(1e-10),
         };
 
         // Test direct field access
         assert_eq!(float_constraints.min_value, -1.0);
         assert_eq!(float_constraints.max_value, 1.0);
         assert!(!float_constraints.allow_nan);
-        assert_eq!(float_constraints.smallest_nonzero_magnitude, 1e-10);
+        assert_eq!(float_constraints.smallest_nonzero_magnitude, Some(1e-10));
 
         // Test field mutation
         float_constraints.min_value = -2.0;
@@ -225,7 +225,7 @@ mod type_consistency_tests {
             min_value: 0.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 1e-10,
+            smallest_nonzero_magnitude: Some(1e-10),
         });
 
         match float_constraints {

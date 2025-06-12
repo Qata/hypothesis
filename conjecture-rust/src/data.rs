@@ -1337,12 +1337,12 @@ impl ConjectureData {
     
     /// Draw a floating-point number with default constraints
     pub fn draw_float(&mut self) -> Result<f64, DrawError> {
-        self.draw_float_full(f64::NEG_INFINITY, f64::INFINITY, true, f64::MIN_POSITIVE, None)
+        self.draw_float_full(f64::NEG_INFINITY, f64::INFINITY, true, Some(f64::MIN_POSITIVE), None)
     }
     
     /// Draw a floating-point number with comprehensive constraint support
     pub fn draw_float_full(&mut self, min_value: f64, max_value: f64, allow_nan: bool, 
-                           smallest_nonzero_magnitude: f64, forced: Option<f64>) -> Result<f64, DrawError> {
+                           smallest_nonzero_magnitude: Option<f64>, forced: Option<f64>) -> Result<f64, DrawError> {
         if !self.can_draw() {
             if self.frozen {
                 return Err(DrawError::Frozen);
@@ -1362,13 +1362,15 @@ impl ConjectureData {
             return Err(DrawError::InvalidRange);
         }
         
-        if smallest_nonzero_magnitude <= 0.0 {
-            return Err(DrawError::InvalidRange);
+        if let Some(magnitude) = smallest_nonzero_magnitude {
+            if magnitude <= 0.0 {
+                return Err(DrawError::InvalidRange);
+            }
         }
         
         // Check for fastmath compilation issues (subnormal detection)
         let test_subnormal = f64::MIN_POSITIVE / 2.0;
-        if test_subnormal == 0.0 && smallest_nonzero_magnitude < f64::MIN_POSITIVE {
+        if test_subnormal == 0.0 && smallest_nonzero_magnitude.map_or(false, |m| m < f64::MIN_POSITIVE) {
             // Fastmath compilation detected, adjust smallest_nonzero_magnitude
             return Err(DrawError::InvalidRange); // Or we could auto-adjust to MIN_POSITIVE
         }
@@ -1382,7 +1384,7 @@ impl ConjectureData {
             if !forced_val.is_nan() && (forced_val < min_value || forced_val > max_value) {
                 return Err(DrawError::InvalidRange);
             }
-            if forced_val.abs() != 0.0 && forced_val.abs() < smallest_nonzero_magnitude {
+            if forced_val.abs() != 0.0 && smallest_nonzero_magnitude.map_or(false, |m| forced_val.abs() < m) {
                 return Err(DrawError::InvalidRange);
             }
         }
@@ -1447,7 +1449,7 @@ impl ConjectureData {
     
     /// Generate IEEE-754 compliant random float with advanced constraints
     fn generate_ieee754_float(&mut self, min_value: f64, max_value: f64, allow_nan: bool, 
-                              smallest_nonzero_magnitude: f64) -> Result<f64, DrawError> {
+                              smallest_nonzero_magnitude: Option<f64>) -> Result<f64, DrawError> {
         use rand::Rng;
         
         // Handle special cases first
@@ -1489,26 +1491,28 @@ impl ConjectureData {
         let mut candidate = self.rng.gen_range(min_value..=max_value);
         
         // Apply smallest_nonzero_magnitude constraint
-        if candidate.abs() != 0.0 && candidate.abs() < smallest_nonzero_magnitude {
-            // Adjust to meet the constraint
-            candidate = if candidate > 0.0 {
-                smallest_nonzero_magnitude
-            } else {
-                -smallest_nonzero_magnitude
-            };
-            
-            // Ensure still in range
+        if let Some(magnitude) = smallest_nonzero_magnitude {
+            if candidate.abs() != 0.0 && candidate.abs() < magnitude {
+                // Adjust to meet the constraint
+                candidate = if candidate > 0.0 {
+                    magnitude
+                } else {
+                    -magnitude
+                };
+            }
+        }
+        
+        // Ensure still in range
+        if candidate < min_value || candidate > max_value {
+            // Try zero instead
+            candidate = 0.0;
             if candidate < min_value || candidate > max_value {
-                // Try zero instead
-                candidate = 0.0;
-                if candidate < min_value || candidate > max_value {
-                    // If zero not in range either, use boundary
-                    candidate = if (min_value - 0.0).abs() < (max_value - 0.0).abs() {
-                        min_value
-                    } else {
-                        max_value
-                    };
-                }
+                // If zero not in range either, use boundary
+                candidate = if (min_value - 0.0).abs() < (max_value - 0.0).abs() {
+                    min_value
+                } else {
+                    max_value
+                };
             }
         }
         
@@ -1516,7 +1520,7 @@ impl ConjectureData {
     }
     
     /// Generate float from full IEEE-754 range with sophisticated distribution
-    fn generate_full_range_float(&mut self, allow_nan: bool, smallest_nonzero_magnitude: f64) -> Result<f64, DrawError> {
+    fn generate_full_range_float(&mut self, allow_nan: bool, smallest_nonzero_magnitude: Option<f64>) -> Result<f64, DrawError> {
         use rand::Rng;
         
         let choice = self.rng.gen_range(0..10);
@@ -1541,8 +1545,12 @@ impl ConjectureData {
             _ => {
                 // Normal random values
                 let normal = self.rng.gen::<f64>() * 1000.0 - 500.0;
-                let adjusted = if normal.abs() != 0.0 && normal.abs() < smallest_nonzero_magnitude {
-                    if normal > 0.0 { smallest_nonzero_magnitude } else { -smallest_nonzero_magnitude }
+                let adjusted = if let Some(magnitude) = smallest_nonzero_magnitude {
+                    if normal.abs() != 0.0 && normal.abs() < magnitude {
+                        if normal > 0.0 { magnitude } else { -magnitude }
+                    } else {
+                        normal
+                    }
                 } else {
                     normal
                 };

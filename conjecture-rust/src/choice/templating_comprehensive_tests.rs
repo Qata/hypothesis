@@ -95,7 +95,7 @@ mod templating_capability_tests {
             min_value: 0.0,
             max_value: 10.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
         let result = engine.process_next_template(ChoiceType::Float, &float_constraints).unwrap();
         assert!(result.is_some());
@@ -544,7 +544,7 @@ mod templating_capability_tests {
                 min_value: 0.0,
                 max_value: 10.0,
                 allow_nan: false,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             })),
             (ChoiceType::String, Constraints::String(StringConstraints {
                 min_size: 0,

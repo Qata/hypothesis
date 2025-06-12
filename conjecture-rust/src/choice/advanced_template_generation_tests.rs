@@ -57,7 +57,7 @@ mod tests {
             min_value: -100.0,
             max_value: 100.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
 
         // Test that we can generate floats at different indices
@@ -141,7 +141,7 @@ mod tests {
             min_value: -1000.0,
             max_value: 1000.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
 
         // Test different bias values
@@ -239,7 +239,7 @@ mod tests {
             min_value: f64::NEG_INFINITY,
             max_value: f64::INFINITY,
             allow_nan: true,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
 
         // Test special float values

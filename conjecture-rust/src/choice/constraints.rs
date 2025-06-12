@@ -86,7 +86,7 @@ pub struct FloatConstraints {
     pub min_value: f64,
     pub max_value: f64,
     pub allow_nan: bool,
-    pub smallest_nonzero_magnitude: f64,
+    pub smallest_nonzero_magnitude: Option<f64>,
 }
 
 impl Eq for FloatConstraints {}
@@ -96,7 +96,11 @@ impl std::hash::Hash for FloatConstraints {
         self.min_value.to_bits().hash(state);
         self.max_value.to_bits().hash(state);
         self.allow_nan.hash(state);
-        self.smallest_nonzero_magnitude.to_bits().hash(state);
+        if let Some(magnitude) = self.smallest_nonzero_magnitude {
+            magnitude.to_bits().hash(state);
+        } else {
+            0u64.hash(state); // Hash a constant for None case
+        }
     }
 }
 
@@ -106,7 +110,7 @@ impl Default for FloatConstraints {
             min_value: f64::NEG_INFINITY,
             max_value: f64::INFINITY,
             allow_nan: true,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE, // Smallest positive normal float
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE), // Smallest positive normal float
         }
     }
 }
@@ -117,7 +121,7 @@ impl FloatConstraints {
             min_value, 
             max_value, 
             true, 
-            f64::MIN_POSITIVE
+            Some(f64::MIN_POSITIVE)
         ).expect("Default constructor should create valid constraints")
     }
     
@@ -126,14 +130,16 @@ impl FloatConstraints {
         min_value: Option<f64>, 
         max_value: Option<f64>,
         allow_nan: bool,
-        smallest_nonzero_magnitude: f64
+        smallest_nonzero_magnitude: Option<f64>
     ) -> Result<Self, String> {
-        // Validate smallest_nonzero_magnitude (Python requirement: must be positive)
-        if smallest_nonzero_magnitude <= 0.0 {
-            return Err(format!(
-                "smallest_nonzero_magnitude must be positive, got: {}", 
-                smallest_nonzero_magnitude
-            ));
+        // Validate smallest_nonzero_magnitude (Python requirement: must be positive if provided)
+        if let Some(magnitude) = smallest_nonzero_magnitude {
+            if magnitude <= 0.0 {
+                return Err(format!(
+                    "smallest_nonzero_magnitude must be positive, got: {}", 
+                    magnitude
+                ));
+            }
         }
         
         let min = min_value.unwrap_or(f64::NEG_INFINITY);
@@ -148,23 +154,25 @@ impl FloatConstraints {
         }
         
         // Validate that the range is meaningful with smallest_nonzero_magnitude
-        if max < f64::INFINITY && min > f64::NEG_INFINITY {
-            // For bounded ranges, ensure there's room for valid values
-            if max > 0.0 && max < smallest_nonzero_magnitude {
-                return Err(format!(
-                    "max_value {} is positive but smaller than smallest_nonzero_magnitude {}",
-                    max, smallest_nonzero_magnitude
-                ));
-            }
-            if min < 0.0 && min > -smallest_nonzero_magnitude {
-                return Err(format!(
-                    "min_value {} is negative but larger than -smallest_nonzero_magnitude {}",
-                    min, smallest_nonzero_magnitude
-                ));
+        if let Some(magnitude) = smallest_nonzero_magnitude {
+            if max < f64::INFINITY && min > f64::NEG_INFINITY {
+                // For bounded ranges, ensure there's room for valid values
+                if max > 0.0 && max < magnitude {
+                    return Err(format!(
+                        "max_value {} is positive but smaller than smallest_nonzero_magnitude {}",
+                        max, magnitude
+                    ));
+                }
+                if min < 0.0 && min > -magnitude {
+                    return Err(format!(
+                        "min_value {} is negative but larger than -smallest_nonzero_magnitude {}",
+                        min, magnitude
+                    ));
+                }
             }
         }
         
-        println!("CONSTRAINTS DEBUG: Creating FloatConstraints with min={}, max={}, allow_nan={}, smallest_nonzero_magnitude={}",
+        println!("CONSTRAINTS DEBUG: Creating FloatConstraints with min={}, max={}, allow_nan={}, smallest_nonzero_magnitude={:?}",
             min, max, allow_nan, smallest_nonzero_magnitude);
         
         Ok(Self {
@@ -194,11 +202,13 @@ impl FloatConstraints {
         }
         
         // Check smallest_nonzero_magnitude constraint
-        let abs_value = value.abs();
-        if abs_value != 0.0 && abs_value < self.smallest_nonzero_magnitude {
-            println!("CONSTRAINTS DEBUG: Smallest magnitude validation failed: |{}| = {} < {}", 
-                value, abs_value, self.smallest_nonzero_magnitude);
-            return false;
+        if let Some(magnitude) = self.smallest_nonzero_magnitude {
+            let abs_value = value.abs();
+            if abs_value != 0.0 && abs_value < magnitude {
+                println!("CONSTRAINTS DEBUG: Smallest magnitude validation failed: |{}| = {} < {}", 
+                    value, abs_value, magnitude);
+                return false;
+            }
         }
         
         println!("CONSTRAINTS DEBUG: Value {} passed all validations", value);
@@ -232,17 +242,19 @@ impl FloatConstraints {
         let mut result = value.max(self.min_value).min(self.max_value);
         
         // Apply smallest_nonzero_magnitude constraint
-        let abs_result = result.abs();
-        if abs_result != 0.0 && abs_result < self.smallest_nonzero_magnitude {
-            // Value is too small, map to smallest allowed magnitude
-            result = if result >= 0.0 {
-                self.smallest_nonzero_magnitude
-            } else {
-                -self.smallest_nonzero_magnitude
-            };
-            
-            // Re-clamp to ensure we're still in range
-            result = result.max(self.min_value).min(self.max_value);
+        if let Some(magnitude) = self.smallest_nonzero_magnitude {
+            let abs_result = result.abs();
+            if abs_result != 0.0 && abs_result < magnitude {
+                // Value is too small, map to smallest allowed magnitude
+                result = if result >= 0.0 {
+                    magnitude
+                } else {
+                    -magnitude
+                };
+                
+                // Re-clamp to ensure we're still in range
+                result = result.max(self.min_value).min(self.max_value);
+            }
         }
         
         println!("CONSTRAINTS DEBUG: Clamped {} to {}", value, result);
@@ -401,7 +413,7 @@ mod tests {
         assert_eq!(constraints.min_value, f64::NEG_INFINITY);
         assert_eq!(constraints.max_value, f64::INFINITY);
         assert_eq!(constraints.allow_nan, true);
-        assert_eq!(constraints.smallest_nonzero_magnitude, f64::MIN_POSITIVE);
+        assert_eq!(constraints.smallest_nonzero_magnitude, Some(f64::MIN_POSITIVE));
         
         println!("CONSTRAINTS DEBUG: FloatConstraints default test passed");
     }
@@ -469,7 +481,7 @@ mod tests {
             min_value: 0.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 1e-10,
+            smallest_nonzero_magnitude: Some(1e-10),
         };
         let cloned = float_constraints.clone();
         assert_eq!(float_constraints, cloned);
@@ -483,31 +495,37 @@ mod tests {
         
         // Test valid constraint creation
         let valid_constraints = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(0.0), Some(10.0), true, 1e-6
+            Some(0.0), Some(10.0), true, Some(1e-6)
         );
         assert!(valid_constraints.is_ok());
         
         // Test invalid smallest_nonzero_magnitude (zero)
         let invalid_zero = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(0.0), Some(10.0), true, 0.0
+            Some(0.0), Some(10.0), true, Some(0.0)
         );
         assert!(invalid_zero.is_err());
         assert!(invalid_zero.unwrap_err().contains("must be positive"));
         
         // Test invalid smallest_nonzero_magnitude (negative)
         let invalid_negative = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(0.0), Some(10.0), true, -1e-6
+            Some(0.0), Some(10.0), true, Some(-1e-6)
         );
         assert!(invalid_negative.is_err());
         assert!(invalid_negative.unwrap_err().contains("must be positive"));
         
         // Test invalid range (min > max)
         let invalid_range = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(10.0), Some(0.0), true, 1e-6
+            Some(10.0), Some(0.0), true, Some(1e-6)
         );
         assert!(invalid_range.is_err());
         assert!(invalid_range.unwrap_err().contains("min_value"));
         assert!(invalid_range.unwrap_err().contains("max_value"));
+        
+        // Test None smallest_nonzero_magnitude (should be valid)
+        let none_magnitude = FloatConstraints::with_smallest_nonzero_magnitude(
+            Some(0.0), Some(10.0), true, None
+        );
+        assert!(none_magnitude.is_ok());
         
         println!("CONSTRAINTS DEBUG: FloatConstraints validation test passed");
     }
@@ -517,7 +535,7 @@ mod tests {
         println!("CONSTRAINTS DEBUG: Testing FloatConstraints value validation");
         
         let constraints = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(-10.0), Some(10.0), false, 1e-3
+            Some(-10.0), Some(10.0), false, Some(1e-3)
         ).unwrap();
         
         // Test valid values
@@ -537,9 +555,15 @@ mod tests {
         
         // Test with NaN allowed
         let nan_allowed = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(-10.0), Some(10.0), true, 1e-3
+            Some(-10.0), Some(10.0), true, Some(1e-3)
         ).unwrap();
         assert!(nan_allowed.validate(f64::NAN));
+        
+        // Test with None smallest_nonzero_magnitude (no magnitude constraint)
+        let no_magnitude = FloatConstraints::with_smallest_nonzero_magnitude(
+            Some(-10.0), Some(10.0), true, None
+        ).unwrap();
+        assert!(no_magnitude.validate(1e-10)); // Should pass without magnitude constraint
         
         println!("CONSTRAINTS DEBUG: FloatConstraints value validation test passed");
     }
@@ -549,7 +573,7 @@ mod tests {
         println!("CONSTRAINTS DEBUG: Testing FloatConstraints clamping");
         
         let constraints = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(-5.0), Some(5.0), false, 1e-2
+            Some(-5.0), Some(5.0), false, Some(1e-2)
         ).unwrap();
         
         // Test clamping to range
@@ -578,7 +602,7 @@ mod tests {
         
         // Test with infinity bounds
         let inf_constraints = FloatConstraints::with_smallest_nonzero_magnitude(
-            None, None, true, f64::MIN_POSITIVE
+            None, None, true, Some(f64::MIN_POSITIVE)
         ).unwrap();
         
         assert!(inf_constraints.validate(f64::INFINITY));
@@ -588,7 +612,7 @@ mod tests {
         
         // Test with very small smallest_nonzero_magnitude
         let tiny_constraints = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(-1.0), Some(1.0), true, f64::MIN_POSITIVE
+            Some(-1.0), Some(1.0), true, Some(f64::MIN_POSITIVE)
         ).unwrap();
         
         assert!(tiny_constraints.validate(f64::MIN_POSITIVE));
@@ -596,9 +620,17 @@ mod tests {
         
         // Test problematic range that conflicts with smallest_nonzero_magnitude
         let problematic = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(0.0), Some(1e-10), true, 1e-6
+            Some(0.0), Some(1e-10), true, Some(1e-6)
         );
         assert!(problematic.is_err()); // Should fail validation
+        
+        // Test with None smallest_nonzero_magnitude (unbounded magnitude)
+        let unbounded_magnitude = FloatConstraints::with_smallest_nonzero_magnitude(
+            Some(-1.0), Some(1.0), true, None
+        ).unwrap();
+        
+        assert!(unbounded_magnitude.validate(f64::MIN_POSITIVE));
+        assert!(unbounded_magnitude.validate(1e-100)); // Very small value should be allowed
         
         println!("CONSTRAINTS DEBUG: FloatConstraints edge cases test passed");
     }
@@ -612,18 +644,18 @@ mod tests {
         assert_eq!(default_constraints.min_value, f64::NEG_INFINITY);
         assert_eq!(default_constraints.max_value, f64::INFINITY);
         assert_eq!(default_constraints.allow_nan, true);
-        assert_eq!(default_constraints.smallest_nonzero_magnitude, f64::MIN_POSITIVE);
+        assert_eq!(default_constraints.smallest_nonzero_magnitude, Some(f64::MIN_POSITIVE));
         
         // Test new constructor with sensible defaults
         let new_constraints = FloatConstraints::new(Some(-100.0), Some(100.0));
         assert_eq!(new_constraints.min_value, -100.0);
         assert_eq!(new_constraints.max_value, 100.0);
         assert_eq!(new_constraints.allow_nan, true);
-        assert_eq!(new_constraints.smallest_nonzero_magnitude, f64::MIN_POSITIVE);
+        assert_eq!(new_constraints.smallest_nonzero_magnitude, Some(f64::MIN_POSITIVE));
         
         // Test Python's constraint validation behavior
         let python_like = FloatConstraints::with_smallest_nonzero_magnitude(
-            Some(-1000.0), Some(1000.0), true, 2.2250738585072014e-308 // Python's SMALLEST_SUBNORMAL
+            Some(-1000.0), Some(1000.0), true, Some(2.2250738585072014e-308) // Python's SMALLEST_SUBNORMAL
         ).unwrap();
         
         // These should match Python's validation behavior
@@ -641,26 +673,36 @@ mod tests {
     fn test_float_constraints_type_consistency() {
         println!("CONSTRAINTS DEBUG: Testing FloatConstraints type consistency");
         
-        // Test that smallest_nonzero_magnitude is always f64, never Option<f64>
+        // Test that smallest_nonzero_magnitude is now Option<f64>
         let constraints = FloatConstraints::default();
-        let _magnitude: f64 = constraints.smallest_nonzero_magnitude; // Should compile without Option unwrapping
+        let _magnitude: Option<f64> = constraints.smallest_nonzero_magnitude; // Should be Option<f64>
         
-        // Test direct field access (no Option wrapping)
-        assert!(constraints.smallest_nonzero_magnitude > 0.0);
+        // Test direct field access (with Option handling)
+        assert!(constraints.smallest_nonzero_magnitude.unwrap() > 0.0);
         
         // Test cloning preserves type
         let cloned = constraints.clone();
-        let _magnitude2: f64 = cloned.smallest_nonzero_magnitude; // Should compile
+        let _magnitude2: Option<f64> = cloned.smallest_nonzero_magnitude; // Should be Option<f64>
         
         // Test constraint construction with explicit value
         let custom_constraints = FloatConstraints {
             min_value: 0.0,
             max_value: 100.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 1e-6, // Direct f64 assignment, no Some() wrapper
+            smallest_nonzero_magnitude: Some(1e-6), // Option<f64> assignment with Some() wrapper
         };
         
-        assert_eq!(custom_constraints.smallest_nonzero_magnitude, 1e-6);
+        assert_eq!(custom_constraints.smallest_nonzero_magnitude, Some(1e-6));
+        
+        // Test constraint construction with None
+        let none_constraints = FloatConstraints {
+            min_value: 0.0,
+            max_value: 100.0,
+            allow_nan: false,
+            smallest_nonzero_magnitude: None, // None means no magnitude constraint
+        };
+        
+        assert_eq!(none_constraints.smallest_nonzero_magnitude, None);
         
         println!("CONSTRAINTS DEBUG: FloatConstraints type consistency test passed");
     }

@@ -222,7 +222,7 @@ mod integration_tests {
             min_value: -5.0,
             max_value: 5.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 0.01,
+            smallest_nonzero_magnitude: Some(0.01),
         });
         
         for i in 0..100 {

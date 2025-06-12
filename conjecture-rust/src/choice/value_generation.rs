@@ -285,7 +285,7 @@ impl StandardValueGenerator {
         constraints: &FloatConstraints,
         entropy: &mut dyn EntropySource,
     ) -> ValueGenerationResult<f64> {
-        debug!("Generating float with range [{}, {}], allow_nan={}, smallest_magnitude={}",
+        debug!("Generating float with range [{}, {}], allow_nan={}, smallest_magnitude={:?}",
                constraints.min_value, constraints.max_value, 
                constraints.allow_nan, constraints.smallest_nonzero_magnitude);
         
@@ -372,17 +372,19 @@ impl StandardValueGenerator {
         // Apply range constraints
         let clamped = value.max(constraints.min_value).min(constraints.max_value);
         
-        // Apply smallest magnitude constraint
-        if constraints.smallest_nonzero_magnitude > 0.0 {
-            let abs_val = clamped.abs();
-            if abs_val != 0.0 && abs_val < constraints.smallest_nonzero_magnitude {
-                let result = if clamped >= 0.0 {
-                    constraints.smallest_nonzero_magnitude
-                } else {
-                    -constraints.smallest_nonzero_magnitude
-                };
-                debug!("Applied smallest magnitude constraint: {} -> {}", clamped, result);
-                return Ok(result);
+        // Apply smallest magnitude constraint if present
+        if let Some(magnitude) = constraints.smallest_nonzero_magnitude {
+            if magnitude > 0.0 {
+                let abs_val = clamped.abs();
+                if abs_val != 0.0 && abs_val < magnitude {
+                    let result = if clamped >= 0.0 {
+                        magnitude
+                    } else {
+                        -magnitude
+                    };
+                    debug!("Applied smallest magnitude constraint: {} -> {}", clamped, result);
+                    return Ok(result);
+                }
             }
         }
         
@@ -721,7 +723,7 @@ mod tests {
             min_value: -10.0,
             max_value: 10.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         };
         
         let value = generator.generate_float(&constraints, &mut entropy).unwrap();

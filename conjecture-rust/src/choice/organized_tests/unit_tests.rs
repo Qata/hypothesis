@@ -139,7 +139,7 @@ mod constraint_tests {
             min_value: 0.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 1e-10,
+            smallest_nonzero_magnitude: Some(1e-10),
         };
         let cloned = float_constraints.clone();
         assert_eq!(float_constraints, cloned);

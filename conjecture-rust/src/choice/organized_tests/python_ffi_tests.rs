@@ -272,7 +272,7 @@ mod python_ffi_verification {
             min_value: f64::NEG_INFINITY,
             max_value: f64::INFINITY,
             allow_nan: true,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         };
         
         Python::with_gil(|py| {

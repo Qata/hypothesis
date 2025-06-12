@@ -233,7 +233,7 @@ mod comprehensive_tests {
                 min_value: 0.0,
                 max_value: 100.0,
                 allow_nan: false,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             }),
         );
 
@@ -358,7 +358,7 @@ mod comprehensive_tests {
             min_value: 2.5,
             max_value: 7.5,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         };
 
         // Value 3.0 should be trivial (closest integer to 0 in range [2.5, 7.5])
@@ -384,7 +384,7 @@ mod comprehensive_tests {
             min_value: 1.1,
             max_value: 1.9,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         };
 
         let no_integer_node = ChoiceNode::new(
@@ -674,7 +674,7 @@ mod integration_tests {
                 min_value: 0.0,
                 max_value: 1.0,
                 allow_nan: false,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             }),
             Constraints::String(StringConstraints {
                 min_size: 1,

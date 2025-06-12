@@ -243,7 +243,7 @@ mod template_engine_tests {
             min_value: 0.0,
             max_value: 10.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
         
         let result = engine.process_next_template(
@@ -367,7 +367,7 @@ mod template_engine_tests {
             min_value: -1.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
         
         let node = engine.generate_simplest_choice(
@@ -1313,7 +1313,7 @@ mod comprehensive_capability_tests {
                     min_value: 0.0,
                     max_value: 10.0,
                     allow_nan: false,
-                    smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                    smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                 })),
                 Some("full partial node".to_string()),
             ),

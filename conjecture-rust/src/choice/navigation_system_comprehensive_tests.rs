@@ -108,7 +108,7 @@ mod navigation_system_comprehensive_tests {
                 min_value: -1.0,
                 max_value: 1.0,
                 allow_nan: false,
-                smallest_nonzero_magnitude: 0.1,
+                smallest_nonzero_magnitude: Some(0.1),
             }),
             Constraints::String(StringConstraints::new(Some(0), Some(3))),
         ];
@@ -248,7 +248,7 @@ mod navigation_system_comprehensive_tests {
             min_value: -100.0,
             max_value: 100.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 0.0,
+            smallest_nonzero_magnitude: Some(0.0),
         });
         
         let float_values = vec![0.0, -0.0, 1.0, -1.0, 0.5, -0.5, 10.5, -10.5];
@@ -361,7 +361,7 @@ mod navigation_system_comprehensive_tests {
                         min_value: 0.0,
                         max_value: 10.0,
                         allow_nan: false,
-                        smallest_nonzero_magnitude: 0.01,
+                        smallest_nonzero_magnitude: Some(0.01),
                     }); 4
                 ]
             ),
@@ -417,7 +417,7 @@ mod navigation_system_comprehensive_tests {
                 min_value: -0.1,
                 max_value: 0.1,
                 allow_nan: false,
-                smallest_nonzero_magnitude: 0.001,
+                smallest_nonzero_magnitude: Some(0.001),
             }),
             // Limited string length
             Constraints::String(StringConstraints::new(Some(0), Some(2))),
@@ -573,7 +573,7 @@ mod navigation_system_comprehensive_tests {
             min_value: 0.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: 0.001,
+            smallest_nonzero_magnitude: Some(0.001),
         };
         for &value in &probabilities {
             let choice = ChoiceValue::Float(value);

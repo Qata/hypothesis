@@ -80,11 +80,12 @@ pub fn choice_permitted(value: &ChoiceValue, constraints: &Constraints) -> bool 
                 return false;
             }
             
-            let smallest = c.smallest_nonzero_magnitude;
-            if smallest > 0.0 {
-                let abs_val = val.abs();
-                if abs_val != 0.0 && abs_val < smallest {
-                    return false;
+            if let Some(smallest) = c.smallest_nonzero_magnitude {
+                if smallest > 0.0 {
+                    let abs_val = val.abs();
+                    if abs_val != 0.0 && abs_val < smallest {
+                        return false;
+                    }
                 }
             }
             
@@ -203,14 +204,14 @@ mod tests {
             min_value: 0.0,
             max_value: 10.0,
             allow_nan: true,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
         
         let constraints_no_nan = Constraints::Float(FloatConstraints {
             min_value: 0.0,
             max_value: 10.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
         
         assert!(choice_permitted(&ChoiceValue::Float(f64::NAN), &constraints_allow_nan));

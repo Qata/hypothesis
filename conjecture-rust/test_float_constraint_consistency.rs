@@ -30,23 +30,23 @@ fn test_type_consistency() {
     
     // Test default construction
     let default_constraints = FloatConstraints::default();
-    let _magnitude: f64 = default_constraints.smallest_nonzero_magnitude; // Should compile without Option unwrapping
-    assert!(default_constraints.smallest_nonzero_magnitude > 0.0);
+    let _magnitude: Option<f64> = default_constraints.smallest_nonzero_magnitude; // Should be Option<f64>
+    assert!(default_constraints.smallest_nonzero_magnitude.unwrap() > 0.0);
     
     // Test explicit construction
     let custom_constraints = FloatConstraints {
         min_value: 0.0,
         max_value: 100.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: 1e-6, // Direct f64 assignment, no Some() wrapper
+        smallest_nonzero_magnitude: Some(1e-6), // Direct f64 assignment, no Some() wrapper
     };
-    assert_eq!(custom_constraints.smallest_nonzero_magnitude, 1e-6);
+    assert_eq!(custom_constraints.smallest_nonzero_magnitude, Some(1e-6));
     
     // Test advanced constructor
     let advanced_constraints = FloatConstraints::with_smallest_nonzero_magnitude(
-        Some(-10.0), Some(10.0), true, 1e-3
+        Some(-10.0), Some(10.0), true, Some(1e-3)
     ).expect("Valid constraints should construct successfully");
-    assert_eq!(advanced_constraints.smallest_nonzero_magnitude, 1e-3);
+    assert_eq!(advanced_constraints.smallest_nonzero_magnitude, Some(1e-3));
     
     println!("FLOAT_CONSTRAINT_TYPE_SYSTEM: Type consistency test passed");
 }

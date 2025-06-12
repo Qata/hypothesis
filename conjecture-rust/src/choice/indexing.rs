@@ -1169,7 +1169,7 @@ mod tests {
             min_value,
             max_value,
             allow_nan: true,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         }
     }
 
@@ -1178,7 +1178,7 @@ mod tests {
             min_value,
             max_value,
             allow_nan,
-            smallest_nonzero_magnitude,
+            smallest_nonzero_magnitude: Some(smallest_nonzero_magnitude),
         }
     }
 

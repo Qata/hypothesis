@@ -1482,7 +1482,7 @@ mod tests {
             min_value: -1.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
         
         let node = engine.generate_simplest_choice(

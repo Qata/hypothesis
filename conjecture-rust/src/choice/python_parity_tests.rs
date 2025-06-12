@@ -28,7 +28,7 @@ pub fn float_constr(min_value: f64, max_value: f64) -> FloatConstraints {
         min_value,
         max_value,
         allow_nan: true,
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     }
 }
 

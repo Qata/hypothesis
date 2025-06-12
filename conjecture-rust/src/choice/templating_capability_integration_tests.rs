@@ -88,7 +88,7 @@ impl TemplatingCapabilityIntegrationTests {
                 min_value: -10.0,
                 max_value: 10.0,
                 allow_nan: false,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             })),
             (ChoiceType::String, Constraints::String(StringConstraints {
                 min_size: 0,
@@ -293,7 +293,7 @@ impl TemplatingCapabilityIntegrationTests {
                     min_value: -1.0,
                     max_value: 1.0,
                     allow_nan: false,
-                    smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                    smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                 }),
                 "float outside range"
             ),
@@ -435,7 +435,7 @@ impl TemplatingCapabilityIntegrationTests {
                     min_value: 0.0,
                     max_value: 1.0,
                     allow_nan: false,
-                    smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                    smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                 }),
                 true,
                 "valid float within range"
@@ -447,7 +447,7 @@ impl TemplatingCapabilityIntegrationTests {
                     min_value: 0.0,
                     max_value: 1.0,
                     allow_nan: false,
-                    smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                    smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                 }),
                 false,
                 "invalid NaN when not allowed"
@@ -626,7 +626,7 @@ impl TemplatingCapabilityIntegrationTests {
                 min_value: f64::NEG_INFINITY,
                 max_value: f64::INFINITY,
                 allow_nan: true,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             }),
             ChoiceType::String => Constraints::String(StringConstraints {
                 min_size: 0,

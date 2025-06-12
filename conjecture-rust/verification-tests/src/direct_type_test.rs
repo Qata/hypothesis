@@ -11,12 +11,12 @@ pub fn run_direct_type_tests() -> Result<(), String> {
     println!("  Test 1: Direct field access type consistency");
     let constraints = FloatConstraints::default();
     
-    // This should compile without any Option unwrapping
-    let magnitude: f64 = constraints.smallest_nonzero_magnitude;
-    if !(magnitude > 0.0) {
+    // This should handle Option<f64> properly
+    let magnitude: Option<f64> = constraints.smallest_nonzero_magnitude;
+    if magnitude.map_or(false, |m| m <= 0.0) {
         return Err("Default smallest_nonzero_magnitude should be positive".to_string());
     }
-    println!("    ✓ Default smallest_nonzero_magnitude: {}", magnitude);
+    println!("    ✓ Default smallest_nonzero_magnitude: {:?}", magnitude);
     
     // Test 2: Assignment should accept f64 directly
     println!("  Test 2: Direct f64 assignment");
@@ -24,13 +24,13 @@ pub fn run_direct_type_tests() -> Result<(), String> {
         min_value: -10.0,
         max_value: 10.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: 1e-6, // Direct f64 assignment
+        smallest_nonzero_magnitude: Some(1e-6), // Direct f64 assignment
     };
     
-    if custom_constraints.smallest_nonzero_magnitude != 1e-6 {
+    if custom_constraints.smallest_nonzero_magnitude != Some(1e-6) {
         return Err("Direct f64 assignment failed".to_string());
     }
-    println!("    ✓ Custom smallest_nonzero_magnitude: {}", custom_constraints.smallest_nonzero_magnitude);
+    println!("    ✓ Custom smallest_nonzero_magnitude: {:?}", custom_constraints.smallest_nonzero_magnitude);
     
     // Test 3: Constructor should accept f64 directly  
     println!("  Test 3: Constructor with f64 parameter");
@@ -38,22 +38,22 @@ pub fn run_direct_type_tests() -> Result<(), String> {
         Some(-100.0),
         Some(100.0),
         true,
-        1e-8, // Direct f64 value, not Option<f64>
+        Some(1e-8), // Option<f64> value
     ).map_err(|e| format!("Constructor failed: {}", e))?;
     
-    if constructed.smallest_nonzero_magnitude != 1e-8 {
+    if constructed.smallest_nonzero_magnitude != Some(1e-8) {
         return Err("Constructor f64 parameter failed".to_string());
     }
-    println!("    ✓ Constructed smallest_nonzero_magnitude: {}", constructed.smallest_nonzero_magnitude);
+    println!("    ✓ Constructed smallest_nonzero_magnitude: {:?}", constructed.smallest_nonzero_magnitude);
     
     // Test 4: Cloning preserves type
     println!("  Test 4: Cloning preserves f64 type");
     let cloned = constructed.clone();
-    let cloned_magnitude: f64 = cloned.smallest_nonzero_magnitude;
-    if cloned_magnitude != 1e-8 {
-        return Err("Cloning did not preserve f64 value".to_string());
+    let cloned_magnitude: Option<f64> = cloned.smallest_nonzero_magnitude;
+    if cloned_magnitude != Some(1e-8) {
+        return Err("Cloning did not preserve Option<f64> value".to_string());
     }
-    println!("    ✓ Cloned smallest_nonzero_magnitude: {}", cloned_magnitude);
+    println!("    ✓ Cloned smallest_nonzero_magnitude: {:?}", cloned_magnitude);
     
     // Test 5: Validation with magnitude constraint
     println!("  Test 5: Validation logic with magnitude constraint");
@@ -61,7 +61,7 @@ pub fn run_direct_type_tests() -> Result<(), String> {
         min_value: -10.0,
         max_value: 10.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: 1e-3,
+        smallest_nonzero_magnitude: Some(1e-3),
     };
     
     // Test valid values
@@ -107,18 +107,18 @@ pub fn run_direct_type_tests() -> Result<(), String> {
         min_value: 0.0,
         max_value: 1.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: 1e-6,
+        smallest_nonzero_magnitude: Some(1e-6),
     };
     
     let constraints_enum = Constraints::Float(float_constraints.clone());
     
     // Verify the enum contains the correct constraints
     if let Constraints::Float(ref c) = constraints_enum {
-        let magnitude: f64 = c.smallest_nonzero_magnitude; // Direct f64 access
-        if magnitude != 1e-6 {
+        let magnitude: Option<f64> = c.smallest_nonzero_magnitude; // Direct Option<f64> access
+        if magnitude != Some(1e-6) {
             return Err("Enum wrapper did not preserve f64 value".to_string());
         }
-        println!("    ✓ Enum wrapper preserves f64 type: {}", magnitude);
+        println!("    ✓ Enum wrapper preserves Option<f64> type: {:?}", magnitude);
     } else {
         return Err("Expected Float constraints in enum".to_string());
     }
@@ -138,12 +138,12 @@ pub fn run_direct_type_tests() -> Result<(), String> {
             min_value: f64::NEG_INFINITY,
             max_value: f64::INFINITY,
             allow_nan: true,
-            smallest_nonzero_magnitude: magnitude, // Direct f64 assignment
+            smallest_nonzero_magnitude: Some(magnitude), // Option<f64> assignment
         };
         
         // Verify direct access works
-        let _direct_access: f64 = edge_constraints.smallest_nonzero_magnitude;
-        if edge_constraints.smallest_nonzero_magnitude != magnitude {
+        let _direct_access: Option<f64> = edge_constraints.smallest_nonzero_magnitude;
+        if edge_constraints.smallest_nonzero_magnitude != Some(magnitude) {
             return Err(format!("Edge case magnitude {} not preserved", magnitude));
         }
     }

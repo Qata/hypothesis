@@ -83,7 +83,7 @@ fn test_weighted_choice_selection_capability_constrained_choice_spaces() {
         min_value: 1.0,
         max_value: 4.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     };
     
     let float_selector = WeightedChoiceContext::new(
@@ -561,7 +561,7 @@ fn test_weighted_choice_selection_capability_complete_integration() {
         min_value: 1.0,
         max_value: 3.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     };
     
     let constrained_selector = WeightedSelectorFactory::create_constrained_selector(
@@ -1444,7 +1444,7 @@ fn test_weighted_selection_capability_advanced_constraint_satisfaction() {
         min_value: 1.0,
         max_value: 3.5,
         allow_nan: false,
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     };
     
     let float_selector = WeightedChoiceContext::new(

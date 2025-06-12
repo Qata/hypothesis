@@ -134,7 +134,7 @@ impl ForcedValueInsertionTests {
                 min_value: f64::NEG_INFINITY,
                 max_value: f64::INFINITY,
                 allow_nan: true,
-                smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+                smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
             });
 
             match self.engine.process_next_template(ChoiceType::Float, &constraints) {
@@ -221,7 +221,7 @@ impl ForcedValueInsertionTests {
             min_value: f64::NEG_INFINITY,
             max_value: f64::INFINITY,
             allow_nan: true,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
 
         match self.engine.process_next_template(ChoiceType::Float, &nan_constraints) {
@@ -376,7 +376,7 @@ impl ForcedValueInsertionTests {
             min_value: -1.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
 
         match self.engine.process_next_template(ChoiceType::Float, &narrow_float_constraints) {
@@ -682,7 +682,7 @@ impl ForcedValueInsertionTests {
             min_value: -10.0,
             max_value: 10.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         });
 
         match self.engine.process_next_template(ChoiceType::Float, &no_nan_constraints) {

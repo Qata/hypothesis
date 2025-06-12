@@ -381,7 +381,7 @@ mod tests {
             min_value: 1.5,
             max_value: 3.5,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         };
         
         let bounded_trivial = ChoiceNode::new(

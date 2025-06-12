@@ -68,7 +68,7 @@ fn test_comprehensive_template_driven_choice_generation() {
             min_value: 0.0,
             max_value: 1.0,
             allow_nan: false,
-            smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+            smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
         })),
         (ChoiceType::String, Constraints::String(StringConstraints {
             min_size: 0,
@@ -185,7 +185,7 @@ fn test_forced_value_insertion_with_constraint_validation() {
         min_value: 0.0,
         max_value: 1.0,
         allow_nan: false, // NaN not allowed
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     });
     
     let result4 = engine.process_next_template(ChoiceType::Float, &float_constraints).unwrap();
@@ -567,7 +567,7 @@ fn test_simplest_choice_generation_comprehensive() {
         min_value: -5.0,
         max_value: 5.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     });
     
     let float_node = engine.generate_simplest_choice(ChoiceType::Float, &float_constraints_finite).unwrap();
@@ -766,7 +766,7 @@ fn test_template_constraint_system_integration() {
         min_value: 0.0,
         max_value: 1.0,
         allow_nan: false,
-        smallest_nonzero_magnitude: f64::MIN_POSITIVE,
+        smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
     });
     
     let float_result = engine.process_next_template(ChoiceType::Float, &float_constraints).unwrap();

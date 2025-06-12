@@ -2041,7 +2041,7 @@ mod tests {
                     min_value: 0.0,
                     max_value: 100.0,
                     allow_nan: false,
-                    smallest_nonzero_magnitude: 1e-10,
+                    smallest_nonzero_magnitude: Some(1e-10),
                 }),
                 false,
             ),
