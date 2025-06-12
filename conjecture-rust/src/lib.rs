@@ -14,6 +14,12 @@ pub mod shrinking;
 pub mod engine;
 pub mod engine_orchestrator;
 pub mod engine_orchestrator_provider_type_integration;
+pub mod engine_orchestrator_choice_system_shrinking_integration;
+
+#[cfg(test)]
+mod engine_orchestrator_choice_system_shrinking_integration_test;
+#[cfg(test)]
+mod engine_orchestrator_choice_system_shrinking_integration_comprehensive_capability_tests;
 pub mod conjecture_data_lifecycle_management;
 pub mod conjecture_data_lifecycle_comprehensive_capability_tests;
 pub mod provider_integration_demo;
@@ -44,6 +50,10 @@ pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
 pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
 pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionPhase, ExecutionStatistics, OrchestrationError};
+pub use engine_orchestrator_choice_system_shrinking_integration::{
+    ChoiceSystemShrinkingIntegration, ShrinkingIntegrationConfig, ShrinkingIntegrationResult, 
+    AdvancedShrinkResult, ConversionError
+};
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
 pub use persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseError, DatabaseIntegration, ExampleSerialization};
 // pub use targeting::{TargetingEngine, TargetFunction, TargetObservation, ParetoPoint, CoverageState, OptimizationDirection, MinimizeFunction, MaximizeFunction, ComplexityFunction, TargetingSuggestions};

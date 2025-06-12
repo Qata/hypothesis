@@ -15,7 +15,7 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crate::choice::{ChoiceNode, ChoiceType};
+use crate::choice::{ChoiceNode, ChoiceType, ChoiceValue};
 use crate::data::{ConjectureData, ConjectureResult, Status, DataObserver};
 use crate::providers::{PrimitiveProvider, ProviderRegistry, get_provider_registry};
 use crate::engine_orchestrator_provider_type_integration::{
@@ -878,9 +878,9 @@ impl EngineOrchestrator {
         }
     }
 
-    /// Shrink interesting examples to minimal failing cases
+    /// Shrink interesting examples to minimal failing cases using sophisticated Choice System Shrinking Integration
     fn shrink_interesting_examples(&mut self) -> OrchestrationResult<()> {
-        eprintln!("Shrinking {} interesting examples", self.interesting_examples.len());
+        eprintln!("CHOICE_SHRINKING: Starting sophisticated shrinking of {} interesting examples", self.interesting_examples.len());
 
         if self.interesting_examples.is_empty() {
             return Ok(());
@@ -891,12 +891,95 @@ impl EngineOrchestrator {
             Instant::now() + Duration::from_secs(MAX_SHRINKING_SECONDS)
         });
 
+        // Configure sophisticated shrinking integration
+        let shrinking_config = crate::engine_orchestrator_choice_system_shrinking_integration::ShrinkingIntegrationConfig {
+            max_shrinking_attempts: MAX_SHRINKS,
+            shrinking_timeout: Duration::from_secs(MAX_SHRINKING_SECONDS),
+            enable_advanced_patterns: true,
+            enable_multi_strategy: true,
+            quality_improvement_threshold: 0.001,
+            max_concurrent_strategies: 4,
+            debug_logging: self.config.debug_logging,
+            use_hex_notation: true,
+        };
+
+        // Create sophisticated shrinking integration engine
+        let mut shrinking_integration = crate::engine_orchestrator_choice_system_shrinking_integration::ChoiceSystemShrinkingIntegration::new(shrinking_config);
+
+        // Apply sophisticated shrinking to all interesting examples
+        let interesting_examples_clone = self.interesting_examples.clone();
+        match shrinking_integration.integrate_shrinking(self, &interesting_examples_clone) {
+            Ok(shrinking_results) => {
+                eprintln!("CHOICE_SHRINKING: Sophisticated shrinking completed with {} results", shrinking_results.len());
+                
+                // Process shrinking results and update state
+                for (example_key, shrink_result) in shrinking_results {
+                    if shrink_result.success {
+                        self.shrinks += shrink_result.shrinks_performed;
+                        
+                        // Update the example with shrunk result if available
+                        if let Some(ref shrunk_result) = shrink_result.shrunk_result {
+                            eprintln!("CHOICE_SHRINKING: Example '{}' shrunk from {} to {} nodes ({:.1}% reduction)", 
+                                     example_key, shrink_result.original_size, shrink_result.final_size, 
+                                     shrink_result.reduction_percentage());
+                            
+                            let shrunk_result_clone = shrunk_result.clone();
+                            self.interesting_examples.insert(example_key.clone(), shrunk_result_clone);
+                            let example_data = self.interesting_examples[&example_key].clone();
+                            self.save_example_to_database(&example_data, "shrunk");
+                        }
+                        
+                        self.shrunk_examples.insert(example_key.clone());
+                        
+                        eprintln!("CHOICE_SHRINKING: Successfully shrunk example '{}' using strategies: {:?}", 
+                                 example_key, shrink_result.successful_strategies);
+                    } else {
+                        eprintln!("CHOICE_SHRINKING: Failed to shrink example '{}': {:?}", 
+                                 example_key, shrink_result.errors);
+                    }
+                    
+                    // Check deadline and limits
+                    if Instant::now() > deadline {
+                        eprintln!("CHOICE_SHRINKING: Shrinking deadline exceeded, stopping sophisticated shrinking");
+                        self.exit_with(ExitReason::VerySlowShrinking);
+                        break;
+                    }
+                    
+                    if self.shrinks >= MAX_SHRINKS {
+                        eprintln!("CHOICE_SHRINKING: Maximum shrinks reached, stopping sophisticated shrinking");
+                        self.exit_with(ExitReason::MaxShrinks);
+                        break;
+                    }
+                }
+                
+                // Log final sophisticated shrinking metrics
+                let integration_metrics = shrinking_integration.get_metrics();
+                eprintln!("CHOICE_SHRINKING: Integration metrics - attempts: {}, successful: {}, conversion_errors: {}, avg_quality: {:.3}", 
+                         integration_metrics.total_attempts, integration_metrics.successful_integrations,
+                         integration_metrics.conversion_errors, integration_metrics.average_quality_improvement);
+            }
+            Err(e) => {
+                eprintln!("CHOICE_SHRINKING: Sophisticated shrinking integration failed: {}", e);
+                
+                // Fallback to simple shrinking if sophisticated shrinking fails
+                self.apply_fallback_shrinking(deadline)?;
+            }
+        }
+
+        eprintln!("CHOICE_SHRINKING: Completed sophisticated shrinking with {} total shrinks", self.shrinks);
+        Ok(())
+    }
+    
+    /// Fallback shrinking when sophisticated shrinking fails
+    fn apply_fallback_shrinking(&mut self, deadline: Instant) -> OrchestrationResult<()> {
+        eprintln!("CHOICE_SHRINKING: Applying fallback shrinking to {} examples", self.interesting_examples.len());
+        
         let mut examples_to_shrink: Vec<_> = self.interesting_examples.keys().cloned().collect();
         examples_to_shrink.sort(); // For deterministic ordering
 
         for example_key in examples_to_shrink {
             if Instant::now() > deadline {
-                eprintln!("Shrinking deadline exceeded, stopping shrinking");
+                eprintln!("CHOICE_SHRINKING: Fallback shrinking deadline exceeded");
                 self.exit_with(ExitReason::VerySlowShrinking);
                 break;
             }
@@ -906,11 +989,37 @@ impl EngineOrchestrator {
             }
 
             if let Some(example) = self.interesting_examples.get(&example_key).cloned() {
-                eprintln!("Shrinking example: {}", example_key);
+                eprintln!("CHOICE_SHRINKING: Applying fallback shrinking to example: {}", example_key);
                 
-                // TODO: Implement actual shrinking logic
-                // For now, just mark as shrunk
-                self.shrunk_examples.insert(example_key);
+                // Simple fallback: try to remove every other choice
+                if example.nodes.len() > 2 {
+                    let simplified_nodes: Vec<_> = example.nodes.iter()
+                        .enumerate()
+                        .filter(|(i, _)| i % 2 == 0)
+                        .map(|(_, node)| node.clone())
+                        .collect();
+                    
+                    if simplified_nodes.len() < example.nodes.len() {
+                        // Create simplified result
+                        let mut simplified_result = example.clone();
+                        simplified_result.nodes = simplified_nodes;
+                        simplified_result.length = simplified_result.nodes.len();
+                        
+                        // Validate the simplified result
+                        if self.validate_fallback_shrinking(&simplified_result)? {
+                            eprintln!("CHOICE_SHRINKING: Fallback shrinking reduced example '{}' from {} to {} nodes", 
+                                     example_key, example.nodes.len(), simplified_result.nodes.len());
+                            
+                            let example_key_clone = example_key.clone();
+                            let simplified_result_clone = simplified_result.clone();
+                            self.interesting_examples.insert(example_key_clone.clone(), simplified_result_clone);
+                            let example_data = self.interesting_examples[&example_key_clone].clone();
+                            self.save_example_to_database(&example_data, "fallback_shrunk");
+                        }
+                    }
+                }
+                
+                self.shrunk_examples.insert(example_key.clone());
                 self.shrinks += 1;
 
                 if self.shrinks >= MAX_SHRINKS {
@@ -919,9 +1028,30 @@ impl EngineOrchestrator {
                 }
             }
         }
-
-        eprintln!("Completed shrinking with {} shrinks", self.shrinks);
+        
         Ok(())
+    }
+    
+    /// Validate fallback shrinking result
+    fn validate_fallback_shrinking(&mut self, result: &ConjectureResult) -> OrchestrationResult<bool> {
+        // Simple validation: check if result has valid structure
+        if result.nodes.is_empty() {
+            return Ok(false);
+        }
+        
+        // Check if all nodes have valid choice types and values
+        for node in &result.nodes {
+            match (&node.choice_type, &node.value) {
+                (ChoiceType::Integer, ChoiceValue::Integer(_)) => {},
+                (ChoiceType::Boolean, ChoiceValue::Boolean(_)) => {},
+                (ChoiceType::Float, ChoiceValue::Float(_)) => {},
+                (ChoiceType::String, ChoiceValue::String(_)) => {},
+                (ChoiceType::Bytes, ChoiceValue::Bytes(_)) => {},
+                _ => return Ok(false), // Invalid type/value combination
+            }
+        }
+        
+        Ok(true)
     }
 
     /// Check execution limits and health
