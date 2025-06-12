@@ -16,6 +16,7 @@ pub mod engine_orchestrator;
 pub mod engine_orchestrator_provider_type_integration;
 pub mod engine_orchestrator_choice_system_shrinking_integration;
 pub mod engine_orchestrator_test_function_signature_alignment;
+pub mod engine_orchestrator_datatree_novel_prefix_integration;
 
 #[cfg(test)]
 mod engine_orchestrator_choice_system_shrinking_integration_test;
@@ -58,6 +59,10 @@ pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionP
 pub use engine_orchestrator_choice_system_shrinking_integration::{
     ChoiceSystemShrinkingIntegration, ShrinkingIntegrationConfig, ShrinkingIntegrationResult, 
     AdvancedShrinkResult, ConversionError
+};
+pub use engine_orchestrator_datatree_novel_prefix_integration::{
+    NovelPrefixGenerator, NovelPrefixIntegrationConfig, NovelPrefixIntegrationStats,
+    NovelPrefixGenerationResult, SimulationResult
 };
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
 pub use persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseError, DatabaseIntegration, ExampleSerialization};

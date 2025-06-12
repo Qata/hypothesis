@@ -49,6 +49,10 @@ path = "conjecture_data_lifecycle_capability_demo.rs"
 name = "test_lifecycle_implementation"
 path = "test_lifecycle_implementation.rs"
 
+[[bin]]
+name = "test_datatree_integration_standalone"
+path = "test_datatree_integration_standalone.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"

@@ -2047,6 +2047,12 @@ impl ConjectureData {
         self.observer.is_some()
     }
     
+    /// Get the choice nodes from this ConjectureData
+    /// Used by DataTree integration to extract test path information
+    pub fn get_nodes(&self) -> &[ChoiceNode] {
+        &self.nodes
+    }
+    
     /// Convert this ConjectureData into an immutable ConjectureResult
     /// 
     /// This creates a snapshot of the current state that can be used for
