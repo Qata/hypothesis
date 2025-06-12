@@ -13,6 +13,7 @@ pub mod choice_sequence_integration;
 pub mod shrinking;
 pub mod engine;
 pub mod engine_orchestrator;
+pub mod engine_orchestrator_provider_type_integration;
 pub mod provider_integration_demo;
 pub mod providers;
 pub mod persistence;

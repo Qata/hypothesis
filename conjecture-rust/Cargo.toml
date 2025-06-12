@@ -37,6 +37,10 @@ path = "test_core_choice_sequence_capability.rs"
 name = "simple_capability_test"
 path = "simple_capability_test.rs"
 
+[[bin]]
+name = "provider_type_system_capability_demo"
+path = "provider_type_system_capability_demo.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"

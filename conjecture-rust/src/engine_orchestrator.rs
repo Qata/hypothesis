@@ -18,6 +18,9 @@ use std::time::{Duration, Instant};
 use crate::choice::{ChoiceNode, ChoiceType};
 use crate::data::{ConjectureData, ConjectureResult, Status, DataObserver};
 use crate::providers::{PrimitiveProvider, ProviderRegistry, get_provider_registry};
+use crate::engine_orchestrator_provider_type_integration::{
+    ProviderTypeManager, ProviderTypeError, EnhancedPrimitiveProvider
+};
 use crate::persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseIntegration};
 
 /// Maximum number of examples to generate before stopping
@@ -316,15 +319,15 @@ impl Default for OrchestratorConfig {
     }
 }
 
-/// The main test execution orchestrator
-pub struct EngineOrchestrator<P: PrimitiveProvider> {
+/// The main test execution orchestrator with unified provider type system
+pub struct EngineOrchestrator {
     /// Configuration
     config: OrchestratorConfig,
     /// Test function to execute
     test_function: Box<dyn Fn(&mut ConjectureData) -> OrchestrationResult<()> + Send + Sync>,
-    /// Primitive provider for generating choices
-    provider: P,
-    /// Provider integration context for backend management
+    /// Provider type manager for unified provider handling
+    provider_manager: ProviderTypeManager,
+    /// Legacy provider context (deprecated)
     provider_context: ProviderContext,
     /// Current execution phase
     current_phase: ExecutionPhase,
@@ -358,15 +361,23 @@ pub struct EngineOrchestrator<P: PrimitiveProvider> {
     exit_reason: Option<ExitReason>,
 }
 
-impl<P: PrimitiveProvider> EngineOrchestrator<P> {
-    /// Create a new test execution orchestrator
+impl EngineOrchestrator {
+    /// Create a new test execution orchestrator with unified provider type system
     pub fn new(
         test_function: Box<dyn Fn(&mut ConjectureData) -> OrchestrationResult<()> + Send + Sync>,
-        provider: P,
         config: OrchestratorConfig,
     ) -> Self {
-        eprintln!("Initializing EngineOrchestrator with config: {:?}", config);
+        Self::with_provider_manager(test_function, config)
+    }
+
+    /// Create with explicit provider type manager (enhanced interface)
+    pub fn with_provider_manager(
+        test_function: Box<dyn Fn(&mut ConjectureData) -> OrchestrationResult<()> + Send + Sync>,
+        config: OrchestratorConfig,
+    ) -> Self {
+        eprintln!("PROVIDER TYPE SYSTEM: Initializing EngineOrchestrator with config: {:?}", config);
         
+        let mut provider_manager = ProviderTypeManager::new();
         let mut provider_context = ProviderContext::default();
         provider_context.active_provider = config.backend.clone();
         
@@ -389,7 +400,7 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         Self {
             config,
             test_function,
-            provider,
+            provider_manager,
             provider_context,
             current_phase: ExecutionPhase::Initialize,
             statistics: ExecutionStatistics::default(),
@@ -473,9 +484,9 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         Ok(())
     }
 
-    /// Initialize the orchestrator
+    /// Initialize the orchestrator with provider type system
     fn initialize(&mut self) -> OrchestrationResult<()> {
-        eprintln!("Initializing orchestrator with {} max examples", self.config.max_examples);
+        eprintln!("PROVIDER TYPE SYSTEM: Initializing orchestrator with {} max examples", self.config.max_examples);
         
         // Validate configuration
         if self.config.max_examples == 0 {
@@ -484,21 +495,17 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
             });
         }
 
-        // Initialize provider context
-        self.provider_context.active_provider = self.config.backend.clone();
-        eprintln!("Provider Integration: Initializing with backend '{}'", self.provider_context.active_provider);
-        
-        // Validate that the requested backend is available
-        let registry = get_provider_registry();
-        let available_providers = registry.available_providers();
-        if !available_providers.contains(&self.config.backend) {
+        // Initialize provider type manager
+        if let Err(e) = self.provider_manager.initialize(&self.config.backend) {
             return Err(OrchestrationError::ProviderCreationFailed {
                 backend: self.config.backend.clone(),
-                reason: format!("Backend not found. Available: {:?}", available_providers),
+                reason: format!("Provider type system initialization failed: {}", e),
             });
         }
         
-        eprintln!("Provider Integration: Backend '{}' validated successfully", self.config.backend);
+        // Update legacy context for compatibility
+        self.provider_context.active_provider = self.config.backend.clone();
+        eprintln!("PROVIDER TYPE SYSTEM: Backend '{}' initialized successfully", self.config.backend);
         Ok(())
     }
 
@@ -995,35 +1002,28 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         self.config.backend == "hypothesis" || self.provider_context.switch_to_hypothesis
     }
 
-    /// Handle BackendCannotProceed exception and determine provider switching logic
+    /// Handle BackendCannotProceed with provider type system integration
     /// 
-    /// This implements the Python ConjectureRunner's BackendCannotProceed handling
-    /// with provider switching logic based on the scope of the error.
+    /// This implements comprehensive BackendCannotProceed handling through the
+    /// unified provider type system with proper error propagation and type safety.
     pub fn handle_backend_cannot_proceed(&mut self, scope: BackendScope) -> OrchestrationResult<()> {
-        eprintln!("Provider Integration: BackendCannotProceed with scope '{}'", scope.as_str());
+        eprintln!("PROVIDER TYPE SYSTEM: BackendCannotProceed with scope '{}'", scope.as_str());
         
-        match scope {
-            BackendScope::Verified | BackendScope::Exhausted => {
-                eprintln!("Provider Integration: Switching to Hypothesis provider due to {} scope", scope.as_str());
-                self.switch_to_hypothesis_provider()?;
-                
-                if scope == BackendScope::Verified {
-                    self.provider_context.verified_by = Some(self.config.backend.clone());
-                    eprintln!("Provider Integration: Test verified by backend '{}'", self.config.backend);
-                }
-            }
-            BackendScope::DiscardTestCase => {
-                self.provider_context.failed_realize_count += 1;
-                eprintln!("Provider Integration: Failed realize count: {}", self.provider_context.failed_realize_count);
-                
-                // Switch to Hypothesis if we have too many failed realizes
-                if self.provider_context.failed_realize_count > 10 
-                    && (self.provider_context.failed_realize_count as f64 / self.call_count as f64) > 0.2 {
-                    eprintln!("Provider Integration: Too many failed realizes ({}), switching to Hypothesis", 
-                             self.provider_context.failed_realize_count);
-                    self.switch_to_hypothesis_provider()?;
-                }
-            }
+        // Handle through provider type manager
+        self.provider_manager.handle_backend_cannot_proceed(scope.as_str())
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Backend cannot proceed handling failed: {}", e),
+            })?;
+
+        // Update legacy context for compatibility
+        let manager_context = self.provider_manager.context();
+        self.provider_context.switch_to_hypothesis = manager_context.switch_to_hypothesis;
+        self.provider_context.active_provider = manager_context.active_provider.clone();
+        self.provider_context.failed_realize_count = manager_context.failed_realize_count;
+        
+        if let Some(ref verified_by) = manager_context.verified_by {
+            self.provider_context.verified_by = Some(verified_by.clone());
+            eprintln!("PROVIDER TYPE SYSTEM: Test verified by backend '{}'", verified_by);
         }
 
         // All BackendCannotProceed exceptions are treated as invalid examples
@@ -1032,88 +1032,72 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         Ok(())
     }
 
-    /// Switch to the Hypothesis provider
+    /// Switch to the Hypothesis provider through type-safe provider manager
     /// 
-    /// This implements the Python ConjectureRunner's _switch_to_hypothesis_provider logic.
-    /// When backends cannot proceed, we fall back to the Hypothesis provider for more
-    /// reliable generation and shrinking.
+    /// This implements provider switching with full type safety and proper
+    /// lifecycle management through the unified provider type system.
     pub fn switch_to_hypothesis_provider(&mut self) -> OrchestrationResult<()> {
-        if self.provider_context.switch_to_hypothesis {
-            eprintln!("Provider Integration: Already using Hypothesis provider");
-            return Ok(());
-        }
-
-        let previous_provider = self.provider_context.active_provider.clone();
-        eprintln!("Provider Integration: Switching from '{}' to 'hypothesis'", previous_provider);
+        let previous_provider = self.provider_manager.context().active_provider.clone();
+        eprintln!("PROVIDER TYPE SYSTEM: Switching from '{}' to 'hypothesis'", previous_provider);
         
-        // Attempt to create the Hypothesis provider to validate the switch
-        let registry = get_provider_registry();
-        if let Some(_hypothesis_provider) = registry.create("hypothesis") {
-            self.provider_context.switch_to_hypothesis = true;
-            self.provider_context.active_provider = "hypothesis".to_string();
-            eprintln!("Provider Integration: Successfully switched to Hypothesis provider");
-            
-            // Log provider switch in statistics
-            self.log_provider_observation("provider_switched", &format!("{}->hypothesis", previous_provider));
-            
-            Ok(())
-        } else {
-            Err(OrchestrationError::ProviderSwitchingFailed {
-                from: previous_provider,
+        self.provider_manager.switch_to_hypothesis()
+            .map_err(|e| OrchestrationError::ProviderSwitchingFailed {
+                from: previous_provider.clone(),
                 to: "hypothesis".to_string(),
-                reason: "Failed to create Hypothesis provider instance".to_string(),
-            })
-        }
-    }
+                reason: format!("Provider type system error: {}", e),
+            })?;
 
-    /// Create a new provider instance based on current context
-    /// 
-    /// This provides dynamic provider instantiation based on the current
-    /// provider context and switching state.
-    pub fn create_active_provider(&self) -> OrchestrationResult<Box<dyn PrimitiveProvider>> {
-        let provider_name = if self.provider_context.switch_to_hypothesis {
-            "hypothesis"
-        } else {
-            &self.provider_context.active_provider
-        };
-
-        eprintln!("Provider Integration: Creating provider instance for '{}'", provider_name);
+        // Update legacy context for compatibility
+        self.provider_context.switch_to_hypothesis = true;
+        self.provider_context.active_provider = "hypothesis".to_string();
         
-        let registry = get_provider_registry();
-        match registry.create(provider_name) {
-            Some(provider) => {
-                eprintln!("Provider Integration: Successfully created provider '{}'", provider_name);
-                Ok(provider)
-            }
-            None => {
-                Err(OrchestrationError::ProviderCreationFailed {
-                    backend: provider_name.to_string(),
-                    reason: "Provider not found in registry".to_string(),
-                })
-            }
-        }
+        eprintln!("PROVIDER TYPE SYSTEM: Successfully switched to hypothesis");
+        self.log_provider_observation("provider_switched", &format!("{}->hypothesis", previous_provider));
+        
+        Ok(())
     }
 
-    /// Register a provider observability callback
+    /// Get active provider through type-safe provider manager
+    /// 
+    /// This provides type-safe access to the active provider instance
+    /// through the unified provider type system.
+    pub fn active_provider(&mut self) -> OrchestrationResult<&mut dyn EnhancedPrimitiveProvider> {
+        self.provider_manager.active_provider()
+            .map_err(|e| OrchestrationError::Provider {
+                message: format!("Provider access failed: {}", e),
+            })
+    }
+
+    /// Create active provider (legacy compatibility method)
+    pub fn create_active_provider(&self) -> OrchestrationResult<String> {
+        // Return provider name for compatibility
+        Ok(self.provider_manager.context().active_provider.clone())
+    }
+
+    /// Register a provider observability callback through type system
     /// 
     /// This provides a mechanism for observing provider-specific events
-    /// and integrating with external monitoring systems.
+    /// through the unified provider type system.
     pub fn register_provider_observation_callback(&mut self, callback_id: String) {
-        eprintln!("Provider Integration: Registering observation callback '{}'", callback_id);
-        self.provider_context.observation_callbacks.push(callback_id);
+        eprintln!("PROVIDER TYPE SYSTEM: Registering observation callback '{}'", callback_id);
+        self.provider_manager.register_observation_callback(callback_id.clone());
+        self.provider_context.observation_callbacks.push(callback_id); // Legacy compatibility
     }
 
-    /// Log a provider-specific observation event
+    /// Log a provider-specific observation event through type system
     /// 
-    /// This enables structured logging of provider events for debugging
-    /// and observability purposes.
+    /// This enables structured logging of provider events through the
+    /// unified provider type system with proper hex notation.
     pub fn log_provider_observation(&self, event_type: &str, details: &str) {
-        let hex_id = format!("{:08X}", self.call_count); // Uppercase hex notation
-        eprintln!("Provider Integration: [{}] {} - {}", hex_id, event_type, details);
+        self.provider_manager.log_observation(event_type, details);
         
-        // If observation callbacks are registered, we could invoke them here
+        // Legacy hex notation for compatibility
+        let hex_id = format!("{:08X}", self.call_count);
+        eprintln!("PROVIDER TYPE SYSTEM: [{}] {} - {}", hex_id, event_type, details);
+        
+        // Notify callbacks for compatibility
         for callback in &self.provider_context.observation_callbacks {
-            eprintln!("Provider Integration: Notifying callback '{}' of event '{}'", callback, event_type);
+            eprintln!("PROVIDER TYPE SYSTEM: Notifying callback '{}' of event '{}'", callback, event_type);
         }
     }
 
@@ -1159,12 +1143,12 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         }
     }
 
-    /// Clean up provider resources and contexts
+    /// Clean up provider resources through type system
     /// 
-    /// This ensures proper resource management with RAII patterns
-    /// and provides clean shutdown for provider instances.
+    /// This ensures proper resource management through the unified
+    /// provider type system with RAII patterns.
     pub fn cleanup_provider_context(&mut self) {
-        eprintln!("Provider Integration: Cleaning up provider context");
+        eprintln!("PROVIDER TYPE SYSTEM: Cleaning up provider context");
         
         // Log final provider statistics
         self.log_provider_observation("cleanup_started", &format!(
@@ -1174,24 +1158,26 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
             self.provider_context.failed_realize_count
         ));
 
-        // Clear observation callbacks
+        // Cleanup through provider type manager
+        self.provider_manager.cleanup();
+
+        // Clear legacy observation callbacks
         let callback_count = self.provider_context.observation_callbacks.len();
         self.provider_context.observation_callbacks.clear();
-        eprintln!("Provider Integration: Cleared {} observation callbacks", callback_count);
+        eprintln!("PROVIDER TYPE SYSTEM: Cleared {} observation callbacks", callback_count);
 
-        // Reset provider context to default state
         if let Some(verified_by) = &self.provider_context.verified_by {
-            eprintln!("Provider Integration: Test case was verified by backend '{}'", verified_by);
+            eprintln!("PROVIDER TYPE SYSTEM: Test case was verified by backend '{}'", verified_by);
         }
 
-        eprintln!("Provider Integration: Provider context cleanup completed");
+        eprintln!("PROVIDER TYPE SYSTEM: Provider context cleanup completed");
     }
 }
 
-impl<P: PrimitiveProvider> Drop for EngineOrchestrator<P> {
+impl Drop for EngineOrchestrator {
     fn drop(&mut self) {
         if !matches!(self.current_phase, ExecutionPhase::Cleanup) {
-            eprintln!("EngineOrchestrator dropped without proper cleanup");
+            eprintln!("PROVIDER TYPE SYSTEM: EngineOrchestrator dropped without proper cleanup");
             // Ensure provider cleanup happens even in abnormal shutdown
             self.cleanup_provider_context();
             self.cleanup();
@@ -1207,10 +1193,9 @@ mod tests {
     #[test]
     fn test_orchestrator_creation() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let config = OrchestratorConfig::default();
         
-        let orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let orchestrator = EngineOrchestrator::new(test_fn, config);
         assert_eq!(orchestrator.current_phase(), ExecutionPhase::Initialize);
         assert_eq!(orchestrator.interesting_examples_count(), 0);
     }
@@ -1273,21 +1258,19 @@ mod tests {
     #[test]
     fn test_orchestrator_using_hypothesis_backend() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let config = OrchestratorConfig::default();
         
-        let orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let orchestrator = EngineOrchestrator::new(test_fn, config);
         assert!(orchestrator.using_hypothesis_backend()); // Default backend is "hypothesis"
     }
 
     #[test]
     fn test_orchestrator_with_custom_backend() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let mut config = OrchestratorConfig::default();
         config.backend = "random".to_string();
         
-        let orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let orchestrator = EngineOrchestrator::new(test_fn, config);
         assert!(!orchestrator.using_hypothesis_backend()); // Custom backend, not switched yet
         assert_eq!(orchestrator.provider_context().active_provider, "random");
     }
@@ -1295,11 +1278,10 @@ mod tests {
     #[test]
     fn test_provider_phase_selection() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let mut config = OrchestratorConfig::default();
         config.backend = "random".to_string();
         
-        let orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let orchestrator = EngineOrchestrator::new(test_fn, config);
         
         // Reuse and Shrink phases always use Hypothesis
         assert_eq!(orchestrator.select_provider_for_phase(ExecutionPhase::Reuse), "hypothesis");
@@ -1312,11 +1294,10 @@ mod tests {
     #[test]
     fn test_handle_backend_cannot_proceed_verified() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let mut config = OrchestratorConfig::default();
         config.backend = "crosshair".to_string();
         
-        let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
         
         // Handle verified scope
         let result = orchestrator.handle_backend_cannot_proceed(BackendScope::Verified);
@@ -1329,10 +1310,9 @@ mod tests {
     #[test]
     fn test_handle_backend_cannot_proceed_discard_threshold() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let config = OrchestratorConfig::default();
         
-        let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
         orchestrator.call_count = 50; // Set up call count for threshold calculation
         
         // Trigger multiple discard test case errors to hit threshold
@@ -1341,7 +1321,7 @@ mod tests {
             assert!(result.is_ok());
         }
         
-        // Should switch after crossing 20% threshold with >10 failed realizes
+        // Should switch after crossing threshold with >10 failed realizes
         assert!(orchestrator.provider_context.switch_to_hypothesis);
         assert_eq!(orchestrator.provider_context.failed_realize_count, 12);
     }
@@ -1349,11 +1329,10 @@ mod tests {
     #[test]
     fn test_switch_to_hypothesis_provider() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let mut config = OrchestratorConfig::default();
         config.backend = "random".to_string();
         
-        let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
         
         assert!(!orchestrator.provider_context.switch_to_hypothesis);
         assert_eq!(orchestrator.provider_context.active_provider, "random");
@@ -1367,10 +1346,9 @@ mod tests {
     #[test]
     fn test_provider_observation_callbacks() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let config = OrchestratorConfig::default();
         
-        let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
         
         // Register observation callbacks
         orchestrator.register_provider_observation_callback("test_callback_1".to_string());
@@ -1384,10 +1362,9 @@ mod tests {
     #[test]
     fn test_provider_cleanup() {
         let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-        let provider = HypothesisProvider::new();
         let config = OrchestratorConfig::default();
         
-        let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+        let mut orchestrator = EngineOrchestrator::new(test_fn, config);
         
         // Set up some state
         orchestrator.register_provider_observation_callback("test_callback".to_string());

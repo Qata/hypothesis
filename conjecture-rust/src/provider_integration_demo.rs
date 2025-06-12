@@ -13,10 +13,9 @@ pub fn demo_provider_lifecycle() {
     println!("=== Provider Integration Demo: Lifecycle Management ===");
     
     let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-    let provider = HypothesisProvider::new();
     let config = OrchestratorConfig::default();
     
-    let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+    let mut orchestrator = EngineOrchestrator::new(test_fn, config);
     
     // Register observation callbacks
     orchestrator.register_provider_observation_callback("demo_observer".to_string());
@@ -37,13 +36,12 @@ pub fn demo_provider_switching() {
     println!("\n=== Provider Integration Demo: Provider Switching ===");
     
     let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-    let provider = HypothesisProvider::new();
     
     // Configure with a non-hypothesis backend
     let mut config = OrchestratorConfig::default();
     config.backend = "crosshair".to_string();
     
-    let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+    let mut orchestrator = EngineOrchestrator::new(test_fn, config);
     
     println!("Initial backend: {}", orchestrator.provider_context().active_provider);
     println!("Initially using Hypothesis: {}", orchestrator.using_hypothesis_backend());
@@ -80,12 +78,11 @@ pub fn demo_phase_provider_selection() {
     println!("\n=== Provider Integration Demo: Phase-Specific Provider Selection ===");
     
     let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-    let provider = HypothesisProvider::new();
     
     let mut config = OrchestratorConfig::default();
     config.backend = "random".to_string();
     
-    let orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+    let orchestrator = EngineOrchestrator::new(test_fn, config);
     
     use crate::engine_orchestrator::ExecutionPhase;
     
@@ -104,13 +101,12 @@ pub fn demo_provider_error_handling() {
     println!("\n=== Provider Integration Demo: Error Handling ===");
     
     let test_fn = Box::new(|_data: &mut ConjectureData| Ok(()));
-    let provider = HypothesisProvider::new();
     
     // Test with invalid backend
     let mut config = OrchestratorConfig::default();
     config.backend = "nonexistent_backend".to_string();
     
-    let mut orchestrator = EngineOrchestrator::new(test_fn, provider, config);
+    let mut orchestrator = EngineOrchestrator::new(test_fn, config);
     
     // Test create_active_provider which will check for backend availability
     match orchestrator.create_active_provider() {

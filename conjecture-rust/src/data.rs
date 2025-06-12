@@ -2335,6 +2335,10 @@ pub enum DrawError {
     PreviouslyUnseenBehaviour,
     /// Invalid choice or misaligned replay
     InvalidChoice,
+    /// Empty weights array for weighted choice
+    EmptyWeights,
+    /// Invalid weights (sum <= 0 or contains NaN/Infinity)
+    InvalidWeights,
 }
 
 impl std::fmt::Display for DrawError {
@@ -2352,6 +2356,8 @@ impl std::fmt::Display for DrawError {
             DrawError::UnsatisfiedAssumption(reason) => write!(f, "Unsatisfied assumption: {}", reason),
             DrawError::PreviouslyUnseenBehaviour => write!(f, "Previously unseen behavior detected during tree simulation"),
             DrawError::InvalidChoice => write!(f, "Invalid choice or misaligned replay"),
+            DrawError::EmptyWeights => write!(f, "Cannot choose from empty weights array"),
+            DrawError::InvalidWeights => write!(f, "Invalid weights: sum must be positive and finite"),
         }
     }
 }
