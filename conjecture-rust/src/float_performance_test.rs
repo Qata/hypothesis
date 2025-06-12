@@ -15,7 +15,7 @@ pub fn benchmark_float_indexing() -> std::time::Duration {
     // Test with a mix of simple and complex floats to reflect real usage
     let test_values = [
         0.0, 1.0, 2.0, 3.0, 10.0, 100.0,  // Simple integers
-        1.5, 2.25, 3.14159, 0.1, 0.333333, // Complex floats
+        1.5, 2.25, std::f64::consts::PI, 0.1, 0.333333, // Complex floats
         f64::MIN_POSITIVE, f64::MAX / 2.0,  // Boundary values
         std::f64::consts::PI, std::f64::consts::E, // Mathematical constants
     ];
@@ -102,7 +102,7 @@ pub fn run_performance_analysis() {
     // Warm up
     println!("Warming up...");
     for _ in 0..10 {
-        let _ = float_to_lex(3.14159);
+        let _ = float_to_lex(std::f64::consts::PI);
         let _ = lex_to_float(12345);
     }
     

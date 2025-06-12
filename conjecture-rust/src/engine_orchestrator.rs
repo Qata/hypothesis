@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 use crate::choice::{ChoiceNode, ChoiceType};
 use crate::data::{ConjectureData, ConjectureResult, Status, DataObserver};
 use crate::providers::{PrimitiveProvider, ProviderRegistry, get_provider_registry};
+use crate::persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseIntegration};
 
 /// Maximum number of examples to generate before stopping
 const DEFAULT_MAX_EXAMPLES: usize = 100;
@@ -290,6 +291,8 @@ pub struct OrchestratorConfig {
     pub ignore_limits: bool,
     /// Database key for example storage
     pub database_key: Option<Vec<u8>>,
+    /// Database path for example storage (None = in-memory)
+    pub database_path: Option<String>,
     /// Enable verbose debug logging
     pub debug_logging: bool,
     /// Backend provider to use
@@ -305,6 +308,7 @@ impl Default for OrchestratorConfig {
             max_iterations: 1000,
             ignore_limits: false,
             database_key: None,
+            database_path: None,
             debug_logging: false,
             backend: "hypothesis".to_string(),
             random_seed: None,
@@ -342,6 +346,8 @@ pub struct EngineOrchestrator<P: PrimitiveProvider> {
     interesting_examples: HashMap<String, ConjectureResult>,
     /// Examples that have been shrunk
     shrunk_examples: HashSet<String>,
+    /// Database for example persistence and reuse
+    database: Option<Box<dyn ExampleDatabase>>,
     /// Start time of execution
     start_time: Instant,
     /// Finish time for shrinking deadline
@@ -364,6 +370,22 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         let mut provider_context = ProviderContext::default();
         provider_context.active_provider = config.backend.clone();
         
+        // Initialize database if configured
+        let database = if config.database_path.is_some() || config.database_key.is_some() {
+            match DatabaseIntegration::create_database(config.database_path.as_deref()) {
+                Ok(db) => {
+                    eprintln!("DEBUG: Database initialized successfully");
+                    Some(db)
+                }
+                Err(e) => {
+                    eprintln!("DEBUG: Failed to initialize database: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        };
+        
         Self {
             config,
             test_function,
@@ -379,6 +401,7 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
             shrinks: 0,
             interesting_examples: HashMap::new(),
             shrunk_examples: HashSet::new(),
+            database,
             start_time: Instant::now(),
             finish_shrinking_deadline: None,
             should_terminate: false,
@@ -513,21 +536,112 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
 
     /// Reuse existing examples from the database
     fn reuse_existing_examples(&mut self) -> OrchestrationResult<()> {
-        eprintln!("Reusing existing examples");
+        eprintln!("DEBUG: Reusing existing examples from database");
         
-        if self.config.database_key.is_none() {
-            eprintln!("No database key configured, skipping reuse phase");
-            return Ok(());
+        // Check if database and key are configured
+        let database_key = match &self.config.database_key {
+            Some(key) => key,
+            None => {
+                eprintln!("DEBUG: No database key configured, skipping reuse phase");
+                return Ok(());
+            }
+        };
+        
+        let database = match &mut self.database {
+            Some(db) => db,
+            None => {
+                eprintln!("DEBUG: No database configured, skipping reuse phase");
+                return Ok(());
+            }
+        };
+        
+        // Generate database key from test function
+        let db_key = match DatabaseIntegration::generate_key(
+            "test_function", // In a real implementation, this would be the actual function name
+            None, // No source code available
+            database_key,
+        ) {
+            Ok(key) => key,
+            Err(e) => {
+                eprintln!("DEBUG: Failed to generate database key: {}", e);
+                return Ok(());
+            }
+        };
+        
+        eprintln!("DEBUG: Fetching examples for key: {:?}", db_key.to_hex());
+        
+        // Fetch examples from database
+        let examples = match database.fetch(&db_key) {
+            Ok(examples) => {
+                eprintln!("DEBUG: Found {} examples in database", examples.len());
+                examples
+            }
+            Err(e) => {
+                eprintln!("DEBUG: Failed to fetch examples from database: {}", e);
+                return Ok(());
+            }
+        };
+        
+        // Replay each example
+        let mut successful_replays = 0;
+        let mut failed_replays = 0;
+        
+        for (i, example_data) in examples.iter().enumerate() {
+            eprintln!("DEBUG: Replaying example {} of {}", i + 1, examples.len());
+            
+            // Deserialize the example
+            let choices = match DatabaseIntegration::deserialize_example(example_data) {
+                Ok(choices) => choices,
+                Err(e) => {
+                    eprintln!("DEBUG: Failed to deserialize example {}: {}", i, e);
+                    failed_replays += 1;
+                    continue;
+                }
+            };
+            
+            if choices.is_empty() {
+                eprintln!("DEBUG: Skipping empty example {}", i);
+                continue;
+            }
+            
+            // Create ConjectureData for replay
+            let mut replay_data = ConjectureData::for_choices(
+                &choices,
+                None, // observer
+                None, // provider  
+                None, // random generator
+            );
+            
+            // Execute the test function with the replay data
+            match (self.test_function)(&mut replay_data) {
+                Ok(()) => {
+                    eprintln!("DEBUG: Example {} replayed successfully", i);
+                    successful_replays += 1;
+                    
+                    // If the example is interesting, save it
+                    if replay_data.status != Status::Valid {
+                        let example_key = format!("replay_{}", i);
+                        let result = replay_data.as_result();
+                        self.interesting_examples.insert(example_key, result);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("DEBUG: Example {} replay failed: {:?}", i, e);
+                    failed_replays += 1;
+                }
+            }
+            
+            self.call_count += 1;
+            
+            // Check if we should stop early
+            if self.should_terminate {
+                break;
+            }
         }
-
-        // TODO: Implement database integration
-        // For now, this is a placeholder that would:
-        // 1. Fetch examples from the database using the key
-        // 2. Replay them through the test function
-        // 3. Update interesting_examples with any that still fail
-        // 4. Track reuse statistics
-
-        eprintln!("Database reuse not yet implemented");
+        
+        eprintln!("DEBUG: Database reuse completed: {} successful, {} failed replays", 
+                 successful_replays, failed_replays);
+        
         Ok(())
     }
 
@@ -631,6 +745,10 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
             Status::Interesting => {
                 let key = format!("failure_{}", self.interesting_examples.len());
                 let result = data.as_result();
+                
+                // Save to database before storing locally
+                self.save_example_to_database(&result, "primary");
+                
                 self.interesting_examples.insert(key.clone(), result);
                 eprintln!("Found interesting example: {}", key);
                 
@@ -642,6 +760,59 @@ impl<P: PrimitiveProvider> EngineOrchestrator<P> {
         }
 
         Ok(())
+    }
+    
+    /// Save an interesting example to the database
+    fn save_example_to_database(&mut self, example: &ConjectureResult, example_type: &str) {
+        let database = match &mut self.database {
+            Some(db) => db,
+            None => return, // No database configured
+        };
+        
+        let database_key = match &self.config.database_key {
+            Some(key) => key,
+            None => return, // No database key configured
+        };
+        
+        // Generate database key
+        let db_key = match DatabaseIntegration::generate_key(
+            "test_function",
+            None,
+            database_key,
+        ) {
+            Ok(key) => {
+                // Use sub-keys for different example types
+                match example_type {
+                    "secondary" => key.with_sub_key("secondary"),
+                    "pareto" => key.with_sub_key("pareto"),
+                    _ => key, // Primary corpus
+                }
+            }
+            Err(e) => {
+                eprintln!("DEBUG: Failed to generate database key for saving: {}", e);
+                return;
+            }
+        };
+        
+        // Serialize the example
+        let serialized = match DatabaseIntegration::serialize_result(example) {
+            Ok(data) => data,
+            Err(e) => {
+                eprintln!("DEBUG: Failed to serialize example: {}", e);
+                return;
+            }
+        };
+        
+        // Save to database
+        match database.save(&db_key, &serialized) {
+            Ok(()) => {
+                eprintln!("DEBUG: Saved {} example to database (key: {})", 
+                         example_type, db_key.to_hex());
+            }
+            Err(e) => {
+                eprintln!("DEBUG: Failed to save example to database: {}", e);
+            }
+        }
     }
 
     /// Shrink interesting examples to minimal failing cases

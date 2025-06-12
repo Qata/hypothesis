@@ -1,9 +1,10 @@
 //! Constraint definitions for different choice types
 
 use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 /// Constraints for integer choices
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct IntegerConstraints {
     pub min_value: Option<i128>,
     pub max_value: Option<i128>,
@@ -54,7 +55,7 @@ impl IntegerConstraints {
 }
 
 /// Constraints for boolean choices  
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BooleanConstraints {
     pub p: f64, // Probability of True
 }
@@ -80,7 +81,7 @@ impl BooleanConstraints {
 }
 
 /// Constraints for float choices
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct FloatConstraints {
     pub min_value: f64,
     pub max_value: f64,
@@ -122,7 +123,7 @@ impl FloatConstraints {
 }
 
 /// Interval set for character ranges (simplified version of Python's IntervalSet)
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct IntervalSet {
     pub intervals: Vec<(u32, u32)>, // (start, end) inclusive ranges of codepoints
 }
@@ -158,7 +159,7 @@ impl Default for IntervalSet {
 }
 
 /// Constraints for string choices
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct StringConstraints {
     pub min_size: usize,
     pub max_size: usize,
@@ -188,7 +189,7 @@ impl StringConstraints {
 }
 
 /// Constraints for bytes choices
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct BytesConstraints {
     pub min_size: usize,
     pub max_size: usize,

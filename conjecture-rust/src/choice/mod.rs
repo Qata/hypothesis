@@ -5,6 +5,7 @@
 
 pub mod advanced_shrinking;
 mod constraints;
+pub mod dfa_string_generation;
 pub mod indexing;
 mod indexing_correct;
 mod navigation;
@@ -12,6 +13,8 @@ mod node;
 pub mod shrinking_system;
 pub mod shrinking_demo;
 pub mod templating;
+pub mod value_generation;
+pub mod weighted_selection;
 mod values;
 
 #[cfg(test)]
@@ -41,21 +44,55 @@ mod choice_templating_forcing_tests;
 #[cfg(test)]
 mod templating_comprehensive_capability_tests;
 
-// #[cfg(test)]
-// mod advanced_shrinking_tests;
+#[cfg(test)]
+mod value_generation_tests;
 
-pub use self::advanced_shrinking::*;
+#[cfg(test)]
+mod weighted_selection_capability_ffi_tests;
+
+#[cfg(test)]
+mod weighted_selection_comprehensive_capability_tests;
+
+#[cfg(test)]
+mod weighted_selection_capability_integration_tests;
+
+#[cfg(test)]
+mod weighted_selection_complete_capability_integration_tests;
+
+#[cfg(test)]
+mod advanced_template_generation_tests;
+
+#[cfg(test)]
+mod advanced_shrinking_tests;
+
+#[cfg(test)]
+mod advanced_shrinking_comprehensive_tests;
+
+#[cfg(test)]
+mod dfa_basic_test;
+
+pub use self::advanced_shrinking::{AdvancedShrinkingEngine as NewAdvancedShrinkingEngine, ShrinkResult as NewShrinkResult, ShrinkingMetrics as NewShrinkingMetrics, ChoicePattern, StringPatternType, ShrinkingContext, shrink_duplicated_blocks, shrink_floats_to_integers, shrink_strings_to_more_structured, lexicographic_weight, minimize_individual_choice_at, constraint_repair_shrinking, calculate_sequence_quality};
 pub use self::constraints::*;
+pub use self::dfa_string_generation::{
+    DFAError, DFAState, LearnedDFA, LStarLearner, MembershipOracle, 
+    RegexOracle, CustomOracle, DFAStringGenerator, PatternRecognitionEngine,
+    AlphabetOptimizer, AdvancedDFALearner, DFAStatistics, GenerationStatistics
+};
 pub use self::indexing::*;
 pub use self::navigation::*;
 pub use self::node::*;
 pub use self::shrinking_system::*;
 pub use self::shrinking_demo::*;
 pub use self::templating::*;
+pub use self::value_generation::{
+    ValueGenerator, EntropySource, BufferEntropySource, ValueGenerationError, 
+    ValueGenerationResult, StandardValueGenerator
+};
+pub use self::weighted_selection::*;
 pub use self::values::*;
 
 /// Choice types that can be drawn
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum ChoiceType {
     Integer,
     Boolean,
@@ -77,7 +114,7 @@ impl std::fmt::Display for ChoiceType {
 }
 
 /// Choice value that can be drawn  
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ChoiceValue {
     Integer(i128),
     Boolean(bool),
@@ -116,7 +153,7 @@ impl std::hash::Hash for ChoiceValue {
 }
 
 /// Constraints for different choice types
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum Constraints {
     Integer(IntegerConstraints),
     Boolean(BooleanConstraints),

@@ -13,6 +13,14 @@ categories = ["development-tools::testing"]
 [lib]
 name = "conjecture"
 
+[[bin]]
+name = "database_integration_test"
+path = "database_integration_test.rs"
+
+[[bin]]
+name = "test_dfa_verification"
+path = "test_dfa_verification.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"
@@ -25,6 +33,12 @@ rand_chacha = "0.3"
 byteorder = "1.4"
 lazy_static = "1.4"
 once_cell = "1.19"
+# Database persistence dependencies
+serde = { version = "1.0", features = ["derive"] }
+hex = "0.4"
+thiserror = "1.0"
+tempfile = "3.0"
+regex = "1.11.1"
 
 [dev-dependencies]
 # For property-based testing of our implementation
@@ -33,6 +47,8 @@ proptest = "1.0"
 criterion = "0.5"
 # For Python FFI verification
 pyo3 = { version = "0.20", features = ["auto-initialize"] }
+# For database testing
+tempfile = "3.0"
 
 # Benchmarks will be added later
 # [[bench]]

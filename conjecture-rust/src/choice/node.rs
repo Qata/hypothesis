@@ -5,12 +5,13 @@
 //! ChoiceNode class but with Rust's ownership and type safety benefits.
 
 use super::{ChoiceType, ChoiceValue, Constraints};
+use serde::{Serialize, Deserialize};
 
 /// A single choice made during test generation
 /// 
 /// This closely mirrors Python's ChoiceNode class. Represents an immutable choice
 /// with complete metadata about how it was generated.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChoiceNode {
     /// The type of choice that was made (integer, float, boolean, string, bytes)
     pub choice_type: ChoiceType,

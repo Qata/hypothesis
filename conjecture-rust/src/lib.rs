@@ -13,6 +13,8 @@ pub mod engine;
 pub mod engine_orchestrator;
 pub mod provider_integration_demo;
 pub mod providers;
+pub mod persistence;
+pub mod targeting;
 pub mod float_performance_test;
 
 // Re-export core types for easy access
@@ -23,6 +25,8 @@ pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
 pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionPhase, ExecutionStatistics, OrchestrationError};
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
+pub use persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseError, DatabaseIntegration, ExampleSerialization};
+// pub use targeting::{TargetingEngine, TargetFunction, TargetObservation, ParetoPoint, CoverageState, OptimizationDirection, MinimizeFunction, MaximizeFunction, ComplexityFunction, TargetingSuggestions};
 
 #[cfg(test)]
 mod tests {
@@ -54,3 +58,6 @@ mod status_integration_test;
 
 #[cfg(test)]
 mod status_verification_test;
+
+// #[cfg(test)]
+// mod targeting_comprehensive_capability_tests;

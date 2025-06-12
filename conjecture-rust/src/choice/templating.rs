@@ -617,40 +617,303 @@ impl TemplateEngine {
         ))
     }
     
-    /// Generate a choice at a specific index (simplified implementation)
+    /// Generate a choice at a specific index using choice_from_index logic
     fn generate_choice_at_index(
         &self,
-        _index: usize,
+        index: usize,
         choice_type: ChoiceType,
         constraints: &Constraints,
     ) -> Result<ChoiceNode, TemplateError> {
-        // For now, fall back to simplest choice
-        // In a full implementation, this would use choice_from_index logic
-        self.generate_simplest_choice(choice_type, constraints)
+        log::debug!("[TEMPLATE] Generating choice at index {} for type {:?}", index, choice_type);
+        
+        // Use the existing choice_from_index function from indexing module
+        use crate::choice::indexing::choice_from_index;
+        
+        let choice_type_str = match choice_type {
+            ChoiceType::Integer => "integer",
+            ChoiceType::Boolean => "boolean", 
+            ChoiceType::Float => "float",
+            ChoiceType::String => "string",
+            ChoiceType::Bytes => "bytes",
+        };
+        
+        let value = choice_from_index(index as u128, choice_type_str, constraints);
+        
+        log::debug!("[TEMPLATE] Generated value {:?} from index {}", value, index);
+        
+        Ok(ChoiceNode::new(
+            choice_type,
+            value,
+            constraints.clone(),
+            false, // Index-based choices are not marked as forced
+        ))
     }
     
-    /// Generate a biased choice (simplified implementation)
+    /// Generate a biased choice using weighted selection with specified bias
     fn generate_biased_choice(
         &self,
-        _bias: f64,
+        bias: f64,
         choice_type: ChoiceType,
         constraints: &Constraints,
     ) -> Result<ChoiceNode, TemplateError> {
-        // For now, fall back to simplest choice
-        // In a full implementation, this would apply the bias to random generation
-        let mut node = self.generate_simplest_choice(choice_type, constraints)?;
-        node.was_forced = false; // Biased choices are not forced
-        Ok(node)
+        log::debug!("[TEMPLATE] Generating biased choice with bias {} for type {:?}", bias, choice_type);
+        
+        // Clamp bias to valid range [0.0, 1.0]
+        let clamped_bias = bias.max(0.0).min(1.0);
+        
+        // Apply bias-based choice generation strategy
+        let value = match choice_type {
+            ChoiceType::Boolean => {
+                // For booleans, bias represents probability of True
+                let bool_value = clamped_bias > 0.5;
+                log::debug!("[TEMPLATE] Biased boolean: bias {} -> {}", clamped_bias, bool_value);
+                ChoiceValue::Boolean(bool_value)
+            },
+            ChoiceType::Integer => {
+                // For integers, bias determines proximity to shrink_towards
+                if let Constraints::Integer(int_constraints) = constraints {
+                    let shrink_towards = int_constraints.shrink_towards.unwrap_or(0);
+                    
+                    // Use bias to determine distance from shrink_towards
+                    // bias close to 0.0 = closer to shrink_towards
+                    // bias close to 1.0 = farther from shrink_towards
+                    let max_distance = 100; // Reasonable distance for biased generation
+                    let distance = (clamped_bias * max_distance as f64) as i128;
+                    
+                    // Alternate positive/negative based on bias fractional part
+                    let direction = if (clamped_bias * 1000.0) as i64 % 2 == 0 { 1 } else { -1 };
+                    let biased_value = shrink_towards + direction * distance;
+                    
+                    // Apply constraints
+                    let final_value = match (int_constraints.min_value, int_constraints.max_value) {
+                        (Some(min), Some(max)) => biased_value.max(min).min(max),
+                        (Some(min), None) => biased_value.max(min),
+                        (None, Some(max)) => biased_value.min(max),
+                        (None, None) => biased_value,
+                    };
+                    
+                    log::debug!("[TEMPLATE] Biased integer: shrink_towards={}, distance={}, direction={}, final={}", 
+                              shrink_towards, distance, direction, final_value);
+                    ChoiceValue::Integer(final_value)
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ChoiceType::Float => {
+                // For floats, use bias to determine magnitude and sign
+                let base_magnitude = clamped_bias * 1000.0; // Scale bias to reasonable float range
+                let sign = if clamped_bias < 0.5 { -1.0 } else { 1.0 };
+                let biased_float = sign * base_magnitude;
+                
+                // Apply float constraints
+                if let Constraints::Float(float_constraints) = constraints {
+                    let clamped_float = biased_float
+                        .max(float_constraints.min_value)
+                        .min(float_constraints.max_value);
+                    
+                    log::debug!("[TEMPLATE] Biased float: bias {} -> magnitude={}, sign={}, final={}", 
+                              clamped_bias, base_magnitude, sign, clamped_float);
+                    ChoiceValue::Float(clamped_float)
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ChoiceType::String => {
+                // For strings, bias determines length preference
+                let max_length = if let Constraints::String(str_constraints) = constraints {
+                    str_constraints.max_size
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                };
+                
+                let biased_length = (clamped_bias * max_length as f64) as usize;
+                let biased_string = "a".repeat(biased_length); // Simple bias toward repeated 'a'
+                
+                log::debug!("[TEMPLATE] Biased string: bias {} -> length {}", clamped_bias, biased_length);
+                ChoiceValue::String(biased_string)
+            },
+            ChoiceType::Bytes => {
+                // For bytes, bias determines length and content preference
+                let max_length = if let Constraints::Bytes(byte_constraints) = constraints {
+                    byte_constraints.max_size
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                };
+                
+                let biased_length = (clamped_bias * max_length as f64) as usize;
+                let biased_byte = (clamped_bias * 255.0) as u8;
+                let biased_bytes = vec![biased_byte; biased_length];
+                
+                log::debug!("[TEMPLATE] Biased bytes: bias {} -> length {}, byte value {}", 
+                          clamped_bias, biased_length, biased_byte);
+                ChoiceValue::Bytes(biased_bytes)
+            },
+        };
+        
+        Ok(ChoiceNode::new(
+            choice_type,
+            value,
+            constraints.clone(),
+            false, // Biased choices are not marked as forced
+        ))
     }
     
-    /// Generate a custom choice (extensibility point)
+    /// Generate a custom choice using named template strategies
     fn generate_custom_choice(
         &self,
-        _name: &str,
+        name: &str,
         choice_type: ChoiceType,
         constraints: &Constraints,
     ) -> Result<ChoiceNode, TemplateError> {
-        self.generate_simplest_choice(choice_type, constraints)
+        log::debug!("[TEMPLATE] Generating custom choice '{}' for type {:?}", name, choice_type);
+        
+        // Implement named template strategies based on Python Hypothesis patterns
+        let value = match (name, choice_type) {
+            // Boundary value templates
+            ("boundary_min", ChoiceType::Integer) => {
+                if let Constraints::Integer(int_constraints) = constraints {
+                    let min_val = int_constraints.min_value.unwrap_or(i128::MIN);
+                    log::debug!("[TEMPLATE] Custom boundary_min integer: {}", min_val);
+                    ChoiceValue::Integer(min_val)
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ("boundary_max", ChoiceType::Integer) => {
+                if let Constraints::Integer(int_constraints) = constraints {
+                    let max_val = int_constraints.max_value.unwrap_or(i128::MAX);
+                    log::debug!("[TEMPLATE] Custom boundary_max integer: {}", max_val);
+                    ChoiceValue::Integer(max_val)
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ("zero", ChoiceType::Integer) => {
+                log::debug!("[TEMPLATE] Custom zero integer");
+                ChoiceValue::Integer(0)
+            },
+            ("one", ChoiceType::Integer) => {
+                log::debug!("[TEMPLATE] Custom one integer");
+                ChoiceValue::Integer(1)
+            },
+            
+            // Float boundary templates
+            ("boundary_min", ChoiceType::Float) => {
+                if let Constraints::Float(float_constraints) = constraints {
+                    let min_val = float_constraints.min_value;
+                    log::debug!("[TEMPLATE] Custom boundary_min float: {}", min_val);
+                    ChoiceValue::Float(min_val)
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ("boundary_max", ChoiceType::Float) => {
+                if let Constraints::Float(float_constraints) = constraints {
+                    let max_val = float_constraints.max_value;
+                    log::debug!("[TEMPLATE] Custom boundary_max float: {}", max_val);
+                    ChoiceValue::Float(max_val)
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ("zero", ChoiceType::Float) => {
+                log::debug!("[TEMPLATE] Custom zero float");
+                ChoiceValue::Float(0.0)
+            },
+            ("one", ChoiceType::Float) => {
+                log::debug!("[TEMPLATE] Custom one float");
+                ChoiceValue::Float(1.0)
+            },
+            ("infinity", ChoiceType::Float) => {
+                if let Constraints::Float(float_constraints) = constraints {
+                    // Check if infinity is allowed by the constraints (infinity should be within the bounds)
+                    let allow_infinity = float_constraints.max_value.is_infinite() && float_constraints.max_value > 0.0;
+                    if allow_infinity {
+                        log::debug!("[TEMPLATE] Custom infinity float");
+                        ChoiceValue::Float(f64::INFINITY)
+                    } else {
+                        // Fall back to max value if infinity not allowed
+                        log::debug!("[TEMPLATE] Custom infinity float (not allowed, using max): {}", float_constraints.max_value);
+                        ChoiceValue::Float(float_constraints.max_value)
+                    }
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            ("nan", ChoiceType::Float) => {
+                if let Constraints::Float(float_constraints) = constraints {
+                    if float_constraints.allow_nan {
+                        log::debug!("[TEMPLATE] Custom NaN float");
+                        ChoiceValue::Float(f64::NAN)
+                    } else {
+                        // Fall back to zero if NaN not allowed
+                        log::debug!("[TEMPLATE] Custom NaN float (not allowed, using zero)");
+                        ChoiceValue::Float(0.0)
+                    }
+                } else {
+                    return Err(TemplateError::TypeMismatch);
+                }
+            },
+            
+            // Boolean templates
+            ("true", ChoiceType::Boolean) => {
+                log::debug!("[TEMPLATE] Custom true boolean");
+                ChoiceValue::Boolean(true)
+            },
+            ("false", ChoiceType::Boolean) => {
+                log::debug!("[TEMPLATE] Custom false boolean");
+                ChoiceValue::Boolean(false)
+            },
+            
+            // String templates
+            ("empty", ChoiceType::String) => {
+                log::debug!("[TEMPLATE] Custom empty string");
+                ChoiceValue::String(String::new())
+            },
+            ("single_char", ChoiceType::String) => {
+                log::debug!("[TEMPLATE] Custom single_char string");
+                ChoiceValue::String("a".to_string())
+            },
+            ("whitespace", ChoiceType::String) => {
+                log::debug!("[TEMPLATE] Custom whitespace string");
+                ChoiceValue::String(" \t\n".to_string())
+            },
+            ("unicode", ChoiceType::String) => {
+                log::debug!("[TEMPLATE] Custom unicode string");
+                ChoiceValue::String("αβγδε".to_string()) // Greek letters for unicode testing
+            },
+            
+            // Bytes templates
+            ("empty", ChoiceType::Bytes) => {
+                log::debug!("[TEMPLATE] Custom empty bytes");
+                ChoiceValue::Bytes(Vec::new())
+            },
+            ("single_byte", ChoiceType::Bytes) => {
+                log::debug!("[TEMPLATE] Custom single_byte bytes");
+                ChoiceValue::Bytes(vec![0x42]) // 'B' in ASCII
+            },
+            ("null_bytes", ChoiceType::Bytes) => {
+                log::debug!("[TEMPLATE] Custom null_bytes");
+                ChoiceValue::Bytes(vec![0x00; 4]) // Four null bytes
+            },
+            ("high_bytes", ChoiceType::Bytes) => {
+                log::debug!("[TEMPLATE] Custom high_bytes");
+                ChoiceValue::Bytes(vec![0xFF, 0xFE, 0xFD, 0xFC]) // High byte values
+            },
+            
+            // Fallback for unknown templates
+            _ => {
+                log::warn!("[TEMPLATE] Unknown custom template '{}' for type {:?}, falling back to simplest", name, choice_type);
+                return self.generate_simplest_choice(choice_type, constraints);
+            }
+        };
+        
+        Ok(ChoiceNode::new(
+            choice_type,
+            value,
+            constraints.clone(),
+            false, // Custom choices are not marked as forced
+        ))
     }
     
     /// Check if a value matches the expected choice type
@@ -771,6 +1034,171 @@ pub struct TemplateEngineState {
     pub remaining_entries: VecDeque<TemplateEntry>,
     pub processed_count: usize,
     pub misalignment_index: Option<usize>,
+}
+
+/// Advanced template generation capabilities - Public API
+impl TemplateEngine {
+    /// Generate a choice at a specific index for deterministic test case construction
+    /// 
+    /// This method uses the choice indexing system to generate values at specific positions
+    /// in the shrinking order, enabling precise control over test case generation.
+    pub fn generate_at_index(
+        &self,
+        index: usize,
+        choice_type: ChoiceType,
+        constraints: &Constraints,
+    ) -> Result<ChoiceNode, TemplateError> {
+        log::info!("[TEMPLATE_API] Generating choice at index {} for type {:?}", index, choice_type);
+        self.generate_choice_at_index(index, choice_type, constraints)
+    }
+    
+    /// Generate a biased choice with the specified probability bias
+    /// 
+    /// The bias parameter (0.0 to 1.0) influences choice generation:
+    /// - For booleans: bias is probability of True
+    /// - For integers: bias determines distance from shrink_towards 
+    /// - For floats: bias affects magnitude and sign
+    /// - For strings/bytes: bias determines length preferences
+    pub fn generate_with_bias(
+        &self,
+        bias: f64,
+        choice_type: ChoiceType,
+        constraints: &Constraints,
+    ) -> Result<ChoiceNode, TemplateError> {
+        log::info!("[TEMPLATE_API] Generating biased choice with bias {} for type {:?}", bias, choice_type);
+        
+        if bias < 0.0 || bias > 1.0 {
+            return Err(TemplateError::ProcessingFailed(
+                format!("Bias must be between 0.0 and 1.0, got {}", bias)
+            ));
+        }
+        
+        self.generate_biased_choice(bias, choice_type, constraints)
+    }
+    
+    /// Generate a custom choice using named template strategies
+    /// 
+    /// Supported template names:
+    /// - "boundary_min", "boundary_max": Boundary values for integers/floats
+    /// - "zero", "one": Common numeric values
+    /// - "infinity", "nan": Special float values (if allowed by constraints)
+    /// - "true", "false": Boolean values
+    /// - "empty", "single_char", "whitespace", "unicode": String patterns
+    /// - "single_byte", "null_bytes", "high_bytes": Byte patterns
+    pub fn generate_custom(
+        &self,
+        template_name: &str,
+        choice_type: ChoiceType,
+        constraints: &Constraints,
+    ) -> Result<ChoiceNode, TemplateError> {
+        log::info!("[TEMPLATE_API] Generating custom choice '{}' for type {:?}", template_name, choice_type);
+        self.generate_custom_choice(template_name, choice_type, constraints)
+    }
+    
+    /// Generate a series of choices at consecutive indices
+    /// 
+    /// This is useful for generating deterministic sequences of values
+    /// starting from a specific index position.
+    pub fn generate_sequence_from_index(
+        &self,
+        start_index: usize,
+        count: usize,
+        choice_type: ChoiceType,
+        constraints: &Constraints,
+    ) -> Result<Vec<ChoiceNode>, TemplateError> {
+        log::info!("[TEMPLATE_API] Generating sequence from index {} with {} choices for type {:?}", 
+                  start_index, count, choice_type);
+        
+        let mut choices = Vec::with_capacity(count);
+        for i in 0..count {
+            let choice = self.generate_choice_at_index(start_index + i, choice_type, constraints)?;
+            choices.push(choice);
+        }
+        
+        log::debug!("[TEMPLATE_API] Generated {} choices in sequence", choices.len());
+        Ok(choices)
+    }
+    
+    /// Generate choices with graduated bias (useful for exploration)
+    /// 
+    /// Creates a series of choices with evenly distributed bias values
+    /// from 0.0 to 1.0, enabling systematic exploration of the bias space.
+    pub fn generate_biased_sequence(
+        &self,
+        count: usize,
+        choice_type: ChoiceType,
+        constraints: &Constraints,
+    ) -> Result<Vec<ChoiceNode>, TemplateError> {
+        log::info!("[TEMPLATE_API] Generating biased sequence with {} choices for type {:?}", count, choice_type);
+        
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        
+        let mut choices = Vec::with_capacity(count);
+        
+        // Generate evenly distributed bias values from 0.0 to 1.0
+        for i in 0..count {
+            let bias = if count == 1 {
+                0.5 // Single choice gets middle bias
+            } else {
+                i as f64 / (count - 1) as f64 // Evenly distribute from 0.0 to 1.0
+            };
+            
+            let choice = self.generate_biased_choice(bias, choice_type, constraints)?;
+            choices.push(choice);
+        }
+        
+        log::debug!("[TEMPLATE_API] Generated {} biased choices", choices.len());
+        Ok(choices)
+    }
+    
+    /// Generate all available custom template choices for a given type
+    /// 
+    /// Returns a collection of choices generated using all applicable
+    /// custom templates for the specified choice type and constraints.
+    pub fn generate_all_custom_templates(
+        &self,
+        choice_type: ChoiceType,
+        constraints: &Constraints,
+    ) -> Result<Vec<(String, ChoiceNode)>, TemplateError> {
+        log::info!("[TEMPLATE_API] Generating all custom templates for type {:?}", choice_type);
+        
+        let template_names = match choice_type {
+            ChoiceType::Integer => vec![
+                "boundary_min", "boundary_max", "zero", "one"
+            ],
+            ChoiceType::Float => vec![
+                "boundary_min", "boundary_max", "zero", "one", "infinity", "nan"
+            ],
+            ChoiceType::Boolean => vec![
+                "true", "false"
+            ],
+            ChoiceType::String => vec![
+                "empty", "single_char", "whitespace", "unicode"
+            ],
+            ChoiceType::Bytes => vec![
+                "empty", "single_byte", "null_bytes", "high_bytes"
+            ],
+        };
+        
+        let mut results = Vec::new();
+        
+        for &template_name in &template_names {
+            match self.generate_custom_choice(template_name, choice_type, constraints) {
+                Ok(choice) => {
+                    results.push((template_name.to_string(), choice));
+                },
+                Err(e) => {
+                    log::warn!("[TEMPLATE_API] Failed to generate custom template '{}': {:?}", template_name, e);
+                    // Continue with other templates rather than failing completely
+                }
+            }
+        }
+        
+        log::debug!("[TEMPLATE_API] Generated {} custom template choices", results.len());
+        Ok(results)
+    }
 }
 
 /// Errors that can occur during template processing
