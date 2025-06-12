@@ -6,6 +6,7 @@
 pub mod advanced_shrinking;
 mod constraints;
 pub mod dfa_string_generation;
+pub mod field_access_system;
 pub mod indexing;
 mod indexing_correct;
 mod navigation;
@@ -69,6 +70,9 @@ mod advanced_shrinking_tests;
 mod advanced_shrinking_comprehensive_tests;
 
 #[cfg(test)]
+mod field_access_system_tests;
+
+#[cfg(test)]
 mod dfa_basic_test;
 
 pub use self::advanced_shrinking::{AdvancedShrinkingEngine as NewAdvancedShrinkingEngine, ShrinkResult as NewShrinkResult, ShrinkingMetrics as NewShrinkingMetrics, ChoicePattern, StringPatternType, ShrinkingContext, shrink_duplicated_blocks, shrink_floats_to_integers, shrink_strings_to_more_structured, lexicographic_weight, minimize_individual_choice_at, constraint_repair_shrinking, calculate_sequence_quality};
@@ -78,6 +82,7 @@ pub use self::dfa_string_generation::{
     RegexOracle, CustomOracle, DFAStringGenerator, PatternRecognitionEngine,
     AlphabetOptimizer, AdvancedDFALearner, DFAStatistics, GenerationStatistics
 };
+pub use self::field_access_system::*;
 pub use self::indexing::*;
 pub use self::navigation::*;
 pub use self::node::*;
