@@ -7,6 +7,7 @@ pub mod advanced_shrinking;
 mod constraints;
 pub mod dfa_string_generation;
 pub mod field_access_system;
+pub mod float_constraint_type_system;
 pub mod indexing;
 mod indexing_correct;
 mod navigation;
@@ -89,6 +90,9 @@ pub use self::dfa_string_generation::{
     AlphabetOptimizer, AdvancedDFALearner, DFAStatistics, GenerationStatistics
 };
 pub use self::field_access_system::*;
+pub use self::float_constraint_type_system::{
+    FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider
+};
 pub use self::indexing::*;
 pub use self::navigation::*;
 pub use self::node::*;

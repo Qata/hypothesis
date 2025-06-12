@@ -21,7 +21,7 @@ pub mod float_performance_test;
 pub mod float_encoding_export;
 
 // Re-export core types for easy access
-pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints};
+pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints, FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider};
 pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
 pub use choice_sequence_management::{
     ChoiceSequenceManager, EnhancedChoiceNode, ChoiceSequenceError, 

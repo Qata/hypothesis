@@ -16,8 +16,104 @@ use std::hash::{Hash, Hasher};
 use once_cell::sync::Lazy;
 use sha2::{Sha384, Digest};
 
+// Debug logging macro for float constraint type system integration
+macro_rules! debug_log {
+    ($($arg:tt)*) => {
+        #[cfg(not(test))]
+        println!("CONJECTURE_DATA DEBUG: {}", format!($($arg)*));
+    };
+}
+
 /// Global test counter for unique test identification
 static GLOBAL_TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Wrapper to adapt ChaCha8Rng to work with PrimitiveProvider interface
+#[derive(Debug)]
+struct RngProvider<'a> {
+    rng: &'a mut ChaCha8Rng,
+}
+
+impl<'a> RngProvider<'a> {
+    fn new(rng: &'a mut ChaCha8Rng) -> Self {
+        Self { rng }
+    }
+}
+
+impl<'a> PrimitiveProvider for RngProvider<'a> {
+    fn lifetime(&self) -> crate::providers::ProviderLifetime {
+        crate::providers::ProviderLifetime::TestCase
+    }
+    
+    fn generate_integer(&mut self, _rng: &mut ChaCha8Rng, constraints: &IntegerConstraints) -> Result<i128, DrawError> {
+        let min = constraints.min_value.unwrap_or(i128::MIN);
+        let max = constraints.max_value.unwrap_or(i128::MAX);
+        Ok(self.rng.gen_range(min..=max))
+    }
+    
+    fn generate_boolean(&mut self, _rng: &mut ChaCha8Rng, constraints: &BooleanConstraints) -> Result<bool, DrawError> {
+        Ok(self.rng.gen::<f64>() < constraints.p)
+    }
+    
+    fn generate_float(&mut self, _rng: &mut ChaCha8Rng, constraints: &FloatConstraints) -> Result<f64, DrawError> {
+        // Basic float generation for the wrapper
+        let value = self.rng.gen::<f64>();
+        if constraints.validate(value) {
+            Ok(value)
+        } else {
+            Ok(constraints.clamp(value))
+        }
+    }
+    
+    fn generate_string(&mut self, _rng: &mut ChaCha8Rng, alphabet: &str, min_size: usize, max_size: usize) -> Result<String, DrawError> {
+        let len = self.rng.gen_range(min_size..=max_size);
+        let chars: Vec<char> = alphabet.chars().collect();
+        if chars.is_empty() {
+            return Ok(String::new());
+        }
+        let mut result = String::new();
+        for _ in 0..len {
+            let idx = self.rng.gen_range(0..chars.len());
+            result.push(chars[idx]);
+        }
+        Ok(result)
+    }
+    
+    fn generate_bytes(&mut self, _rng: &mut ChaCha8Rng, size: usize) -> Result<Vec<u8>, DrawError> {
+        Ok((0..size).map(|_| self.rng.gen()).collect())
+    }
+}
+
+// Implement FloatPrimitiveProvider for RngProvider to work with FloatConstraintTypeSystem
+impl<'a> crate::choice::float_constraint_type_system::FloatPrimitiveProvider for RngProvider<'a> {
+    fn generate_u64(&mut self) -> u64 {
+        self.rng.gen()
+    }
+    
+    fn generate_f64(&mut self) -> f64 {
+        self.rng.gen()
+    }
+    
+    fn generate_usize(&mut self) -> usize {
+        self.rng.gen()
+    }
+    
+    fn generate_bool(&mut self) -> bool {
+        self.rng.gen()
+    }
+    
+    fn generate_float(&mut self, constraints: &FloatConstraints) -> f64 {
+        // Basic float generation for the wrapper
+        let value = self.rng.gen::<f64>();
+        if constraints.validate(value) {
+            value
+        } else {
+            constraints.clamp(value)
+        }
+    }
+}
+
+// Implement FloatConstraintAwareProvider for RngProvider
+impl<'a> crate::choice::float_constraint_type_system::FloatConstraintAwareProvider for RngProvider<'a> {}
 
 /// Label mask for combining labels (equivalent to Python's LABEL_MASK = 2**64 - 1)
 const LABEL_MASK: u64 = u64::MAX;
@@ -1407,13 +1503,28 @@ impl ConjectureData {
                 return Err(DrawError::InvalidReplayType);
             }
         } else {
-            // Generate new value using provider or random generation
+            // Generate new value using enhanced float constraint type system
             if let Constraints::Float(ref float_constraints) = constraints {
                 if let Some(ref mut provider) = self.provider {
-                    provider.generate_float(&mut self.rng, float_constraints)?
+                    // Try to use provider's regular float generation
+                    match provider.generate_float(&mut self.rng, float_constraints) {
+                        Ok(value) => value,
+                        Err(_) => {
+                            // Fallback to FloatConstraintTypeSystem for sophisticated generation
+                            debug_log!("Provider failed, using FloatConstraintTypeSystem fallback");
+                            let float_system = FloatConstraintTypeSystem::new(float_constraints.clone());
+                            let mut rng_provider = RngProvider::new(&mut self.rng);
+                            float_system.generate_float(&mut rng_provider)
+                        }
+                    }
                 } else {
-                    // Fallback to IEEE-754 compliant random generation
-                    self.generate_ieee754_float(min_value, max_value, allow_nan, smallest_nonzero_magnitude)?
+                    // Use FloatConstraintTypeSystem for sophisticated fallback generation
+                    debug_log!("Using FloatConstraintTypeSystem for fallback generation");
+                    let float_system = FloatConstraintTypeSystem::new(float_constraints.clone());
+                    
+                    // Create a wrapper for the RNG to work with the provider interface
+                    let mut rng_provider = RngProvider::new(&mut self.rng);
+                    float_system.generate_float(&mut rng_provider)
                 }
             } else {
                 unreachable!("We just created float constraints")

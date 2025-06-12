@@ -4,7 +4,7 @@
 //! which abstracts different generation backends and enables sophisticated
 //! generation strategies like constant injection and coverage-guided generation.
 
-use crate::choice::{ChoiceValue, Constraints, ChoiceType};
+use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints};
 use crate::data::DrawError;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -614,3 +614,72 @@ mod tests {
         provider.span_end(true);
     }
 }
+
+// Implement FloatPrimitiveProvider for existing providers to work with FloatConstraintTypeSystem
+impl crate::choice::float_constraint_type_system::FloatPrimitiveProvider for RandomProvider {
+    fn generate_u64(&mut self) -> u64 {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_f64(&mut self) -> f64 {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_usize(&mut self) -> usize {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_bool(&mut self) -> bool {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_float(&mut self, constraints: &FloatConstraints) -> f64 {
+        let mut rng = ChaCha8Rng::from_entropy();
+        let value = rng.gen::<f64>();
+        if constraints.validate(value) {
+            value
+        } else {
+            constraints.clamp(value)
+        }
+    }
+}
+
+impl crate::choice::float_constraint_type_system::FloatPrimitiveProvider for HypothesisProvider {
+    fn generate_u64(&mut self) -> u64 {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_f64(&mut self) -> f64 {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_usize(&mut self) -> usize {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_bool(&mut self) -> bool {
+        let mut rng = ChaCha8Rng::from_entropy();
+        rng.gen()
+    }
+    
+    fn generate_float(&mut self, constraints: &FloatConstraints) -> f64 {
+        let mut rng = ChaCha8Rng::from_entropy();
+        let value = rng.gen::<f64>();
+        if constraints.validate(value) {
+            value
+        } else {
+            constraints.clamp(value)
+        }
+    }
+}
+
+// Implement FloatConstraintAwareProvider for existing providers
+impl crate::choice::float_constraint_type_system::FloatConstraintAwareProvider for RandomProvider {}
+impl crate::choice::float_constraint_type_system::FloatConstraintAwareProvider for HypothesisProvider {}
