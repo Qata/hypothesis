@@ -65,6 +65,10 @@ path = "test_datatree_integration_standalone.rs"
 name = "test_enhanced_provider_system"
 path = "test_enhanced_provider_system.rs"
 
+[[bin]]
+name = "provider_lifecycle_demo"
+path = "provider_lifecycle_demo.rs"
+
 [dependencies]
 # Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
 sha1 = "0.10"

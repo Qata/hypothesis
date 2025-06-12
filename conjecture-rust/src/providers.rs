@@ -35,6 +35,16 @@ pub enum ProviderLifetime {
 /// Backend capability flags for provider negotiation
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct BackendCapabilities {
+    /// Support for integer choices
+    pub supports_integers: bool,
+    /// Support for float choices
+    pub supports_floats: bool,
+    /// Support for string choices
+    pub supports_strings: bool,
+    /// Support for byte array choices
+    pub supports_bytes: bool,
+    /// Support for general choice types
+    pub supports_choices: bool,
     /// Avoid forcing symbolic values to concrete ones
     pub avoid_realization: bool,
     /// Add observability callback support
@@ -50,6 +60,11 @@ pub struct BackendCapabilities {
 impl Default for BackendCapabilities {
     fn default() -> Self {
         Self {
+            supports_integers: true,
+            supports_floats: true,
+            supports_strings: true,
+            supports_bytes: true,
+            supports_choices: true,
             avoid_realization: false,
             add_observability_callback: false,
             structural_awareness: false,
@@ -146,10 +161,9 @@ impl TestCaseContext for DefaultTestCaseContext {}
 /// Observability message types
 #[derive(Debug, Clone)]
 pub struct ObservationMessage {
-    pub message_type: ObservationType,
-    pub title: String,
-    pub content: serde_json::Value,
-    pub timestamp: std::time::SystemTime,
+    pub level: String,
+    pub message: String,
+    pub data: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -387,7 +401,7 @@ pub struct ProviderRegistry {
     /// Provider configurations
     configs: HashMap<String, HashMap<String, serde_json::Value>>,
     /// Cached provider instances for session-lifetime providers
-    session_cache: HashMap<String, Arc<Mutex<dyn PrimitiveProvider>>>,
+    session_cache: HashMap<String, Arc<Mutex<Box<dyn PrimitiveProvider>>>>,
     /// Registry metadata
     metadata: HashMap<String, serde_json::Value>,
 }
@@ -469,6 +483,30 @@ impl ProviderRegistry {
         self.create_with_config(name, None)
     }
     
+    /// Register a provider instance directly (for testing)
+    pub fn register_provider(&mut self, name: String, provider: Box<dyn PrimitiveProvider>) -> Result<(), ProviderError> {
+        let lifetime = provider.lifetime();
+        
+        // Store provider in session cache regardless of lifetime for testing simplicity
+        self.session_cache.insert(name.clone(), Arc::new(Mutex::new(provider)));
+        
+        println!("PROVIDER_REGISTRY DEBUG: Registered provider '{}' with lifetime {:?}", name, lifetime);
+        Ok(())
+    }
+    
+    /// Get a provider instance by name (for testing)
+    pub fn get_provider(&mut self, name: &str) -> Result<Box<dyn PrimitiveProvider>, ProviderError> {
+        // Check session cache first
+        if let Some(cached_provider) = self.session_cache.get(name) {
+            return Ok(Box::new(CachedProviderWrapper {
+                provider: cached_provider.clone(),
+                name: name.to_string(),
+            }));
+        }
+        
+        Err(ProviderError::ConfigError(format!("Provider '{}' not found", name)))
+    }
+    
     /// Get list of available provider names
     pub fn available_providers(&self) -> Vec<String> {
         self.factories.keys().cloned().collect()
@@ -547,6 +585,19 @@ struct ClosureProviderFactory {
     factory: Arc<dyn Fn() -> Box<dyn PrimitiveProvider> + Send + Sync>,
 }
 
+/// Direct provider factory for registered instances
+struct DirectProviderFactory {
+    name: String,
+    provider_box: Arc<Mutex<Option<Box<dyn PrimitiveProvider>>>>,
+}
+
+/// Wrapper for cached provider instances
+#[derive(Debug)]
+pub struct CachedProviderWrapper {
+    provider: Arc<Mutex<Box<dyn PrimitiveProvider>>>,
+    name: String,
+}
+
 impl ProviderFactory for ClosureProviderFactory {
     fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
         (self.factory)()
@@ -554,6 +605,81 @@ impl ProviderFactory for ClosureProviderFactory {
     
     fn name(&self) -> &str {
         &self.name
+    }
+}
+
+impl ProviderFactory for DirectProviderFactory {
+    fn create_provider(&self) -> Box<dyn PrimitiveProvider> {
+        // For direct provider factories, we need to create a new instance that behaves like the original
+        // This is a simplified approach - in a real implementation we might clone the provider
+        // For now, we'll create a RandomProvider as a fallback
+        Box::new(RandomProvider::new())
+    }
+    
+    fn name(&self) -> &str {
+        &self.name
+    }
+}
+
+impl PrimitiveProvider for CachedProviderWrapper {
+    fn lifetime(&self) -> ProviderLifetime {
+        let provider = self.provider.lock().unwrap();
+        provider.lifetime()
+    }
+    
+    fn capabilities(&self) -> BackendCapabilities {
+        let provider = self.provider.lock().unwrap();
+        provider.capabilities()
+    }
+    
+    fn draw_boolean(&mut self, p: f64) -> Result<bool, ProviderError> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.draw_boolean(p)
+    }
+    
+    fn draw_integer(&mut self, constraints: &IntegerConstraints) -> Result<i128, ProviderError> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.draw_integer(constraints)
+    }
+    
+    fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.draw_float(constraints)
+    }
+    
+    fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.draw_string(intervals, min_size, max_size)
+    }
+    
+    fn draw_bytes(&mut self, min_size: usize, max_size: usize) -> Result<Vec<u8>, ProviderError> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.draw_bytes(min_size, max_size)
+    }
+    
+    fn observe_test_case(&mut self) -> HashMap<String, serde_json::Value> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.observe_test_case()
+    }
+    
+    fn observe_information_messages(&mut self, lifetime: ProviderLifetime) -> Vec<ObservationMessage> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.observe_information_messages(lifetime)
+    }
+    
+    fn per_test_case_context(&mut self) -> Box<dyn TestCaseContext> {
+        let mut provider = self.provider.lock().unwrap();
+        provider.per_test_case_context()
+    }
+    
+    fn span_start(&mut self, label: u32) {
+        let mut provider = self.provider.lock().unwrap();
+        provider.span_start(label)
+    }
+    
+    fn span_end(&mut self, discard: bool) {
+        let mut provider = self.provider.lock().unwrap();
+        provider.span_end(discard)
     }
 }
 
@@ -634,6 +760,11 @@ impl PrimitiveProvider for RandomProvider {
     
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
+            supports_integers: true,
+            supports_floats: true,
+            supports_strings: true,
+            supports_bytes: true,
+            supports_choices: true,
             avoid_realization: false,
             add_observability_callback: false,
             structural_awareness: false,
@@ -868,6 +999,11 @@ impl PrimitiveProvider for HypothesisProvider {
     
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
+            supports_integers: true,
+            supports_floats: true,
+            supports_strings: true,
+            supports_bytes: true,
+            supports_choices: true,
             avoid_realization: false,
             add_observability_callback: true,
             structural_awareness: true,
@@ -1041,13 +1177,12 @@ impl PrimitiveProvider for HypothesisProvider {
         
         if lifetime == ProviderLifetime::TestCase {
             messages.push(ObservationMessage {
-                message_type: ObservationType::Info,
-                title: "Constant Injection Status".to_string(),
-                content: serde_json::json!({
+                level: "info".to_string(),
+                message: "Constant Injection Status".to_string(),
+                data: Some(serde_json::json!({
                     "cache_size": self.constant_cache.len(),
                     "injection_rate": "5%"
-                }),
-                timestamp: std::time::SystemTime::now(),
+                })),
             });
         }
         
@@ -1314,6 +1449,11 @@ impl PrimitiveProvider for SmtSolverProvider {
     
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
+            supports_integers: true,
+            supports_floats: true,
+            supports_strings: true,
+            supports_bytes: true,
+            supports_choices: true,
             avoid_realization: true,  // Keep symbolic values as long as possible
             add_observability_callback: true,
             structural_awareness: true,
@@ -1576,6 +1716,11 @@ impl PrimitiveProvider for FuzzingProvider {
     
     fn capabilities(&self) -> BackendCapabilities {
         BackendCapabilities {
+            supports_integers: true,
+            supports_floats: true,
+            supports_strings: true,
+            supports_bytes: true,
+            supports_choices: true,
             avoid_realization: false,
             add_observability_callback: true,
             structural_awareness: true,
@@ -1796,11 +1941,14 @@ mod tests {
         
         let hypothesis_provider = registry.create("hypothesis").unwrap();
         assert_eq!(hypothesis_provider.lifetime(), ProviderLifetime::TestCase);
+        assert!(hypothesis_provider.capabilities().supports_integers);
+        assert!(hypothesis_provider.capabilities().supports_floats);
         assert!(hypothesis_provider.capabilities().add_observability_callback);
         assert!(hypothesis_provider.capabilities().structural_awareness);
         
         let random_provider = registry.create("random").unwrap();
         assert_eq!(random_provider.lifetime(), ProviderLifetime::TestCase);
+        assert!(random_provider.capabilities().supports_choices);
         assert!(!random_provider.capabilities().avoid_realization);
     }
     
@@ -1883,12 +2031,14 @@ mod tests {
         // Test SMT provider
         let smt_provider = registry.create("smt").unwrap();
         assert_eq!(smt_provider.lifetime(), ProviderLifetime::TestFunction);
+        assert!(smt_provider.capabilities().supports_integers);
         assert!(smt_provider.capabilities().avoid_realization);
         assert!(smt_provider.capabilities().symbolic_constraints);
         
         // Test Fuzzing provider
         let fuzzing_provider = registry.create("fuzzing").unwrap();
         assert_eq!(fuzzing_provider.lifetime(), ProviderLifetime::TestRun);
+        assert!(fuzzing_provider.capabilities().supports_choices);
         assert!(fuzzing_provider.capabilities().replay_support);
         assert!(!fuzzing_provider.capabilities().symbolic_constraints);
     }
@@ -1988,6 +2138,11 @@ mod tests {
     #[test]
     fn test_provider_capabilities() {
         let default_caps = BackendCapabilities::default();
+        assert!(default_caps.supports_integers);
+        assert!(default_caps.supports_floats);
+        assert!(default_caps.supports_strings);
+        assert!(default_caps.supports_bytes);
+        assert!(default_caps.supports_choices);
         assert!(!default_caps.avoid_realization);
         assert!(!default_caps.add_observability_callback);
         assert!(!default_caps.structural_awareness);
@@ -1995,6 +2150,11 @@ mod tests {
         assert!(!default_caps.symbolic_constraints);
         
         let enhanced_caps = BackendCapabilities {
+            supports_integers: true,
+            supports_floats: true,
+            supports_strings: true,
+            supports_bytes: true,
+            supports_choices: true,
             avoid_realization: true,
             add_observability_callback: true,
             structural_awareness: true,
@@ -2002,6 +2162,7 @@ mod tests {
             symbolic_constraints: true,
         };
         
+        assert!(enhanced_caps.supports_choices);
         assert!(enhanced_caps.avoid_realization);
         assert!(enhanced_caps.add_observability_callback);
         assert!(enhanced_caps.structural_awareness);

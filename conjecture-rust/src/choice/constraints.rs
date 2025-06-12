@@ -278,6 +278,16 @@ impl IntervalSet {
         let intervals = chars.into_iter().map(|c| (c, c)).collect();
         Self { intervals }
     }
+    
+    pub fn from_chars(s: &str) -> Self {
+        Self::from_string(s)
+    }
+    
+    pub fn ascii() -> Self {
+        Self {
+            intervals: vec![(32, 126)], // Printable ASCII
+        }
+    }
 
     pub fn from_ranges(ranges: &[(u32, u32)]) -> Self {
         Self {

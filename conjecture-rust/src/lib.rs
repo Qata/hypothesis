@@ -28,6 +28,7 @@ pub mod conjecture_data_lifecycle_management;
 pub mod conjecture_data_lifecycle_comprehensive_capability_tests;
 pub mod provider_integration_demo;
 pub mod providers;
+pub mod provider_lifecycle_management;
 pub mod persistence;
 pub mod targeting;
 pub mod float_performance_test;
@@ -37,6 +38,10 @@ pub mod float_encoding_export;
 mod provider_verification_test;
 #[cfg(test)]
 pub mod provider_system_coverage_guided_generation_integration_comprehensive_capability_tests;
+#[cfg(test)]
+pub mod provider_lifecycle_management_comprehensive_capability_tests;
+#[cfg(all(test, feature = "python-ffi"))]
+pub mod provider_lifecycle_management_comprehensive_pyo3_ffi_integration_tests;
 
 // Python FFI Integration modules (conditionally compiled)
 #[cfg(feature = "python-ffi")]
@@ -73,6 +78,11 @@ pub use engine_orchestrator_datatree_novel_prefix_integration::{
     NovelPrefixGenerationResult, SimulationResult
 };
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
+pub use provider_lifecycle_management::{
+    ProviderLifecycleManager, ManagedProvider, LifecycleScope, LifecycleEvent, LifecycleHooks,
+    DefaultLifecycleHooks, ProviderInstanceMetadata, ProviderState, ProviderMetrics,
+    CacheConfiguration, CleanupTask, CleanupTaskType
+};
 pub use persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseError, DatabaseIntegration, ExampleSerialization};
 // pub use targeting::{TargetingEngine, TargetFunction, TargetObservation, ParetoPoint, CoverageState, OptimizationDirection, MinimizeFunction, MaximizeFunction, ComplexityFunction, TargetingSuggestions};
 pub use float_encoding_export::{
