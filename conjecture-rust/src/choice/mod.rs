@@ -4,7 +4,7 @@
 //! flows through strongly-typed choices with associated constraints.
 
 pub mod advanced_shrinking;
-mod constraints;
+pub mod constraints;
 pub mod dfa_string_generation;
 pub mod field_access_system;
 pub mod float_constraint_type_system;
@@ -17,7 +17,7 @@ pub mod shrinking_demo;
 pub mod templating;
 pub mod value_generation;
 pub mod weighted_selection;
-mod values;
+pub mod values;
 
 #[cfg(test)]
 mod python_parity_tests;

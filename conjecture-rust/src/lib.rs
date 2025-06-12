@@ -20,6 +20,16 @@ pub mod targeting;
 pub mod float_performance_test;
 pub mod float_encoding_export;
 
+// Python FFI Integration modules (conditionally compiled)
+#[cfg(feature = "python-ffi")]
+pub mod conjecture_data_python_ffi;
+#[cfg(feature = "python-ffi")]
+pub mod conjecture_data_python_ffi_advanced;
+#[cfg(feature = "python-ffi")]
+pub mod conjecture_data_python_ffi_validation_tests;
+#[cfg(feature = "python-ffi")]
+pub mod conjecture_data_python_ffi_integration;
+
 // Re-export core types for easy access
 pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints, FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider};
 pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
@@ -39,6 +49,24 @@ pub use float_encoding_export::{
     FloatWidth, FloatEncodingStrategy, FloatEncodingResult, FloatEncodingConfig, EncodingDebugInfo,
     build_exponent_tables, build_exponent_tables_for_width_export,
     float_to_lex_advanced, float_to_lex_multi_width, lex_to_float_multi_width
+};
+
+// Python FFI Integration re-exports (conditionally compiled)
+#[cfg(feature = "python-ffi")]
+pub use conjecture_data_python_ffi::{
+    FfiError, ConstraintPythonSerializable, ConstraintPythonDeserializable
+};
+#[cfg(feature = "python-ffi")]
+pub use conjecture_data_python_ffi_advanced::{
+    ChoiceSequenceBinaryCodec, ConstraintValidator, BulkOperations, StateManager
+};
+#[cfg(feature = "python-ffi")]
+pub use conjecture_data_python_ffi_validation_tests::{
+    ConjectureDataValidationSuite
+};
+#[cfg(feature = "python-ffi")]
+pub use conjecture_data_python_ffi_integration::{
+    ConjectureDataPythonIntegration
 };
 
 #[cfg(test)]

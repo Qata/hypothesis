@@ -57,16 +57,20 @@ hex = "0.4"
 thiserror = "1.0"
 tempfile = "3.0"
 regex = "1.11.1"
+# Optional dependencies for features
+pyo3 = { version = "0.20", features = ["auto-initialize"], optional = true }
 
 [dev-dependencies]
 # For property-based testing of our implementation
 proptest = "1.0"
 # For benchmarking
 criterion = "0.5"
-# For Python FFI verification
-pyo3 = { version = "0.20", features = ["auto-initialize"] }
 # For database testing
 tempfile = "3.0"
+
+[features]
+# Python FFI Integration feature
+python-ffi = ["pyo3"]
 
 # Benchmarks will be added later
 # [[bench]]
