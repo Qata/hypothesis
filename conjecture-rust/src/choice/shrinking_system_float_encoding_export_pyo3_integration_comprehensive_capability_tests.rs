@@ -252,7 +252,7 @@ impl FloatEncodingExportCapabilityTest {
     }
 
     /// Test PyO3 Python bindings capability
-    #[cfg(feature = "python")]
+    #[cfg(feature = "python-ffi")]
     fn test_pyo3_python_bindings_capability(&mut self) -> Result<(), String> {
         println!("Testing PyO3 Python bindings capability...");
         
@@ -573,7 +573,7 @@ fn test_shrinking_system_float_encoding_export_complete_capability() {
         .expect("C FFI interface capability test failed");
     
     // Test 4: PyO3 Python bindings capability (if feature enabled)
-    #[cfg(feature = "python")]
+    #[cfg(feature = "python-ffi")]
     capability_test.test_pyo3_python_bindings_capability()
         .expect("PyO3 Python bindings capability test failed");
     

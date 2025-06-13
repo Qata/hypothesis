@@ -607,7 +607,7 @@ fn test_weighted_choice_selection_capability_complete_integration() {
 }
 
 /// Test PyO3 and FFI compatibility for the weighted choice selection capability
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[test]
 fn test_weighted_choice_selection_capability_python_ffi_integration() {
     println!("WEIGHTED_SELECTION_CAPABILITY DEBUG: Testing Python FFI integration capability");
@@ -647,7 +647,7 @@ fn test_weighted_choice_selection_capability_python_ffi_integration() {
 }
 
 /// Comprehensive PyO3 FFI tests for Python interoperability
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 mod pyo3_ffi_tests {
     use super::*;
     use pyo3::prelude::*;

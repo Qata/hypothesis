@@ -657,10 +657,10 @@ pub extern "C" fn conjecture_float_width_exponent_bits(width: u32) -> u32 {
 // PyO3 Python Export Interface
 // ===================================
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 /// Python binding: Convert float to lexicographic encoding
 pub fn py_float_to_lex(value: f64) -> u64 {
@@ -668,7 +668,7 @@ pub fn py_float_to_lex(value: f64) -> u64 {
     float_to_lex(value)
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 /// Python binding: Convert lexicographic encoding back to float
 pub fn py_lex_to_float(lex: u64) -> f64 {
@@ -676,7 +676,7 @@ pub fn py_lex_to_float(lex: u64) -> f64 {
     lex_to_float(lex)
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 /// Python binding: Convert float to integer for storage
 pub fn py_float_to_int(value: f64) -> u64 {
@@ -684,7 +684,7 @@ pub fn py_float_to_int(value: f64) -> u64 {
     float_to_int(value)
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 /// Python binding: Convert integer back to float from storage
 pub fn py_int_to_float(i: u64) -> f64 {
@@ -692,7 +692,7 @@ pub fn py_int_to_float(i: u64) -> f64 {
     int_to_float(i)
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 /// Python binding: Multi-width float encoding
 pub fn py_float_to_lex_multi_width(value: f64, width: u32) -> u64 {
@@ -705,7 +705,7 @@ pub fn py_float_to_lex_multi_width(value: f64, width: u32) -> u64 {
     float_to_lex_multi_width(value, float_width)
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 /// Python binding: Multi-width float decoding
 pub fn py_lex_to_float_multi_width(lex: u64, width: u32) -> f64 {
@@ -718,14 +718,14 @@ pub fn py_lex_to_float_multi_width(lex: u64, width: u32) -> f64 {
     lex_to_float_multi_width(lex, float_width)
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pyclass]
 /// Python binding: Float width enumeration
 pub struct PyFloatWidth {
     width: FloatWidth,
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pymethods]
 impl PyFloatWidth {
     #[new]
@@ -756,7 +756,7 @@ impl PyFloatWidth {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[pymodule]
 /// Python module for float encoding exports
 pub fn float_encoding_export(_py: Python, m: &PyModule) -> PyResult<()> {

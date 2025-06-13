@@ -1,6 +1,8 @@
 use crate::choice::{ChoiceType, ChoiceValue, Constraints, IntegerConstraints, FloatConstraints, StringConstraints, BytesConstraints};
 use crate::providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, GlobalConstants, DrawError, ProviderLifetime};
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-ffi")]
 use pyo3::types::{PyDict, PyList, PyModule, PyString};
 use std::collections::{HashMap, BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, RwLock};
@@ -643,7 +645,7 @@ mod tests {
         assert_eq!(provider.cache_size(), 1000);
     }
 
-    #[cfg(feature = "python")]
+    #[cfg(feature = "python-ffi")]
     #[pyo3_asyncio::tokio::test]
     async fn test_python_constant_discovery() -> PyResult<()> {
         Python::with_gil(|py| {
@@ -678,7 +680,7 @@ class TestClass:
         })
     }
 
-    #[cfg(feature = "python")]
+    #[cfg(feature = "python-ffi")]
     #[pyo3_asyncio::tokio::test]
     async fn test_constant_injection_with_discovered_values() -> PyResult<()> {
         Python::with_gil(|py| {

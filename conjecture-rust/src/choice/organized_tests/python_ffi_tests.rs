@@ -3,11 +3,14 @@
 //! These tests call Python Hypothesis's actual choice functions via PyO3 FFI
 //! to verify our Rust implementation produces identical results.
 
+#[cfg(all(test, feature = "python-ffi"))]
 use crate::choice::*;
+#[cfg(all(test, feature = "python-ffi"))]
 use pyo3::prelude::*;
+#[cfg(all(test, feature = "python-ffi"))]
 use pyo3::types::{PyDict, PyBool, PyFloat, PyLong, PyAny};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "python-ffi"))]
 mod python_ffi_verification {
     use super::*;
 

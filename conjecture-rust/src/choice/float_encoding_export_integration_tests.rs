@@ -18,6 +18,7 @@ use crate::choice::indexing::float_encoding::{
 };
 use crate::datatree::DataTree;
 use crate::data::ConjectureData;
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
 use std::collections::HashMap;
 
@@ -354,7 +355,7 @@ mod float_encoding_export_tests {
 }
 
 /// PyO3 integration tests for float encoding capability export
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[cfg(test)]
 mod pyo3_integration_tests {
     use super::*;

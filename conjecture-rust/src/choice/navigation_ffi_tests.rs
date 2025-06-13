@@ -4,17 +4,23 @@
 //! the complete navigation capability workflow including NavigationTree, 
 //! PrefixSelector, and ChoiceIndexer components.
 
+#[cfg(all(test, feature = "python-ffi"))]
 use crate::choice::{ChoiceType, ChoiceValue, Constraints, IntegerConstraints, BooleanConstraints, FloatConstraints, StringConstraints, BytesConstraints, IntervalSet};
+#[cfg(all(test, feature = "python-ffi"))]
 use crate::choice::navigation::{NavigationTree, NavigationChoiceNode, ChoiceSequence, PrefixSelector, ChoiceIndexer, NavigationError, NavigationResult};
+#[cfg(all(test, feature = "python-ffi"))]
 use pyo3::prelude::*;
+#[cfg(all(test, feature = "python-ffi"))]
 use std::collections::HashMap;
 
 /// PyO3 wrapper for NavigationTree to test FFI integration
+#[cfg(all(test, feature = "python-ffi"))]
 #[pyclass]
 struct NavigationTreeWrapper {
     tree: NavigationTree,
 }
 
+#[cfg(all(test, feature = "python-ffi"))]
 #[pymethods]
 impl NavigationTreeWrapper {
     #[new]

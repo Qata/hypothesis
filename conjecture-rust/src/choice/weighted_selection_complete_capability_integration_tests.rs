@@ -22,12 +22,14 @@ use crate::choice::{
     WeightedSelectionError
 };
 use std::collections::HashMap;
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
 
 /// Complete Capability Integration Test Interface
 /// 
 /// This struct represents the complete weighted choice selection capability
 /// interface for comprehensive testing across all architectural components.
+#[cfg(feature = "python-ffi")]
 #[pyclass]
 #[derive(Debug)]
 pub struct WeightedChoiceSelectionCapability {
@@ -45,6 +47,7 @@ pub struct WeightedChoiceSelectionCapability {
     performance_benchmarks: HashMap<String, f64>,
 }
 
+#[cfg(feature = "python-ffi")]
 #[pymethods]
 impl WeightedChoiceSelectionCapability {
     #[new]
@@ -1156,6 +1159,7 @@ mod additional_capability_tests {
     
     /// Test complete capability Python FFI comprehensive integration
     #[test]
+    #[cfg(feature = "python-ffi")]
     fn test_complete_capability_python_ffi_comprehensive() {
         println!("=== Testing Complete Capability Python FFI Comprehensive Integration ===");
         
@@ -1331,6 +1335,7 @@ mod additional_capability_tests {
 pub mod capability_python_bindings {
     use super::*;
     
+    #[cfg(feature = "python-ffi")]
     #[pymodule]
     fn weighted_selection_complete_capability(_py: Python, m: &PyModule) -> PyResult<()> {
         m.add_class::<WeightedChoiceSelectionCapability>()?;

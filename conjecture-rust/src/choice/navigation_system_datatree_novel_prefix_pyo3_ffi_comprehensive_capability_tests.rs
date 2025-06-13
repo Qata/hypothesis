@@ -3,7 +3,9 @@
 //! Simplified tests for the NavigationSystem's DataTree Novel Prefix Generation capability.
 
 use std::collections::HashMap;
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-ffi")]
 use pyo3::types::PyDict;
 
 use crate::choice::{
@@ -13,6 +15,7 @@ use crate::choice::{
 use crate::datatree::DataTree;
 
 /// Simplified PyO3/FFI test for NavigationSystem DataTree Novel Prefix functionality
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_complete_navigation_datatree_novel_prefix_workflow_pyo3_ffi(py: Python) -> PyResult<PyObject> {
     py.allow_threads(|| {
@@ -90,6 +93,7 @@ pub fn test_complete_navigation_datatree_novel_prefix_workflow_pyo3_ffi(py: Pyth
 }
 
 /// Simplified PyO3/FFI test for navigation shrinking patterns
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_navigation_structured_shrinking_patterns_pyo3_ffi(py: Python) -> PyResult<PyObject> {
     py.allow_threads(|| {
@@ -123,6 +127,7 @@ pub fn test_navigation_structured_shrinking_patterns_pyo3_ffi(py: Python) -> PyR
 }
 
 /// Simplified PyO3/FFI test for navigation exhaustion recovery
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_navigation_exhaustion_recovery_pyo3_ffi(py: Python) -> PyResult<PyObject> {
     py.allow_threads(|| {
@@ -155,6 +160,7 @@ pub fn test_navigation_exhaustion_recovery_pyo3_ffi(py: Python) -> PyResult<PyOb
 }
 
 /// PyO3 module registration for navigation system DataTree novel prefix tests
+#[cfg(feature = "python-ffi")]
 #[pymodule]
 pub fn navigation_system_datatree_novel_prefix_pyo3_ffi_tests(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(test_complete_navigation_datatree_novel_prefix_workflow_pyo3_ffi, m)?)?;

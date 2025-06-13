@@ -351,7 +351,7 @@ mod c_ffi_tests {
     }
 }
 
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[cfg(test)]
 mod pyo3_ffi_tests {
     use super::*;
@@ -506,7 +506,7 @@ mod cross_interface_compatibility_tests {
             let c_lex = conjecture_float_to_lex(value);
             let c_int = conjecture_float_to_int(value);
             
-            #[cfg(feature = "python")]
+            #[cfg(feature = "python-ffi")]
             {
                 let py_lex = py_float_to_lex(value);
                 let py_int = py_float_to_int(value);

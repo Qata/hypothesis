@@ -24,6 +24,7 @@ use crate::engine_orchestrator_provider_type_integration::{
 use crate::data::{ConjectureData, Status};
 use std::sync::Arc;
 use std::collections::HashMap;
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
 
 #[cfg(test)]

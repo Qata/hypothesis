@@ -14,11 +14,13 @@ use crate::choice::navigation::{
     PrefixSelector, ChoiceIndexer,
     NavigationError
 };
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 
 /// Test complete end-to-end navigation capability workflow
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_complete_navigation_workflow(py: Python) -> PyResult<PyObject> {
     let mut results = HashMap::new();
@@ -218,6 +220,7 @@ pub fn test_complete_navigation_workflow(py: Python) -> PyResult<PyObject> {
 }
 
 /// Test structured shrinking pattern validation
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_structured_shrinking_patterns(py: Python) -> PyResult<PyObject> {
     let mut results = HashMap::new();
@@ -273,6 +276,7 @@ pub fn test_structured_shrinking_patterns(py: Python) -> PyResult<PyObject> {
 }
 
 /// Test navigation system exhaustion and recovery
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_navigation_exhaustion_recovery(py: Python) -> PyResult<PyObject> {
     let mut results = HashMap::new();
@@ -320,6 +324,7 @@ pub fn test_navigation_exhaustion_recovery(py: Python) -> PyResult<PyObject> {
 }
 
 /// Test cross-constraint type interactions
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 pub fn test_cross_constraint_navigation(py: Python) -> PyResult<PyObject> {
     let mut results = HashMap::new();
@@ -385,6 +390,7 @@ fn get_default_constraints(choice_type: &ChoiceType) -> Constraints {
 }
 
 /// PyO3 module definition for FFI testing
+#[cfg(feature = "python-ffi")]
 #[pymodule]
 fn navigation_capability_ffi_tests(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(test_complete_navigation_workflow, m)?)?;

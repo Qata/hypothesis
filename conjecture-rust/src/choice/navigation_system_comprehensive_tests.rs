@@ -13,10 +13,13 @@
 use crate::choice::{ChoiceType, ChoiceValue, Constraints};
 use crate::choice::constraints::*;
 use crate::choice::navigation::*;
+
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-ffi")]
 use pyo3::types::{PyDict, PyBool, PyFloat, PyLong, PyAny};
 
-#[cfg(test)]
+#[cfg(all(test, feature = "python-ffi"))]
 mod navigation_system_comprehensive_tests {
     use super::*;
 

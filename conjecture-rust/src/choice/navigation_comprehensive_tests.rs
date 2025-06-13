@@ -5,7 +5,9 @@
 //! Tests validate the entire capability's core responsibilities and interface contracts
 //! using PyO3 and FFI integration patterns.
 
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-ffi")]
 use pyo3::types::{PyList, PyTuple, PyDict};
 use crate::choice::navigation::*;
 use crate::choice::{ChoiceType, ChoiceValue, Constraints};
@@ -13,6 +15,7 @@ use crate::choice::constraints::*;
 use std::time::Instant;
 
 /// Test complete navigation capability behavior with comprehensive validation
+#[cfg(feature = "python-ffi")]
 #[pyfunction]
 fn test_complete_navigation_capability() -> PyResult<bool> {
     let mut success_count = 0;
@@ -908,6 +911,7 @@ fn test_ffi_integration_behavior() -> PyResult<bool> {
 }
 
 /// PyO3 module definition for Python integration
+#[cfg(feature = "python-ffi")]
 #[pymodule]
 fn navigation_comprehensive_tests(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(test_complete_navigation_capability, m)?)?;

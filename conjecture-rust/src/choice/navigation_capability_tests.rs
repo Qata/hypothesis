@@ -709,7 +709,7 @@ fn test_end_to_end_navigation_capability() {
 }
 
 /// PyO3 FFI compatibility test for navigation system
-#[cfg(feature = "python")]
+#[cfg(feature = "python-ffi")]
 #[test]
 fn test_navigation_ffi_compatibility() {
     use pyo3::prelude::*;

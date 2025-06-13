@@ -19,7 +19,9 @@ use crate::choice::{
     choice_equal, choice_permitted
 };
 use crate::choice::indexing::{choice_to_index, choice_from_index};
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-ffi")]
 use pyo3::types::*;
 use std::collections::HashMap;
 

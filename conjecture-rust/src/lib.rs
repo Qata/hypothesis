@@ -33,6 +33,7 @@ pub mod persistence;
 pub mod targeting;
 pub mod float_performance_test;
 pub mod float_encoding_export;
+pub mod pyo3_feature_gate_system_comprehensive_capability_tests;
 
 #[cfg(test)]
 mod provider_verification_test;

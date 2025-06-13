@@ -18,7 +18,9 @@ use crate::choice::{
     StringConstraints, BytesConstraints,
     NavigationChoiceNode, ChoiceTemplate, TemplateType,
 };
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
+#[cfg(feature = "python-ffi")]
 use pyo3::types::*;
 use std::collections::HashMap;
 
@@ -799,6 +801,7 @@ mod capability_integration_tests {
 }
 
 /// PyO3 FFI capability tests for field access system
+#[cfg(feature = "python-ffi")]
 #[test]
 fn test_pyo3_field_access_capability() {
     Python::with_gil(|py| {

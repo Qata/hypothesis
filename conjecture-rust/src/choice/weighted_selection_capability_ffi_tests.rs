@@ -14,8 +14,10 @@ use crate::choice::{
     WeightedSelectionError
 };
 use std::collections::HashMap;
+#[cfg(feature = "python-ffi")]
 use pyo3::prelude::*;
 
+#[cfg(feature = "python-ffi")]
 #[pyclass]
 #[derive(Debug, Clone)]
 pub struct WeightedChoiceSelector {
@@ -24,6 +26,7 @@ pub struct WeightedChoiceSelector {
     choice_type: ChoiceType,
 }
 
+#[cfg(feature = "python-ffi")]
 #[pymethods]
 impl WeightedChoiceSelector {
     #[new]
@@ -666,7 +669,7 @@ mod weighted_selection_capability_tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "python-ffi"))]
 mod weighted_selection_python_ffi_tests {
     use super::*;
     use pyo3::types::PyDict;
@@ -1096,6 +1099,7 @@ mod comprehensive_capability_integration_tests {
     
     /// Test complete capability with Python FFI integration
     #[test]
+    #[cfg(feature = "python-ffi")]
     fn test_complete_weighted_selection_capability_python_ffi() {
         println!("=== Testing Complete Weighted Selection Capability: Python FFI ===");
         
@@ -1314,21 +1318,24 @@ mod comprehensive_capability_integration_tests {
                   "Should process all priority templates");
         
         // 8. Test Python FFI integration in end-to-end scenario
-        Python::with_gil(|py| {
-            let ffi_selector = WeightedChoiceSelector::new(weights.clone()).unwrap();
-            
-            // Test FFI selector works with same distribution
-            for &test_val in &[0.1, 0.3, 0.5, 0.7, 0.9] {
-                let ffi_result = ffi_selector.select_weighted(test_val);
-                assert!(ffi_result.is_ok(), "FFI selection failed in end-to-end test");
-                let selected = ffi_result.unwrap();
-                assert!(weights.contains_key(&selected), "FFI selected invalid value: {}", selected);
-            }
-            
-            // Test FFI distribution validation with our results
-            let ffi_validation = ffi_selector.validate_distribution(all_results.clone(), 0.1);
-            assert!(ffi_validation.is_ok(), "FFI validation should work");
-        });
+        #[cfg(feature = "python-ffi")]
+        {
+            Python::with_gil(|py| {
+                let ffi_selector = WeightedChoiceSelector::new(weights.clone()).unwrap();
+                
+                // Test FFI selector works with same distribution
+                for &test_val in &[0.1, 0.3, 0.5, 0.7, 0.9] {
+                    let ffi_result = ffi_selector.select_weighted(test_val);
+                    assert!(ffi_result.is_ok(), "FFI selection failed in end-to-end test");
+                    let selected = ffi_result.unwrap();
+                    assert!(weights.contains_key(&selected), "FFI selected invalid value: {}", selected);
+                }
+                
+                // Test FFI distribution validation with our results
+                let ffi_validation = ffi_selector.validate_distribution(all_results.clone(), 0.1);
+                assert!(ffi_validation.is_ok(), "FFI validation should work");
+            });
+        }
         
         // 9. Verify robustness across edge cases
         let edge_cases = [0.0, f64::EPSILON, 0.5, 1.0 - f64::EPSILON, 1.0];
@@ -1355,6 +1362,7 @@ mod comprehensive_capability_integration_tests {
 pub mod python_bindings {
     use super::*;
     
+    #[cfg(feature = "python-ffi")]
     #[pymodule]
     fn weighted_selection_capability(_py: Python, m: &PyModule) -> PyResult<()> {
         m.add_class::<WeightedChoiceSelector>()?;

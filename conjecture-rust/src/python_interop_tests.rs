@@ -67,10 +67,14 @@ mod tests {
         }
     }
     use std::collections::{HashMap, HashSet};
+    
+    #[cfg(feature = "python-ffi")]
     use pyo3::prelude::*;
+    #[cfg(feature = "python-ffi")]
     use pyo3::types::{PyList, PyTuple};
 
     /// Helper to initialize Python and import Hypothesis modules
+    #[cfg(feature = "python-ffi")]
     fn setup_python() -> PyResult<Py<PyModule>> {
         Python::with_gil(|py| {
             let sys = py.import("sys")?;
@@ -167,6 +171,7 @@ globals()['test_python_integer_shrinking'] = test_python_integer_shrinking
 
     /// Test that our integer shrinking matches Python's exactly
     #[test]
+    #[cfg(feature = "python-ffi")]
     fn test_integer_shrinking_matches_python() {
         println!("PYO3_INTEROP: Testing integer shrinking parity with Python");
         
@@ -250,6 +255,7 @@ globals()['test_python_integer_shrinking'] = test_python_integer_shrinking
 
     /// Test that our boolean shrinking matches Python's exactly
     #[test]
+    #[cfg(feature = "python-ffi")]
     fn test_boolean_shrinking_matches_python() {
         println!("PYO3_INTEROP: Testing boolean shrinking parity with Python");
         
@@ -317,6 +323,7 @@ globals()['test_python_integer_shrinking'] = test_python_integer_shrinking
 
     /// Test multi-choice shrinking matches Python's behavior
     #[test]
+    #[cfg(feature = "python-ffi")]
     fn test_multi_choice_shrinking_matches_python() {
         println!("PYO3_INTEROP: Testing multi-choice shrinking parity with Python");
         
@@ -331,6 +338,7 @@ globals()['test_python_integer_shrinking'] = test_python_integer_shrinking
 
     /// Helper function to create a simple test that forces specific choices in Python
     #[test]
+    #[cfg(feature = "python-ffi")]
     fn test_python_choice_creation() {
         println!("PYO3_INTEROP: Testing basic Python choice creation");
         
@@ -362,6 +370,7 @@ print(f"PYO3_INTEROP: Choice values: {[choice for choice in result.choices]}")
 
     /// Test forced choice behavior matches between Rust and Python
     #[test] 
+    #[cfg(feature = "python-ffi")]
     fn test_forced_choice_parity() {
         println!("PYO3_INTEROP: Testing forced choice behavior parity");
         
