@@ -31,14 +31,9 @@
 //! ### Direct Rust API
 //! All functions and types are directly accessible for Rust code integration.
 //!
-//! ### C FFI Export
-//! C-compatible functions with `extern "C"` linkage for system integration.
-//!
-//! ### PyO3 Python Export
-//! Python-compatible functions using PyO3 bindings for Python integration.
-//!
-//! ### WebAssembly Export
-//! WASM-compatible functions for browser and JavaScript integration.
+//! ### C FFI Export (TODO: Remove as cruft)
+//! C-compatible functions with `extern "C"` linkage. These should be moved to
+//! a separate c-ffi crate if needed - not part of core library.
 //!
 //! ## Architecture Benefits
 //!
@@ -81,7 +76,6 @@ macro_rules! debug_log {
 
 /// Re-exported FloatWidth enum with additional utility methods for external consumers
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[repr(C)]
 pub enum FloatWidth {
     /// IEEE 754 half precision (binary16) - 16 bits total
     Width16,
@@ -92,7 +86,31 @@ pub enum FloatWidth {
 }
 
 impl FloatWidth {
-    /// Returns the total number of bits for this float width
+    /// Returns the total number of bits for this IEEE 754 float width.
+    ///
+    /// This method provides compile-time constant values for each supported IEEE 754
+    /// format, enabling zero-cost width-dependent optimizations in encoding algorithms.
+    ///
+    /// # Returns
+    ///
+    /// * `Width16`: 16 bits (IEEE 754 binary16 - half precision)
+    /// * `Width32`: 32 bits (IEEE 754 binary32 - single precision) 
+    /// * `Width64`: 64 bits (IEEE 754 binary64 - double precision)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use conjecture_rust::FloatWidth;
+    ///
+    /// assert_eq!(FloatWidth::Width64.bits(), 64);
+    /// assert_eq!(FloatWidth::Width32.bits(), 32);
+    /// assert_eq!(FloatWidth::Width16.bits(), 16);
+    /// ```
+    ///
+    /// # Performance Notes
+    ///
+    /// This is a `const fn` and has zero runtime cost - the compiler will inline
+    /// the constant value at compile time for optimal performance.
     pub const fn bits(self) -> u32 {
         match self {
             FloatWidth::Width16 => 16,
@@ -101,7 +119,32 @@ impl FloatWidth {
         }
     }
 
-    /// Returns the number of exponent bits for this float width
+    /// Returns the number of exponent bits in the IEEE 754 representation.
+    ///
+    /// The exponent field size determines the range of representable values and is
+    /// critical for proper float encoding and lexicographic ordering algorithms.
+    ///
+    /// # Returns
+    ///
+    /// * `Width16`: 5 bits (range: ±65,504)
+    /// * `Width32`: 8 bits (range: ±3.4 × 10³⁸)
+    /// * `Width64`: 11 bits (range: ±1.8 × 10³⁰⁸)
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// use conjecture_rust::FloatWidth;
+    ///
+    /// assert_eq!(FloatWidth::Width64.exponent_bits(), 11);
+    /// assert_eq!(FloatWidth::Width32.exponent_bits(), 8);
+    /// assert_eq!(FloatWidth::Width16.exponent_bits(), 5);
+    /// ```
+    ///
+    /// # IEEE 754 Background
+    ///
+    /// The exponent field uses a biased representation where the actual exponent
+    /// equals the stored value minus the bias. This enables efficient comparison
+    /// operations and supports special values (infinity, NaN).
     pub const fn exponent_bits(self) -> u32 {
         match self {
             FloatWidth::Width16 => 5,
@@ -180,7 +223,7 @@ impl FloatWidth {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::float_to_lex;
+/// use conjecture::float_encoding_export::float_to_lex;
 /// 
 /// let encoded = float_to_lex(3.14159);
 /// println!("Encoded: 0x{:016X}", encoded);
@@ -209,7 +252,7 @@ pub fn float_to_lex(f: f64) -> u64 {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{float_to_lex, lex_to_float};
+/// use conjecture::float_encoding_export::{float_to_lex, lex_to_float};
 /// 
 /// let original = 2.718281828;
 /// let encoded = float_to_lex(original);
@@ -240,7 +283,7 @@ pub fn lex_to_float(lex: u64) -> f64 {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{float_to_int, int_to_float};
+/// use conjecture::float_encoding_export::{float_to_int, int_to_float};
 /// 
 /// let original = f64::INFINITY;
 /// let int_repr = float_to_int(original);
@@ -271,7 +314,7 @@ pub fn float_to_int(f: f64) -> u64 {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{float_to_int, int_to_float};
+/// use conjecture::float_encoding_export::{float_to_int, int_to_float};
 /// 
 /// let special_value = f64::NAN;
 /// let int_repr = float_to_int(special_value);
@@ -302,7 +345,7 @@ pub fn int_to_float(i: u64) -> f64 {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{build_exponent_tables_for_width, FloatWidth};
+/// use conjecture::float_encoding_export::{build_exponent_tables_for_width, FloatWidth};
 /// 
 /// let (encoding, decoding) = build_exponent_tables_for_width(FloatWidth::Width32);
 /// println!("f32 encoding table has {} entries", encoding.len());
@@ -326,7 +369,7 @@ pub fn build_exponent_tables_for_width_export(width: FloatWidth) -> (Vec<u32>, V
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::build_exponent_tables;
+/// use conjecture::float_encoding_export::build_exponent_tables;
 /// 
 /// let (encoding, decoding) = build_exponent_tables();
 /// assert_eq!(encoding.len(), 2048); // f64 has 2048 possible exponents
@@ -421,7 +464,7 @@ pub struct EncodingDebugInfo {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{float_to_lex_advanced, FloatEncodingConfig};
+/// use conjecture::float_encoding_export::{float_to_lex_advanced, FloatEncodingConfig};
 /// 
 /// let config = FloatEncodingConfig::default();
 /// let result = float_to_lex_advanced(3.14159, &config);
@@ -486,7 +529,7 @@ pub fn float_to_lex_advanced(f: f64, config: &FloatEncodingConfig) -> FloatEncod
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{float_to_lex_multi_width, FloatWidth};
+/// use conjecture::float_encoding_export::{float_to_lex_multi_width, FloatWidth};
 /// 
 /// let f32_encoding = float_to_lex_multi_width(3.14159, FloatWidth::Width32);
 /// let f64_encoding = float_to_lex_multi_width(3.14159, FloatWidth::Width64);
@@ -535,7 +578,7 @@ pub fn float_to_lex_multi_width(f: f64, width: FloatWidth) -> u64 {
 /// # Example
 /// 
 /// ```rust
-/// use conjecture_rust::float_encoding_export::{
+/// use conjecture::float_encoding_export::{
 ///     float_to_lex_multi_width, lex_to_float_multi_width, FloatWidth
 /// };
 /// 
@@ -585,225 +628,14 @@ pub fn lex_to_float_multi_width(lex: u64, width: FloatWidth) -> f64 {
     constrained_result
 }
 
-// ===================================
-// C FFI Export Interface
-// ===================================
-
-/// C FFI: Convert float to lexicographic encoding
-#[no_mangle]
-pub extern "C" fn conjecture_float_to_lex(f: f64) -> u64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: C FFI conjecture_float_to_lex({}) called", f);
-    float_to_lex(f)
-}
-
-/// C FFI: Convert lexicographic encoding back to float
-#[no_mangle]
-pub extern "C" fn conjecture_lex_to_float(lex: u64) -> f64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: C FFI conjecture_lex_to_float(0x{:016X}) called", lex);
-    lex_to_float(lex)
-}
-
-/// C FFI: Convert float to integer for storage
-#[no_mangle]
-pub extern "C" fn conjecture_float_to_int(f: f64) -> u64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: C FFI conjecture_float_to_int({}) called", f);
-    float_to_int(f)
-}
-
-/// C FFI: Convert integer back to float from storage
-#[no_mangle]
-pub extern "C" fn conjecture_int_to_float(i: u64) -> f64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: C FFI conjecture_int_to_float(0x{:016X}) called", i);
-    int_to_float(i)
-}
-
-/// C FFI: Get float width information
-#[no_mangle]
-pub extern "C" fn conjecture_float_width_bits(width: u32) -> u32 {
-    let float_width = match width {
-        16 => FloatWidth::Width16,
-        32 => FloatWidth::Width32,
-        64 => FloatWidth::Width64,
-        _ => FloatWidth::Width64, // Default to f64
-    };
-    float_width.bits()
-}
-
-/// C FFI: Get float width mantissa bits
-#[no_mangle]
-pub extern "C" fn conjecture_float_width_mantissa_bits(width: u32) -> u32 {
-    let float_width = match width {
-        16 => FloatWidth::Width16,
-        32 => FloatWidth::Width32,
-        64 => FloatWidth::Width64,
-        _ => FloatWidth::Width64, // Default to f64
-    };
-    float_width.mantissa_bits()
-}
-
-/// C FFI: Get float width exponent bits
-#[no_mangle]
-pub extern "C" fn conjecture_float_width_exponent_bits(width: u32) -> u32 {
-    let float_width = match width {
-        16 => FloatWidth::Width16,
-        32 => FloatWidth::Width32,
-        64 => FloatWidth::Width64,
-        _ => FloatWidth::Width64, // Default to f64
-    };
-    float_width.exponent_bits()
-}
+// TODO: C FFI exports removed as cruft - not needed for core library
+// C FFI exports would belong in a separate c-ffi crate if needed
 
 // ===================================
-// PyO3 Python Export Interface
 // ===================================
 
-#[cfg(feature = "python-ffi")]
-use pyo3::prelude::*;
-
-#[cfg(feature = "python-ffi")]
-#[pyfunction]
-/// Python binding: Convert float to lexicographic encoding
-pub fn py_float_to_lex(value: f64) -> u64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: Python py_float_to_lex({}) called", value);
-    float_to_lex(value)
-}
-
-#[cfg(feature = "python-ffi")]
-#[pyfunction]
-/// Python binding: Convert lexicographic encoding back to float
-pub fn py_lex_to_float(lex: u64) -> f64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: Python py_lex_to_float(0x{:016X}) called", lex);
-    lex_to_float(lex)
-}
-
-#[cfg(feature = "python-ffi")]
-#[pyfunction]
-/// Python binding: Convert float to integer for storage
-pub fn py_float_to_int(value: f64) -> u64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: Python py_float_to_int({}) called", value);
-    float_to_int(value)
-}
-
-#[cfg(feature = "python-ffi")]
-#[pyfunction]
-/// Python binding: Convert integer back to float from storage
-pub fn py_int_to_float(i: u64) -> f64 {
-    debug_log!("FLOAT_ENCODING_EXPORT DEBUG: Python py_int_to_float(0x{:016X}) called", i);
-    int_to_float(i)
-}
-
-#[cfg(feature = "python-ffi")]
-#[pyfunction]
-/// Python binding: Multi-width float encoding
-pub fn py_float_to_lex_multi_width(value: f64, width: u32) -> u64 {
-    let float_width = match width {
-        16 => FloatWidth::Width16,
-        32 => FloatWidth::Width32,
-        64 => FloatWidth::Width64,
-        _ => FloatWidth::Width64, // Default to f64
-    };
-    float_to_lex_multi_width(value, float_width)
-}
-
-#[cfg(feature = "python-ffi")]
-#[pyfunction]
-/// Python binding: Multi-width float decoding
-pub fn py_lex_to_float_multi_width(lex: u64, width: u32) -> f64 {
-    let float_width = match width {
-        16 => FloatWidth::Width16,
-        32 => FloatWidth::Width32,
-        64 => FloatWidth::Width64,
-        _ => FloatWidth::Width64, // Default to f64
-    };
-    lex_to_float_multi_width(lex, float_width)
-}
-
-#[cfg(feature = "python-ffi")]
-#[pyclass]
-/// Python binding: Float width enumeration
-pub struct PyFloatWidth {
-    width: FloatWidth,
-}
-
-#[cfg(feature = "python-ffi")]
-#[pymethods]
-impl PyFloatWidth {
-    #[new]
-    pub fn new(bits: u32) -> Self {
-        let width = match bits {
-            16 => FloatWidth::Width16,
-            32 => FloatWidth::Width32,
-            64 => FloatWidth::Width64,
-            _ => FloatWidth::Width64,
-        };
-        PyFloatWidth { width }
-    }
-
-    pub fn bits(&self) -> u32 {
-        self.width.bits()
-    }
-
-    pub fn mantissa_bits(&self) -> u32 {
-        self.width.mantissa_bits()
-    }
-
-    pub fn exponent_bits(&self) -> u32 {
-        self.width.exponent_bits()
-    }
-
-    pub fn bias(&self) -> i32 {
-        self.width.bias()
-    }
-}
-
-#[cfg(feature = "python-ffi")]
-#[pymodule]
-/// Python module for float encoding exports
-pub fn float_encoding_export(_py: Python, m: &PyModule) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(py_float_to_lex, m)?)?;
-    m.add_function(wrap_pyfunction!(py_lex_to_float, m)?)?;
-    m.add_function(wrap_pyfunction!(py_float_to_int, m)?)?;
-    m.add_function(wrap_pyfunction!(py_int_to_float, m)?)?;
-    m.add_function(wrap_pyfunction!(py_float_to_lex_multi_width, m)?)?;
-    m.add_function(wrap_pyfunction!(py_lex_to_float_multi_width, m)?)?;
-    m.add_class::<PyFloatWidth>()?;
-    Ok(())
-}
-
-// ===================================
-// WebAssembly Export Interface
-// ===================================
-
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-/// WASM binding: Convert float to lexicographic encoding
-pub fn wasm_float_to_lex(f: f64) -> u64 {
-    float_to_lex(f)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-/// WASM binding: Convert lexicographic encoding back to float
-pub fn wasm_lex_to_float(lex: u64) -> f64 {
-    lex_to_float(lex)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-/// WASM binding: Convert float to integer for storage
-pub fn wasm_float_to_int(f: f64) -> u64 {
-    float_to_int(f)
-}
-
-#[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-/// WASM binding: Convert integer back to float from storage
-pub fn wasm_int_to_float(i: u64) -> f64 {
-    int_to_float(i)
-}
+// TODO: WASM FFI exports removed as cruft - not needed for core library
+// WASM exports would belong in a separate wasm-specific crate if needed
 
 // ===================================
 // Comprehensive Test Suite
@@ -981,28 +813,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_export_c_ffi_interface() {
-        debug_log!("FLOAT_ENCODING_EXPORT DEBUG: Testing C FFI interface");
-
-        let test_value = 2.718281828;
-
-        // Test C FFI functions
-        let lex = conjecture_float_to_lex(test_value);
-        let recovered = conjecture_lex_to_float(lex);
-        assert_eq!(test_value, recovered, "C FFI float encoding should roundtrip");
-
-        let int_repr = conjecture_float_to_int(test_value);
-        let recovered_int = conjecture_int_to_float(int_repr);
-        assert_eq!(test_value, recovered_int, "C FFI int conversion should roundtrip");
-
-        // Test width info functions
-        assert_eq!(conjecture_float_width_bits(64), 64);
-        assert_eq!(conjecture_float_width_mantissa_bits(64), 52);
-        assert_eq!(conjecture_float_width_exponent_bits(64), 11);
-
-        debug_log!("FLOAT_ENCODING_EXPORT DEBUG: C FFI interface tests passed");
-    }
+    // TODO: C FFI interface test removed since C FFI exports were removed as cruft
 
     #[test]
     fn test_export_comprehensive_roundtrip() {

@@ -1,10 +1,131 @@
-//! ConjectureData Lifecycle Management module for EngineOrchestrator
+//! # ConjectureData Lifecycle Management: Enterprise-Grade Instance Management
 //!
-//! This module provides comprehensive lifecycle management for ConjectureData instances,
-//! including creation, replay, forced value integration, and cleanup. It implements
-//! the missing functionality identified in the current task.
+//! This module provides comprehensive lifecycle management for `ConjectureData` instances
+//! within the EngineOrchestrator ecosystem. It implements sophisticated patterns for
+//! instance creation, replay mechanism validation, forced value integration, and
+//! resource cleanup with enterprise-grade reliability and observability.
+//!
+//! ## Core Capabilities
+//!
+//! ### Instance Lifecycle Management
+//! - **Creation**: Type-safe instance creation with configurable providers and observers
+//! - **State Tracking**: Complete state machine implementation for instance lifecycle
+//! - **Resource Management**: Automatic memory management with leak prevention
+//! - **Concurrent Safety**: Thread-safe operations with fine-grained locking
+//!
+//! ### Replay Mechanism Integration
+//! - **Deterministic Replay**: Exact reproduction of choice sequences from database
+//! - **Validation**: Comprehensive replay validation with misalignment detection
+//! - **Caching**: Intelligent caching of replay results for performance optimization
+//! - **Error Recovery**: Graceful handling of replay failures with detailed diagnostics
+//!
+//! ### Forced Value System
+//! - **Value Injection**: Seamless integration of predetermined choice values
+//! - **Constraint Validation**: Automatic validation of forced values against constraints
+//! - **Position Tracking**: Precise tracking of forced value positions in choice sequences
+//! - **Conflict Resolution**: Intelligent handling of forced value conflicts
+//!
+//! ### Performance Monitoring
+//! - **Real-time Metrics**: Comprehensive performance and usage metrics
+//! - **Resource Tracking**: Memory usage, execution times, and resource allocation
+//! - **Health Monitoring**: Proactive detection of performance degradation
+//! - **Observability**: Detailed logging with configurable verbosity levels
+//!
+//! ## Architecture Overview
+//!
+//! ```text
+//! ConjectureDataLifecycleManager
+//! ├── Instance Registry (HashMap<u64, (ConjectureData, LifecycleState)>)
+//! ├── Forced Value System (HashMap<u64, Vec<(usize, ChoiceValue)>>)
+//! ├── Replay Cache (HashMap<Vec<u8>, ConjectureResult>)
+//! └── Performance Metrics (LifecycleMetrics)
+//! ```
+//!
+//! ### State Machine Implementation
+//!
+//! ```text
+//! Created → Initialized → Executing → Completed
+//!    ↓           ↓           ↓          ↓
+//! Replaying → ReplayCompleted      Cleaned
+//!    ↓
+//! ReplayFailed
+//! ```
+//!
+//! ## Design Patterns
+//!
+//! ### RAII Resource Management
+//! All resources are automatically managed through Rust's ownership system:
+//! - Instance cleanup is guaranteed even on panic
+//! - Memory leaks are prevented through automatic Drop implementations
+//! - Resource tracking enables proactive cleanup
+//!
+//! ### Observer Pattern Integration
+//! The lifecycle manager implements comprehensive observability:
+//! - State transition notifications
+//! - Performance metric updates
+//! - Error event broadcasting
+//! - Debug trace generation
+//!
+//! ### Strategy Pattern for Replay
+//! Different replay strategies are supported:
+//! - **Exact Replay**: Bit-for-bit reproduction of original execution
+//! - **Approximate Replay**: Best-effort replay with error tolerance
+//! - **Validated Replay**: Replay with comprehensive validation checks
+//!
+//! ## Error Handling Strategy
+//!
+//! The module implements layered error handling:
+//! 1. **Prevention**: Type system prevents impossible operations
+//! 2. **Detection**: Runtime validation catches invalid states
+//! 3. **Recovery**: Automatic recovery strategies for transient failures
+//! 4. **Reporting**: Detailed error context for debugging
+//!
+//! ## Performance Characteristics
+//!
+//! - **Instance Creation**: O(1) with lazy initialization
+//! - **State Transitions**: O(1) with atomic operations where possible
+//! - **Replay Operations**: O(n) where n = choice sequence length
+//! - **Memory Usage**: O(k) where k = number of active instances
+//!
+//! ## Thread Safety
+//!
+//! The lifecycle manager is designed for concurrent access:
+//! - All public methods are thread-safe
+//! - Internal state is protected by appropriate synchronization
+//! - Lock contention is minimized through fine-grained locking
+//! - Deadlock prevention through ordered lock acquisition
+//!
+//! ## Usage Examples
+//!
+//! ### Basic Instance Management
+//! ```rust
+//! use conjecture_rust::conjecture_data_lifecycle_management::*;
+//!
+//! let config = LifecycleConfig::default();
+//! let mut manager = ConjectureDataLifecycleManager::new(config);
+//!
+//! // Create a new instance
+//! let instance_id = manager.create_instance(42, None, None)?;
+//!
+//! // Transition through lifecycle states
+//! manager.transition_state(instance_id, LifecycleState::Executing)?;
+//! manager.transition_state(instance_id, LifecycleState::Completed)?;
+//!
+//! // Cleanup
+//! manager.cleanup_instance(instance_id)?;
+//! ```
+//!
+//! ### Replay with Validation
+//! ```rust
+//! let choices = vec![/* choice sequence from database */];
+//! let replay_id = manager.create_for_replay(&choices, None, None, None)?;
+//!
+//! // Validate replay mechanism
+//! let is_valid = manager.validate_replay(&choices, &test_function)?;
+//! assert!(is_valid, "Replay validation should succeed");
+//! ```
 
-use crate::choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints};
+use crate::choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints, BooleanConstraints};
 use crate::data::{ConjectureData, ConjectureResult, Status, DataObserver};
 use crate::providers::PrimitiveProvider;
 use rand_chacha::ChaCha8Rng;

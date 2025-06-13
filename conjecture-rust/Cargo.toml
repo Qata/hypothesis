@@ -13,73 +13,10 @@ categories = ["development-tools::testing"]
 [lib]
 name = "conjecture"
 
-[[bin]]
-name = "database_integration_test"
-path = "database_integration_test.rs"
-
-[[bin]]
-name = "test_dfa_verification"
-path = "test_dfa_verification.rs"
-
-[[bin]]
-name = "test_float_encoding_demo"
-path = "test_float_encoding_demo.rs"
-
-[[bin]]
-name = "choice_sequence_demo"
-path = "choice_sequence_demo.rs"
-
-[[bin]]
-name = "test_core_choice_sequence_capability"
-path = "test_core_choice_sequence_capability.rs"
-
-[[bin]]
-name = "simple_capability_test"
-path = "simple_capability_test.rs"
-
-[[bin]]
-name = "provider_type_system_capability_demo"
-path = "provider_type_system_capability_demo.rs"
-
-[[bin]]
-name = "conjecture_data_lifecycle_capability_demo"
-path = "conjecture_data_lifecycle_capability_demo.rs"
-
-[[bin]]
-name = "test_lifecycle_implementation"
-path = "test_lifecycle_implementation.rs"
-
-[[bin]]
-name = "test_core_compilation_error_resolution"
-path = "test_core_compilation_error_resolution.rs"
-
-[[bin]]
-name = "test_provider_system_capability"
-path = "test_provider_system_capability.rs"
-
-[[bin]]
-name = "test_datatree_capability"
-path = "test_datatree_capability.rs"
-
-[[bin]]
-name = "test_datatree_integration_standalone"
-path = "test_datatree_integration_standalone.rs"
-
-[[bin]]
-name = "test_enhanced_provider_system"
-path = "test_enhanced_provider_system.rs"
-
-[[bin]]
-name = "provider_lifecycle_demo"
-path = "provider_lifecycle_demo.rs"
-
-[[bin]]
-name = "test_advanced_error_handling_standalone"
-path = "test_advanced_error_handling_standalone.rs"
 
 [dependencies]
-# Pure Rust crypto to avoid OpenSSL dependencies (key insight from swift-hypothesis)
-sha1 = "0.10"
+# Crypto dependencies for database hashing
+# sha1 = "0.10"  # TODO: Not used yet
 sha2 = "0.10"
 # Logging support
 log = "0.4"
@@ -89,8 +26,8 @@ rand_chacha = "0.3"
 byteorder = "1.4"
 lazy_static = "1.4"
 once_cell = "1.19"
-# For IEEE 754 half precision float support
-half = "2.4"
+# TODO: f16 support not implemented yet
+# half = "2.4"
 # Database persistence dependencies
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -98,20 +35,14 @@ hex = "0.4"
 thiserror = "1.0"
 tempfile = "3.0"
 regex = "1.11.1"
-# Optional dependencies for features
-pyo3 = { version = "0.20", features = ["auto-initialize"], optional = true }
 
 [dev-dependencies]
 # For property-based testing of our implementation
 proptest = "1.0"
 # For benchmarking
 criterion = "0.5"
-# For database testing
-tempfile = "3.0"
+# tempfile already in main dependencies
 
-[features]
-# Python FFI Integration feature
-python-ffi = ["pyo3"]
 
 # Benchmarks will be added later
 # [[bench]]

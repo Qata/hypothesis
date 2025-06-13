@@ -1,207 +1,230 @@
-# Conjecture-Rust Architectural Synthesis Blueprint
+# Architectural Synthesis Blueprint: Python-to-Rust Conjecture Engine Port
 
 ## Executive Summary
 
-This blueprint synthesizes Python Hypothesis architecture analysis, Rust implementation status, and PyO3 verification gaps to provide a comprehensive porting strategy. The Rust implementation has achieved 85-90% functional parity but requires extensive PyO3 verification (currently only ~10% coverage) to ensure production readiness.
+Based on comprehensive analysis of the Python Hypothesis conjecture engine, current Rust implementation status, PyO3 behavioral parity verification gaps, and critical code issues, this blueprint provides a unified porting strategy that prioritizes fixing critical implementation gaps first, followed by comprehensive PyO3 behavioral parity verification.
 
-## Core Architecture Mapping
+**Key Finding**: The Rust implementation is **85-90% functionally complete** but suffers from **critical infrastructure gaps** and **severely limited PyO3 verification coverage (~10%)**. The primary blocker is not missing functionality but missing verification confidence and critical system integration issues.
 
-### Python → Rust Component Translation
+## Critical Issues Analysis & Prioritization
 
-| Python Component | Rust Equivalent | Implementation Status | PyO3 Verification Status |
-|------------------|----------------|---------------------|------------------------|
-| `ConjectureData` | `ConjectureData` | ✅ Complete | ❌ 10% Coverage |
-| `ConjectureRunner` | `ConjectureRunner` | ✅ Complete | ❌ 15% Coverage |
-| `DataTree` | `DataTree` | ✅ Complete | ❌ 5% Coverage |
-| `ChoiceNode` | `Choice` enum | ✅ Complete | ❌ 20% Coverage |
-| `PrimitiveProvider` | `Provider` trait | ✅ Complete | ❌ 8% Coverage |
+### Phase 1: Critical Code Issues (Immediate - Weeks 1-2)
 
-## Critical Gap Analysis
+#### 1.1 Engine Orchestrator Infrastructure (CRITICAL BLOCKER)
+- **Location**: `src/engine_orchestrator.rs:548, 687, 758, 945, 1249-1297`
+- **Issue**: Core system components not implemented
+- **Impact**: Blocks fundamental system operation
+- **Python Pattern**: ConjectureRunner orchestration with provider coordination
+- **Rust Solution**: 
+  ```rust
+  pub struct EngineOrchestrator {
+      provider_system: Box<dyn PrimitiveProvider>,
+      shrinking_integration: ShrinkingSystemIntegration,
+      alignment_context: AlignmentContext,
+  }
+  ```
 
-### 1. Missing Python Functionality in Rust
+#### 1.2 SHA-384 Label Calculation Parity (CRITICAL)
+- **Location**: `src/data.rs:147`
+- **Issue**: Using simple hash instead of SHA-384
+- **Impact**: Breaks Python-Rust behavioral parity
+- **Python Reference**: `data.py` uses SHA-384 for calc_label
+- **Rust Fix**: Replace with proper SHA-384 implementation
 
-#### **High Priority Gaps:**
-- **Targeting System**: Commented out in `lib.rs`, needs full implementation
-- **Advanced Constraint Pooling**: Missing LRU cache optimization from Python
-- **Deprecation Warnings**: Python's backward compatibility handling
-- **Cross-platform Edge Cases**: Platform-specific behavior differences
+#### 1.3 Core ConjectureData Operations (CRITICAL)
+- **Location**: `verification-tests/src/missing_functionality_verification.rs` (14 TODOs)
+- **Issue**: Fundamental operations return panic! stubs
+- **Python Patterns**: 
+  - Draw operations with choice recording
+  - Status lifecycle management (VALID/INVALID/INTERESTING/OVERRUN)
+  - Choice sequence replay
+- **Rust Implementation**: Replace panic! stubs with actual implementations
 
-#### **Medium Priority Gaps:**
-- **Dynamic Type Resolution**: Python's duck typing vs Rust's static typing
-- **Runtime Configuration**: Python's dynamic configuration vs compile-time features
-- **Error Message Formatting**: Python's detailed error context vs Rust's structured errors
+### Phase 2: Important Functional Gaps (Weeks 3-4)
 
-### 2. PyO3 Verification Critical Gaps
+#### 2.1 Constraint System Implementation
+- **Locations**: 23 'simplified' constraint implementations across choice system
+- **Python Pattern**: Comprehensive constraint validation and propagation
+- **Rust Solution**: Implement trait-based constraint system:
+  ```rust
+  trait ConstraintValidator<T> {
+      fn validate(&self, value: &T) -> ValidationResult;
+      fn estimate_satisfaction(&self, context: &GenerationContext) -> f64;
+      fn detect_violations(&self, sequence: &[Choice]) -> Vec<ViolationReport>;
+  }
+  ```
 
-Based on the verification analysis, the following components lack adequate PyO3 testing:
+#### 2.2 Float Encoding Special Values
+- **Python Gap**: `data.py:926` - Missing float width support
+- **Rust Gap**: `choice/indexing.rs` - Simplified encoding
+- **Solution**: Complete IEEE 754 special value handling (NaN, infinity, subnormals)
 
-#### **Immediate Priority (Blocking Production):**
-- **Choice System PyO3 Interface**: Only 20% of choice types verified
-- **DataTree Python Interop**: Only 5% of tree operations tested
-- **Shrinking System FFI**: Complex shrinking logic unverified with Python
-- **Float Encoding Export**: Sophisticated system needs full verification
+#### 2.3 Provider System Fallbacks
+- **Locations**: `src/providers.rs:629, 992, 998`
+- **Issue**: Missing constraint handling, fallback strategies
+- **Python Pattern**: Sophisticated provider backend abstraction
+- **Rust Solution**: Implement comprehensive provider trait with capability negotiation
 
-#### **Secondary Priority:**
-- **Provider System FFI**: Plugin architecture needs comprehensive testing
-- **Error Handling Across FFI**: Rust error types → Python exceptions
-- **Memory Management**: Rust lifetime handling in Python context
+## PyO3 Behavioral Parity Verification Strategy
 
-## Idiomatic Rust Pattern Recommendations
+### Current Verification Coverage: ~10%
+- ✅ **Verified**: Basic choice system, templating, navigation
+- ❌ **Missing**: 90% of sophisticated functionality
 
-### Python Construct → Rust Pattern Mapping
+### Phase 3: Comprehensive PyO3 Verification (Weeks 5-6)
 
-#### **Duck Typing → Trait System**
+#### 3.1 ConjectureData Lifecycle Verification
 ```rust
-// Python: Duck typing with hasattr() checks
-// Rust: Trait-based polymorphism
-trait DataProvider {
-    fn draw_choice(&mut self, choice_type: ChoiceType) -> Result<Choice, ProviderError>;
-    fn can_provide(&self, choice_type: &ChoiceType) -> bool;
+#[cfg(test)]
+mod pyo3_parity_tests {
+    // Verify choice recording produces identical sequences
+    // Verify status transitions match Python exactly
+    // Verify span tracking hierarchies are equivalent
 }
 ```
 
-#### **Inheritance → Composition + Traits**
+#### 3.2 Advanced Shrinking Algorithm Verification
+- **Missing**: Verification of 17+ transformation passes
+- **Critical**: Multi-level cache behavior parity
+- **Implementation**: Create shrinking test vectors with Python reference
+
+#### 3.3 Float Encoding Lexicographic Verification
+- **Missing**: Verify lexicographic ordering properties
+- **Critical**: Ensure shrinking behavior matches Python exactly
+- **Test Cases**: Edge cases (NaN, infinity, subnormals, precision boundaries)
+
+#### 3.4 DFA String Generation Verification
+- **Missing**: L* algorithm learning verification
+- **Critical**: Pattern recognition behavioral parity
+- **Implementation**: Cross-language DFA state machine verification
+
+## Architectural Patterns: Python → Rust Translation
+
+### 1. Dynamic Typing → Strong Type System
+**Python Pattern**: Duck typing with runtime checks
+```python
+def draw_choice(self, choice_type: str, **kwargs) -> Any:
+    # Runtime type dispatch
+```
+
+**Rust Solution**: Enum-based type system with compile-time safety
 ```rust
-// Python: Class inheritance hierarchies
-// Rust: Composition with trait implementations
-struct ConjectureRunner {
-    engine: Engine,
-    provider: Box<dyn DataProvider>,
+pub enum Choice {
+    Integer(IntegerChoice),
+    Float(FloatChoice),
+    String(StringChoice),
+    Boolean(BooleanChoice),
+    Bytes(BytesChoice),
+}
+```
+
+### 2. Inheritance → Composition + Traits
+**Python Pattern**: Class inheritance hierarchies
+```python
+class ConjectureData(DataObserver):
+    class Status(IntEnum): ...
+```
+
+**Rust Solution**: Composition with trait implementations
+```rust
+pub struct ConjectureData {
     observer: Box<dyn DataObserver>,
+    status: Status,
+}
+
+impl DataObserver for ConjectureData { ... }
+```
+
+### 3. Plugin System → Dynamic Trait Objects
+**Python Pattern**: Runtime plugin registration
+```python
+AVAILABLE_PROVIDERS = {
+    "hypothesis": "hypothesis.internal.conjecture.providers.HypothesisProvider",
+    "urandom": "hypothesis.internal.conjecture.providers.URandomProvider",
 }
 ```
 
-#### **Dynamic Configuration → Feature Flags + Builder Pattern**
+**Rust Solution**: Registry pattern with trait objects
 ```rust
-// Python: Runtime configuration changes
-// Rust: Compile-time features + builder pattern
-#[cfg(feature = "python-ffi")]
-pub struct ConjunctureRunnerBuilder {
-    max_examples: Option<u64>,
-    database: Option<Database>,
+pub struct ProviderRegistry {
+    providers: HashMap<String, Box<dyn Fn() -> Box<dyn PrimitiveProvider>>>,
 }
 ```
 
-#### **Exception Handling → Result Types**
+### 4. Observer Pattern → Event-Driven Architecture
+**Python Pattern**: Observer callbacks
+```python
+class DataObserver:
+    def observe_choice(self, choice): ...
+```
+
+**Rust Solution**: Channel-based event system
 ```rust
-// Python: Exception hierarchies
-// Rust: Structured error types with From/Into
-#[derive(Debug, Error)]
-pub enum ConjunctureError {
-    #[error("Invalid choice: {0}")]
-    InvalidChoice(String),
-    #[error("Provider error: {source}")]
-    Provider { #[from] source: ProviderError },
+pub enum DataEvent {
+    ChoiceRecorded(Choice),
+    StatusChanged(Status),
+    SpanEntered(SpanInfo),
 }
 ```
 
-## Unified Porting Strategy
+## Implementation Strategy
 
-### Phase 1: PyO3 Verification Foundation (Immediate - 4 weeks)
+### Week 1-2: Critical Infrastructure
+1. ✅ Fix engine orchestrator provider system integration
+2. ✅ Implement SHA-384 label calculation
+3. ✅ Replace ConjectureData operation panic! stubs
 
-#### **Critical PyO3 Verification Requirements:**
+### Week 3-4: Constraint & Provider Systems
+1. ✅ Implement comprehensive constraint validation
+2. ✅ Complete float encoding special value handling
+3. ✅ Fix provider system fallbacks and capability negotiation
 
-1. **Choice System FFI Verification**
-   - Comprehensive tests for all 5 choice types (Integer, Boolean, Float, String, Bytes)
-   - Constraint validation across FFI boundary
-   - Memory safety validation for complex choice structures
+### Week 5-6: PyO3 Verification Infrastructure
+1. ✅ ConjectureData lifecycle parity verification
+2. ✅ Advanced shrinking algorithm verification
+3. ✅ Float encoding lexicographic verification
+4. ✅ DFA string generation verification
 
-2. **DataTree Python Interoperability**
-   - Novel prefix generation verification
-   - Tree navigation consistency checks
-   - Memory management validation for tree structures
+### Week 7-8: Integration & Performance
+1. ✅ Database-orchestrator integration
+2. ✅ Targeting system final hooks
+3. ✅ Performance optimization and caching
+4. ✅ Comprehensive integration testing
 
-3. **Shrinking System FFI Integration**
-   - Multi-pass shrinking algorithm verification
-   - Constraint preservation across language boundaries
-   - Float encoding shrinking verification
+## Quality Assurance Strategy
 
-4. **Error Handling Standardization**
-   - Rust error types → Python exception mapping
-   - Context preservation across FFI
-   - Stack trace integration
+### 1. Behavioral Parity Verification
+- **Test Vectors**: Generate identical test cases in Python and Rust
+- **Output Comparison**: Bit-for-bit comparison of choice sequences
+- **Edge Case Coverage**: NaN, infinity, constraint violations, boundary conditions
 
-### Phase 2: Critical Gap Implementation (6 weeks)
+### 2. Performance Benchmarking
+- **Shrinking Performance**: Compare shrinking convergence rates
+- **Memory Usage**: Verify efficient memory management
+- **Cache Effectiveness**: Multi-level cache hit rates
 
-#### **2.1 Targeting System Implementation**
-- Uncomment and complete targeting system in `lib.rs`
-- Implement score-based generation targeting
-- Add PyO3 bindings for targeting configuration
-
-#### **2.2 Advanced Constraint Pooling**
-- Implement LRU cache for constraint optimization
-- Add memory pressure handling
-- Create PyO3 interface for cache statistics
-
-#### **2.3 Cross-platform Compatibility**
-- Validate behavior across target platforms
-- Handle platform-specific edge cases
-- Add comprehensive platform testing
-
-### Phase 3: Production Hardening (4 weeks)
-
-#### **3.1 Performance Optimization**
-- Benchmark critical paths against Python implementation
-- Optimize FFI call overhead
-- Implement zero-copy optimizations where possible
-
-#### **3.2 Documentation and Examples**
-- Create comprehensive PyO3 usage examples
-- Document performance characteristics
-- Provide migration guide from Python
-
-## Implementation Priorities
-
-### **Immediate (Blocking Production)**
-1. **Choice System PyO3 Verification** - Complete test coverage for all choice types
-2. **DataTree FFI Testing** - Comprehensive tree operation verification
-3. **Shrinking System PyO3 Integration** - Full shrinking algorithm verification
-4. **Error Handling Standardization** - Consistent error propagation
-
-### **High Priority**
-1. **Targeting System Implementation** - Complete the commented-out system
-2. **Float Encoding Verification** - Full PyO3 testing of sophisticated float system
-3. **Provider System FFI** - Plugin architecture verification
-
-### **Medium Priority**
-1. **Advanced Constraint Pooling** - LRU cache implementation
-2. **Cross-platform Testing** - Platform-specific behavior validation
-3. **Performance Benchmarking** - Comprehensive performance comparison
+### 3. Integration Testing
+- **End-to-End**: Complete test case generation and shrinking cycles
+- **Provider Switching**: Verify seamless backend transitions
+- **Error Handling**: Comprehensive error recovery verification
 
 ## Success Metrics
 
-### **PyO3 Verification Targets**
-- **Choice System**: 95% PyO3 test coverage
-- **DataTree**: 90% FFI operation coverage
-- **Shrinking**: 85% algorithm verification
-- **Overall**: 80% PyO3 verification coverage (from current 10%)
+### Completion Criteria
+1. **100% PyO3 Verification Coverage**: All sophisticated functionality verified
+2. **Zero Critical Issues**: All TODO/FIXME/simplified markers resolved
+3. **Performance Parity**: Rust performance matches or exceeds Python
+4. **Memory Safety**: Zero unsafe code, comprehensive ownership patterns
 
-### **Functional Completeness**
-- **Targeting System**: 100% implementation
-- **Python Parity**: 95% feature parity
-- **Cross-platform**: All supported platforms validated
-
-### **Production Readiness Indicators**
-- Zero memory leaks in FFI operations
-- Performance within 10% of Python implementation
-- Comprehensive error handling coverage
-- Full documentation and examples
-
-## Risk Mitigation
-
-### **High Risk Areas**
-1. **Memory Safety Across FFI** - Extensive testing required
-2. **Performance Degradation** - Continuous benchmarking needed
-3. **API Compatibility** - Version compatibility testing
-
-### **Mitigation Strategies**
-- Incremental PyO3 verification with each component
-- Automated performance regression testing
-- Comprehensive integration test suite
-- Memory leak detection in CI/CD pipeline
+### Quality Gates
+- ✅ All critical infrastructure gaps closed
+- ✅ Comprehensive constraint system implemented
+- ✅ Provider system fully functional
+- ✅ PyO3 behavioral parity verified for all core operations
+- ✅ Performance benchmarks meet requirements
 
 ## Conclusion
 
-The Rust implementation represents an exceptionally sophisticated port with 85-90% functional completeness. The primary blocker is the critical gap in PyO3 verification coverage (only ~10%). This blueprint provides a structured approach to achieve production readiness through comprehensive PyO3 verification while completing the remaining functionality gaps.
+This blueprint transforms the current **85% complete but unverified** Rust implementation into a **production-ready, fully verified** conjecture engine. The strategy prioritizes fixing critical code issues first (addressing the 39 'simplified' implementations and critical TODOs), then establishes comprehensive PyO3 behavioral parity verification to ensure confidence in the sophisticated algorithms already implemented.
 
-**Key Success Factor**: Prioritizing PyO3 verification alongside functionality implementation ensures both correctness and interoperability, addressing the confidence gap that currently prevents production deployment despite the high-quality underlying implementation.
+The result will be a world-class property-based testing engine that is faster, safer, and more reliable than the Python original while maintaining full behavioral compatibility through comprehensive verification.
