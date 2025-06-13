@@ -1,9 +1,9 @@
 //! Test the ConjectureData Lifecycle Management implementation
 //! This is a standalone test to verify the core functionality works correctly
 
-use conjecture_rust::conjecture_data_lifecycle_management::*;
-use conjecture_rust::choice::*;
-use conjecture_rust::data::ConjectureData;
+use conjecture::conjecture_data_lifecycle_management::*;
+use conjecture::choice::*;
+use conjecture::data::ConjectureData;
 
 fn main() {
     println!("Testing ConjectureData Lifecycle Management implementation...");
@@ -25,34 +25,34 @@ fn main() {
     // Test 3: Create replay instance and verify max_choices preservation
     println!("\n3. Testing replay instance creation with max_choices preservation...");
     let choices = vec![
-        ChoiceNode {
-            choice_type: ChoiceType::Integer,
-            value: ChoiceValue::Integer(42),
-            constraints: Constraints::Integer(IntegerConstraints {
+        ChoiceNode::new(
+            ChoiceType::Integer,
+            ChoiceValue::Integer(42),
+            Constraints::Integer(IntegerConstraints {
                 min_value: Some(0),
                 max_value: Some(100),
                 weights: None,
                 shrink_towards: Some(0),
             }),
-            was_forced: false,
-        },
-        ChoiceNode {
-            choice_type: ChoiceType::Boolean,
-            value: ChoiceValue::Boolean(true),
-            constraints: Constraints::Boolean(BooleanConstraints { p: 0.5 }),
-            was_forced: false,
-        },
-        ChoiceNode {
-            choice_type: ChoiceType::Integer,
-            value: ChoiceValue::Integer(123),
-            constraints: Constraints::Integer(IntegerConstraints {
+            false, // was_forced
+        ),
+        ChoiceNode::new(
+            ChoiceType::Boolean,
+            ChoiceValue::Boolean(true),
+            Constraints::Boolean(BooleanConstraints { p: 0.5 }),
+            false, // was_forced
+        ),
+        ChoiceNode::new(
+            ChoiceType::Integer,
+            ChoiceValue::Integer(123),
+            Constraints::Integer(IntegerConstraints {
                 min_value: Some(0),
                 max_value: Some(200),
                 weights: None,
                 shrink_towards: Some(0),
             }),
-            was_forced: false,
-        },
+            false, // was_forced
+        ),
     ];
     
     let replay_id = manager.create_for_replay(&choices, None, None, None).unwrap();

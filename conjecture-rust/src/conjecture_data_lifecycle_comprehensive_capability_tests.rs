@@ -917,7 +917,7 @@ mod pyo3_tests {
 #[cfg(test)]
 mod integration_tests {
     use super::*;
-    use crate::engine_orchestrator::{EngineOrchestrator, OrchestrationConfig};
+    use crate::engine_orchestrator::{EngineOrchestrator, OrchestratorConfig};
 
     #[test]
     fn test_engine_orchestrator_integration() {
@@ -929,7 +929,7 @@ mod integration_tests {
             ..Default::default()
         };
         
-        let orchestrator_config = OrchestrationConfig {
+        let orchestrator_config = OrchestratorConfig {
             debug_logging: false,
             max_test_cases: 100,
             max_examples: 10,

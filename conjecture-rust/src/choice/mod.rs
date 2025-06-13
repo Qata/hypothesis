@@ -11,6 +11,7 @@ pub mod float_constraint_type_system;
 pub mod indexing;
 mod indexing_correct;
 mod navigation;
+pub mod navigation_system;
 mod node;
 pub mod shrinking_system;
 pub mod shrinking_demo;
@@ -18,6 +19,7 @@ pub mod templating;
 pub mod value_generation;
 pub mod weighted_selection;
 pub mod values;
+pub mod core_compilation_error_resolution;
 
 #[cfg(test)]
 mod python_parity_tests;
@@ -39,6 +41,9 @@ mod navigation_system_comprehensive_tests;
 
 #[cfg(test)]
 mod navigation_capability_ffi_tests;
+
+#[cfg(test)]
+mod navigation_system_datatree_novel_prefix_pyo3_ffi_comprehensive_capability_tests;
 
 #[cfg(test)]
 mod choice_templating_forcing_tests;
@@ -83,6 +88,9 @@ mod choice_type_system_integration_capability_tests;
 mod shrinking_system_float_constraint_integration_comprehensive_capability_tests;
 
 #[cfg(test)]
+mod core_compilation_error_resolution_comprehensive_capability_tests;
+
+#[cfg(test)]
 mod simple_choice_test;
 
 pub use self::advanced_shrinking::{AdvancedShrinkingEngine as NewAdvancedShrinkingEngine, ShrinkResult as NewShrinkResult, ShrinkingMetrics as NewShrinkingMetrics, ChoicePattern, StringPatternType, ShrinkingContext, shrink_duplicated_blocks, shrink_floats_to_integers, shrink_strings_to_more_structured, lexicographic_weight, minimize_individual_choice_at, constraint_repair_shrinking, calculate_sequence_quality};
@@ -98,6 +106,7 @@ pub use self::float_constraint_type_system::{
 };
 pub use self::indexing::*;
 pub use self::navigation::*;
+pub use self::navigation_system::*;
 pub use self::node::*;
 pub use self::shrinking_system::*;
 pub use self::shrinking_demo::*;
@@ -108,6 +117,10 @@ pub use self::value_generation::{
 };
 pub use self::weighted_selection::*;
 pub use self::values::*;
+pub use self::core_compilation_error_resolution::{
+    CompilationErrorType, CompilationErrorResolver, ResolutionResult, ResolutionStatistics,
+    ChoiceNodeBuilder, CompilationErrorAnalyzer
+};
 
 /// Choice types that can be drawn
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

@@ -69,8 +69,19 @@ pub struct Branch {
     pub is_exhausted: RwLock<bool>,
 }
 
+impl Clone for Branch {
+    fn clone(&self) -> Self {
+        let children = self.children.read().unwrap().clone();
+        let is_exhausted = *self.is_exhausted.read().unwrap();
+        Self {
+            children: RwLock::new(children),
+            is_exhausted: RwLock::new(is_exhausted),
+        }
+    }
+}
+
 /// Terminal node representing the end of a test execution path
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Conclusion {
     /// Final status of the test execution
     pub status: Status,
@@ -83,7 +94,7 @@ pub struct Conclusion {
 }
 
 /// Killed node representing a branch that should not be explored further
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Killed {
     /// Optional continuation point after killed section
     pub next_node: Option<Arc<TreeNode>>,
