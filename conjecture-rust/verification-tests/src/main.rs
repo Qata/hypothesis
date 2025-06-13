@@ -131,6 +131,7 @@ mod direct_type_test;
 mod float_constraint_python_parity_test;
 mod python_parity_verification;
 mod core_compilation_verification;
+mod direct_pyo3_verification;
 
 use test_runner::TestRunner;
 
@@ -165,15 +166,62 @@ fn main() {
                 .action(clap::ArgAction::SetTrue)
                 .help("Run core compilation error resolution verification")
         )
+        .arg(
+            Arg::new("direct")
+                .short('d')
+                .long("direct")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run direct PyO3 byte-for-byte comparison verification")
+        )
         .get_matches();
 
     let test_name = matches.get_one::<String>("test");
     let verbose = matches.get_flag("verbose");
     let run_parity = matches.get_flag("parity");
     let run_core = matches.get_flag("core");
+    let run_direct = matches.get_flag("direct");
 
     println!("🔍 Conjecture Python-Rust Verification Tool");
     println!("============================================");
+    
+    // If direct flag is set, run direct PyO3 byte-for-byte comparison
+    if run_direct {
+        println!("\n🔍 Running direct PyO3 byte-for-byte comparison verification...");
+        match direct_pyo3_verification::DirectPyO3Verifier::new() {
+            Ok(verifier) => {
+                match verifier.run_verification_suite() {
+                    Ok(results) => {
+                        println!("\n📊 Direct Verification Results:");
+                        println!("   Total tests: {}", results.total_tests());
+                        println!("   Passed: {}", results.total_passed());
+                        println!("   Failed: {}", results.total_failed());
+                        println!("   Success rate: {:.1}%", results.success_rate() * 100.0);
+                        
+                        println!("\n📈 Breakdown:");
+                        println!("   Integer tests: {}/{}", results.integer_tests_passed, results.integer_tests_passed + results.integer_tests_failed);
+                        println!("   Float tests: {}/{}", results.float_tests_passed, results.float_tests_passed + results.float_tests_failed);
+                        println!("   Boolean tests: {}/{}", results.boolean_tests_passed, results.boolean_tests_passed + results.boolean_tests_failed);
+                        
+                        if results.total_failed() > 0 {
+                            println!("\n❌ Direct verification found discrepancies!");
+                            process::exit(1);
+                        } else {
+                            println!("\n✅ All direct verification tests passed!");
+                            return;
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("\n❌ Direct verification failed: {}", e);
+                        process::exit(1);
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("\n❌ Failed to initialize direct verifier: {}", e);
+                process::exit(1);
+            }
+        }
+    }
     
     // If core flag is set, run core compilation error resolution verification
     if run_core {

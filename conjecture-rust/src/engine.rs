@@ -321,15 +321,15 @@ impl ConjectureRunner {
                     },
                     crate::choice::ChoiceValue::Float(_val) => {
                         // Float shrinking not implemented yet
-                        let _ = data.draw_float();
+                        let _ = data.draw_float_simple();
                     },
                     crate::choice::ChoiceValue::String(_val) => {
                         // String shrinking not implemented yet  
-                        let _ = data.draw_string("abc", 0, 10);
+                        let _ = data.draw_string_simple("abc", 0, 10);
                     },
                     crate::choice::ChoiceValue::Bytes(_val) => {
                         // Bytes shrinking not implemented yet
-                        let _ = data.draw_bytes(10);
+                        let _ = data.draw_bytes_simple(10);
                     },
                 }
             }

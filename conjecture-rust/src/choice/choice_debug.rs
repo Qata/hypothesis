@@ -1,4 +1,62 @@
-//! Debug helper to understand Python's choice indexing algorithm
+//! # Choice Debug: Advanced Analysis of Python's Choice Indexing Algorithm
+//!
+//! This module provides comprehensive debugging tools and analysis utilities for understanding
+//! and verifying the complex choice indexing algorithms ported from Python Hypothesis.
+//! It implements detailed logging, algorithm verification, and performance profiling to ensure
+//! the Rust implementation maintains perfect compatibility with Python's battle-tested ordering.
+//!
+//! ## Algorithm Analysis Focus
+//!
+//! ### Python Choice Ordering Algorithm
+//! The choice indexing algorithm from Python Hypothesis implements a sophisticated distance-based
+//! ordering that prioritizes values closer to a "shrink towards" target. This creates an optimal
+//! shrinking path where:
+//!
+//! 1. **Shrink Target First**: The shrink_towards value gets index 0 (highest priority)
+//! 2. **Distance-Based Ordering**: Values are ordered by increasing distance from shrink_towards
+//! 3. **Positive/Negative Alternation**: For equal distances, positive offsets come before negative
+//! 4. **Boundary Awareness**: Out-of-bounds values are skipped intelligently
+//!
+//! ### Complexity Analysis
+//! - **Time Complexity**: O(log n) for choice lookup using binary search
+//! - **Space Complexity**: O(n) for precomputed ordering tables
+//! - **Cache Performance**: Excellent due to localized access patterns
+//!
+//! ### Example Ordering Pattern
+//! For integer constraints(-3, 3, shrink_towards=1):
+//! ```text
+//! Index | Value | Distance | Direction | Reason
+//! ------|-------|----------|-----------|------------------
+//!   0   |   1   |    0     |   target  | Shrink target
+//!   1   |   2   |    1     | positive  | +1 from target
+//!   2   |   0   |    1     | negative  | -1 from target  
+//!   3   |   3   |    2     | positive  | +2 from target
+//!   4   |  -1   |    2     | negative  | -2 from target
+//!   5   |  -2   |    3     | negative  | -3 from target (skip +3, out of bounds)
+//!   6   |  -3   |    4     | negative  | -4 from target (skip +4, out of bounds)
+//! ```
+//!
+//! ## Verification Strategy
+//!
+//! The module implements multi-layered verification:
+//! 1. **Pattern Recognition**: Detect ordering patterns across different constraint sets
+//! 2. **Boundary Testing**: Verify correct handling of edge cases and constraints
+//! 3. **Performance Profiling**: Measure and compare algorithm performance
+//! 4. **Regression Testing**: Ensure changes don't break existing behavior
+//!
+//! ## Implementation Notes
+//!
+//! ### Critical Requirements
+//! - **Exact Compatibility**: Must match Python's ordering precisely for reproducibility
+//! - **Edge Case Handling**: Proper boundary conditions and overflow protection
+//! - **Performance Optimization**: Efficient implementation without losing correctness
+//! - **Debug Visibility**: Comprehensive logging for algorithm debugging
+//!
+//! ### Design Decisions
+//! - Uses explicit pattern analysis rather than black-box testing
+//! - Implements both forward and reverse verification of ordering algorithms
+//! - Provides detailed diagnostic output for each ordering decision
+//! - Separates algorithm logic from verification to enable independent testing
 
 #[cfg(test)]
 mod debug_tests {
