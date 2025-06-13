@@ -14,7 +14,7 @@ path = "src/main.rs"
 conjecture = { path = "..", package = "conjecture-rust" }
 
 # Python FFI for calling actual Python Hypothesis functions
-pyo3 = { path = "/home/ch/Develop/pyo3", features = ["auto-initialize"] }
+pyo3 = { version = "0.25", features = ["auto-initialize"] }
 
 # CLI argument parsing
 clap = { version = "4.0", features = ["derive"] }
