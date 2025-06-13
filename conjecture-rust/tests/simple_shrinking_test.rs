@@ -1,7 +1,7 @@
 /// Minimal shrinking test to verify basic functionality
-use conjecture_rust::choice::{ChoiceNode, ChoiceValue, ChoiceType, Constraints, IntegerConstraints};
-use conjecture_rust::data::ConjectureData;
-use conjecture_rust::shrinking::PythonEquivalentShrinker;
+use conjecture::choice::{ChoiceNode, ChoiceValue, ChoiceType, Constraints, IntegerConstraints};
+use conjecture::data::ConjectureData;
+use conjecture::shrinking::PythonEquivalentShrinker;
 
 #[test]
 fn test_basic_shrinking_functionality() {

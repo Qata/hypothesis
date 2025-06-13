@@ -175,7 +175,7 @@ use serde::{Serialize, Deserialize};
 /// # Examples
 ///
 /// ```rust
-/// use conjecture_rust::choice::IntegerConstraints;
+/// use conjecture::choice::IntegerConstraints;
 /// use std::collections::HashMap;
 ///
 /// // Simple range constraint: integers from 1 to 100
@@ -312,7 +312,7 @@ impl IntegerConstraints {
     /// # Examples
     ///
     /// ```rust
-    /// use conjecture_rust::choice::IntegerConstraints;
+    /// use conjecture::choice::IntegerConstraints;
     ///
     /// // Standard range: 0 to 100, shrink toward 0
     /// let standard = IntegerConstraints::new(Some(0), Some(100), Some(0));
@@ -370,7 +370,7 @@ impl IntegerConstraints {
     /// # Examples
     ///
     /// ```rust
-    /// use conjecture_rust::choice::IntegerConstraints;
+    /// use conjecture::choice::IntegerConstraints;
     /// use std::collections::HashMap;
     ///
     /// let mut weights = HashMap::new();
@@ -438,7 +438,7 @@ impl IntegerConstraints {
     /// # Examples
     ///
     /// ```rust
-    /// use conjecture_rust::choice::IntegerConstraints;
+    /// use conjecture::choice::IntegerConstraints;
     ///
     /// let constraints = IntegerConstraints::new(Some(0), Some(100), Some(0));
     ///
@@ -491,7 +491,7 @@ impl IntegerConstraints {
     /// # Examples
     ///
     /// ```rust
-    /// use conjecture_rust::choice::IntegerConstraints;
+    /// use conjecture::choice::IntegerConstraints;
     ///
     /// // Explicit shrinking target
     /// let explicit = IntegerConstraints::new(Some(-100), Some(100), Some(42));
@@ -566,7 +566,7 @@ impl IntegerConstraints {
 /// # Examples
 ///
 /// ```rust
-/// use conjecture_rust::choice::BooleanConstraints;
+/// use conjecture::choice::BooleanConstraints;
 ///
 /// // Uniform distribution (50/50 chance)
 /// let uniform = BooleanConstraints { p: 0.5 };

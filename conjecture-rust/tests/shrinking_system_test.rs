@@ -6,12 +6,12 @@
 /// - tests/conjecture/test_choice.py
 /// - tests/quality/test_shrink_quality.py
 
-use conjecture_rust::choice::{
+use conjecture::choice::{
     ChoiceNode, ChoiceValue, ChoiceType, Constraints,
     IntegerConstraints, BooleanConstraints, FloatConstraints, StringConstraints, BytesConstraints
 };
-use conjecture_rust::data::ConjectureData;
-use conjecture_rust::shrinking::PythonEquivalentShrinker;
+use conjecture::data::ConjectureData;
+use conjecture::shrinking::PythonEquivalentShrinker;
 
 /// Test basic shrinking functionality - port of test_shrinker.py::test_basic_shrinking
 #[test]

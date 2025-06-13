@@ -5,9 +5,9 @@
 //! management, recording choices, replay from prefix, misalignment detection,
 //! and choice buffer management.
 
-use conjecture_rust::choice::{ChoiceType, ChoiceValue, Constraints, IntegerConstraints, BooleanConstraints, FloatConstraints, StringConstraints, BytesConstraints};
-use conjecture_rust::choice_sequence_management::{ChoiceSequenceManager, ChoiceSequenceError};
-use conjecture_rust::data::{ConjectureData, Status};
+use conjecture::choice::{ChoiceType, ChoiceValue, Constraints, IntegerConstraints, BooleanConstraints, FloatConstraints, StringConstraints, BytesConstraints};
+use conjecture::choice_sequence_management::{ChoiceSequenceManager, ChoiceSequenceError};
+use conjecture::data::{ConjectureData, Status};
 
 /// Test that choices can be recorded in sequence and replayed correctly
 /// Ported from test_choice.py::test_drawing_directly_matches_for_choices

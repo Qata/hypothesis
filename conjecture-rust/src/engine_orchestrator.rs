@@ -529,7 +529,7 @@ impl EngineOrchestrator {
     /// # Example
     ///
     /// ```rust
-    /// use conjecture_rust::*;
+    /// use conjecture::*;
     ///
     /// let test_fn = Box::new(|data: &mut ConjectureData| {
     ///     let x = data.draw_integer(0, 100)?;
@@ -668,7 +668,7 @@ impl EngineOrchestrator {
     /// # Example Usage
     ///
     /// ```rust
-    /// use conjecture_rust::*;
+    /// use conjecture::*;
     ///
     /// let test_fn = Box::new(|data: &mut ConjectureData| {
     ///     let values: Vec<i32> = (0..data.draw_integer(0, 10)?)

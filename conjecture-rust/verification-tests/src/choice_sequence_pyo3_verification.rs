@@ -2,11 +2,11 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use std::collections::HashMap;
 
-use conjecture_rust::choice::{
+use conjecture::choice::{
     ChoiceType, ChoiceValue, Constraints, ChoiceNode,
     IntegerConstraints, BooleanConstraints, FloatConstraints
 };
-use conjecture_rust::choice_sequence_management::{
+use conjecture::choice_sequence_management::{
     ChoiceSequenceManager, ChoiceSequenceError, MisalignmentInfo
 };
 

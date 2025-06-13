@@ -100,7 +100,7 @@ impl FloatWidth {
     /// # Example
     ///
     /// ```rust
-    /// use conjecture_rust::FloatWidth;
+    /// use conjecture::FloatWidth;
     ///
     /// assert_eq!(FloatWidth::Width64.bits(), 64);
     /// assert_eq!(FloatWidth::Width32.bits(), 32);
@@ -133,7 +133,7 @@ impl FloatWidth {
     /// # Example
     ///
     /// ```rust
-    /// use conjecture_rust::FloatWidth;
+    /// use conjecture::FloatWidth;
     ///
     /// assert_eq!(FloatWidth::Width64.exponent_bits(), 11);
     /// assert_eq!(FloatWidth::Width32.exponent_bits(), 8);

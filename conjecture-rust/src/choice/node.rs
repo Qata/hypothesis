@@ -205,7 +205,7 @@ use serde::{Serialize, Deserialize};
 /// # Examples
 ///
 /// ```rust
-/// use conjecture_rust::choice::{
+/// use conjecture::choice::{
 ///     ChoiceNode, ChoiceType, ChoiceValue, Constraints, IntegerConstraints
 /// };
 ///

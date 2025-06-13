@@ -1,7 +1,7 @@
 // Standalone test to demonstrate the shrinking implementation
-use conjecture_rust::choice::{ChoiceNode, ChoiceValue, Constraints, IntegerConstraints, ChoiceType};
-use conjecture_rust::data::ConjectureData;
-use conjecture_rust::shrinking::{shrink_integer, IntegerShrinker};
+use conjecture::choice::{ChoiceNode, ChoiceValue, Constraints, IntegerConstraints, ChoiceType};
+use conjecture::data::ConjectureData;
+use conjecture::shrinking::{shrink_integer, IntegerShrinker};
 
 fn main() {
     // Test 1: Integer shrinking

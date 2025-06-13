@@ -108,7 +108,7 @@ fn get_cache() -> &'static Mutex<HashMap<u64, u64>> {
 /// # Example Usage
 ///
 /// ```rust
-/// use conjecture_rust::choice::indexing::FloatEncodingStrategy;
+/// use conjecture::choice::indexing::FloatEncodingStrategy;
 ///
 /// fn select_strategy(value: f64) -> FloatEncodingStrategy {
 ///     if value.is_nan() || value.is_infinite() || value == 0.0 {

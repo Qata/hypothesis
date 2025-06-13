@@ -145,7 +145,7 @@ fn test_cannot_draw_after_freeze() {
     let mut data = ConjectureData::new(12345);
     
     // Draw a boolean value
-    let _result = data.draw_boolean(0.5);
+    let _result = data.draw_boolean(0.5, None, true);
     
     // Freeze the data
     data.freeze();
@@ -154,7 +154,7 @@ fn test_cannot_draw_after_freeze() {
     assert!(data.frozen);
     
     // Additional draw should return error 
-    let result = data.draw_boolean(0.5);
+    let result = data.draw_boolean(0.5, None, true);
     assert!(result.is_err());
 }
 
@@ -219,7 +219,7 @@ fn test_basic_data_drawing() {
     let mut data = ConjectureData::new(12345);
     
     // Draw 2 bytes
-    let bytes_result = data.draw_bytes(2);
+    let bytes_result = data.draw_bytes(2, 2, None, true);
     assert!(bytes_result.is_ok());
     let bytes = bytes_result.unwrap();
     assert_eq!(bytes.len(), 2);

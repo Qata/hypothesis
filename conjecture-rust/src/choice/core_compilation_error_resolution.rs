@@ -60,7 +60,7 @@ use crate::choice::{IntegerConstraints, BooleanConstraints, FloatConstraints, St
 /// # Example Error Handling
 ///
 /// ```rust
-/// use conjecture_rust::choice::CompilationErrorType;
+/// use conjecture::choice::CompilationErrorType;
 ///
 /// fn handle_compilation_error(error: &CompilationErrorType) -> RecoveryAction {
 ///     match error {
@@ -285,7 +285,7 @@ impl CompilationErrorResolver {
         
         // Import path corrections
         self.import_mappings.insert(
-            "conjecture_rust".to_string(),
+            "conjecture".to_string(),
             "conjecture".to_string()
         );
         self.import_mappings.insert(
@@ -844,9 +844,9 @@ impl CompilationErrorAnalyzer {
     /// Initialize common error patterns for automatic detection
     fn initialize_error_patterns(&mut self) {
         self.error_patterns.insert(
-            "failed to resolve: use of unresolved module or unlinked crate `conjecture_rust`".to_string(),
+            "failed to resolve: use of unresolved module or unlinked crate `conjecture`".to_string(),
             CompilationErrorType::ImportPathError {
-                invalid_path: "conjecture_rust".to_string(),
+                invalid_path: "conjecture".to_string(),
                 suggested_path: "conjecture".to_string(),
             }
         );
@@ -903,7 +903,7 @@ impl CompilationErrorAnalyzer {
 === ERROR PATTERN ANALYSIS ===
 Total Error Patterns: {}
 Most Common Issues:
-- Import path corrections (conjecture_rust -> conjecture)
+- Import path corrections (conjecture -> conjecture)
 - ChoiceNode construction via builder pattern
 - Missing trait implementations
 
@@ -946,7 +946,7 @@ mod tests {
         let mut resolver = CompilationErrorResolver::new();
         
         let error = CompilationErrorType::ImportPathError {
-            invalid_path: "conjecture_rust".to_string(),
+            invalid_path: "conjecture".to_string(),
             suggested_path: "conjecture".to_string(),
         };
         
@@ -987,7 +987,7 @@ mod tests {
         println!("COMPILATION_ERROR_RESOLUTION DEBUG: Testing error analyzer");
         let mut analyzer = CompilationErrorAnalyzer::new();
         
-        let error_msg = "failed to resolve: use of unresolved module or unlinked crate `conjecture_rust`";
+        let error_msg = "failed to resolve: use of unresolved module or unlinked crate `conjecture`";
         let results = analyzer.analyze_and_resolve(error_msg);
         
         assert!(!results.is_empty());

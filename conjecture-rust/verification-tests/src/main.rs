@@ -147,6 +147,10 @@ mod shrinking_verification;
 mod minimal_shrinking_test;
 mod python_shrinking_ffi;
 mod direct_pyo3_shrinking_verification;
+#[cfg(feature = "full-verification")]
+mod simple_float_verification;
+#[cfg(feature = "full-verification")]
+mod conjecture_data_verification;
 
 #[cfg(feature = "full-verification")]
 use test_runner::TestRunner;
@@ -465,10 +469,28 @@ fn main() {
         }
     }
     
-    #[cfg(not(feature = "full-verification"))]
-    if !run_minimal_shrinking {
-        println!("\n🔍 Available tests without full-verification:");
-        println!("   --minimal-shrinking: Test basic shrinking algorithms");
-        println!("\n💡 For full verification suite, use: cargo run --features full-verification");
+    // If no specific test flags are set, run simple float verification by default
+    if !run_parity && !run_core && !run_direct && !run_choice_sequence && !run_shrinking && !run_minimal_shrinking && !run_pyo3_shrinking {
+        #[cfg(feature = "full-verification")]
+        {
+            println!("\n🔥 Running Simple Float Encoding Verification by default...");
+            match simple_float_verification::run_float_verification() {
+                Ok(()) => println!("✅ Float verification completed"),
+                Err(e) => println!("❌ Float verification failed: {}", e),
+            }
+            
+            println!("\n🔥 Running ConjectureData Operation Verification...");
+            match conjecture_data_verification::run_conjecture_data_verification() {
+                Ok(()) => println!("✅ ConjectureData verification completed"),
+                Err(e) => println!("❌ ConjectureData verification failed: {}", e),
+            }
+        }
+        
+        #[cfg(not(feature = "full-verification"))]
+        {
+            println!("\n🔍 Available tests without full-verification:");
+            println!("   --minimal-shrinking: Test basic shrinking algorithms");
+            println!("\n💡 For full verification suite, use: cargo run --features full-verification");
+        }
     }
 }

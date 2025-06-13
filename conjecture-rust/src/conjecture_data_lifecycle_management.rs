@@ -99,7 +99,7 @@
 //!
 //! ### Basic Instance Management
 //! ```rust
-//! use conjecture_rust::conjecture_data_lifecycle_management::*;
+//! use conjecture::conjecture_data_lifecycle_management::*;
 //!
 //! let config = LifecycleConfig::default();
 //! let mut manager = ConjectureDataLifecycleManager::new(config);

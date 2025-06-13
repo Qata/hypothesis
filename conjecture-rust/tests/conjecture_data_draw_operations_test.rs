@@ -35,7 +35,7 @@
 //! 4. **Observer Integration**: Callback validation and data observer patterns
 //! 5. **Forced Value Handling**: Override behavior and constraint interaction
 
-use conjecture_rust::{
+use conjecture::{
     choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints},
     data::{ConjectureData, Status, StopTest},
     engine::ConjectureEngine,
@@ -44,7 +44,7 @@ use std::collections::HashMap;
 
 /// Test helper to create a fresh ConjectureData instance for testing
 fn fresh_data() -> ConjectureData {
-    ConjectureData::new(None, None)
+    ConjectureData::new(12345)
 }
 
 /// Test helper to create ConjectureData with predefined choices

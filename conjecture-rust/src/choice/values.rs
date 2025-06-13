@@ -154,7 +154,7 @@ use super::{ChoiceValue, Constraints};
 /// # Examples
 ///
 /// ```rust
-/// use conjecture_rust::choice::{ChoiceValue, choice_equal};
+/// use conjecture::choice::{ChoiceValue, choice_equal};
 ///
 /// // Integer comparison
 /// let a = ChoiceValue::Integer(42);
@@ -285,7 +285,7 @@ pub fn choice_equal(a: &ChoiceValue, b: &ChoiceValue) -> bool {
 /// # Examples
 ///
 /// ```rust
-/// use conjecture_rust::choice::{
+/// use conjecture::choice::{
 ///     ChoiceValue, Constraints, IntegerConstraints, BooleanConstraints, 
 ///     FloatConstraints, StringConstraints, BytesConstraints, IntervalSet
 /// };

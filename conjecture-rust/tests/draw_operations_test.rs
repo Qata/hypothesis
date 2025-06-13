@@ -3,13 +3,13 @@
 //! This test verifies that our Rust implementation provides the same
 //! functionality as the Python ConjectureData draw operations.
 
-use conjecture_rust::data::ConjectureData;
-use conjecture_rust::choice::IntervalSet;
+use conjecture::data::ConjectureData;
+use conjecture::choice::IntervalSet;
 use std::collections::HashMap;
 
 #[test]
 fn test_draw_integer_basic() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test basic integer drawing
     let result = data.draw_integer(Some(0), Some(10), None, 0, None, true);
@@ -20,7 +20,7 @@ fn test_draw_integer_basic() {
 
 #[test]
 fn test_draw_integer_with_weights() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test weighted integer drawing
     let mut weights = HashMap::new();
@@ -34,7 +34,7 @@ fn test_draw_integer_with_weights() {
 
 #[test]
 fn test_draw_integer_forced() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test forced integer value
     let result = data.draw_integer(Some(0), Some(10), None, 0, Some(7), true);
@@ -44,7 +44,7 @@ fn test_draw_integer_forced() {
 
 #[test]
 fn test_draw_boolean_basic() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test basic boolean drawing
     let result = data.draw_boolean(0.5, None, true);
@@ -54,7 +54,7 @@ fn test_draw_boolean_basic() {
 
 #[test]
 fn test_draw_boolean_deterministic() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test deterministic cases
     let result_false = data.draw_boolean(0.0, None, true);
@@ -68,7 +68,7 @@ fn test_draw_boolean_deterministic() {
 
 #[test]
 fn test_draw_float_basic() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test basic float drawing
     let result = data.draw_float(0.0, 1.0, false, None, None, true);
@@ -80,7 +80,7 @@ fn test_draw_float_basic() {
 
 #[test]
 fn test_draw_float_with_nan() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test float drawing with NaN allowed
     let result = data.draw_float(f64::NEG_INFINITY, f64::INFINITY, true, None, None, true);
@@ -90,7 +90,7 @@ fn test_draw_float_with_nan() {
 
 #[test]
 fn test_draw_string_basic() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test basic string drawing
     let intervals = IntervalSet::from_string("abc");
@@ -106,7 +106,7 @@ fn test_draw_string_basic() {
 
 #[test]
 fn test_draw_bytes_basic() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test basic bytes drawing
     let result = data.draw_bytes(0, 10, None, true);
@@ -117,7 +117,7 @@ fn test_draw_bytes_basic() {
 
 #[test]
 fn test_constraint_validation() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test invalid range should fail
     let result = data.draw_integer(Some(10), Some(5), None, 0, None, true);
@@ -130,7 +130,7 @@ fn test_constraint_validation() {
 
 #[test]
 fn test_choice_recording() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Initially no choices - check length field instead
     assert_eq!(data.length, 0);
@@ -148,7 +148,7 @@ fn test_choice_recording() {
 
 #[test]
 fn test_legacy_compatibility() {
-    let mut data = ConjectureData::new(1000, None);
+    let mut data = ConjectureData::new(1000);
     
     // Test legacy methods still work
     let result = data.draw_integer_simple(0, 10);
