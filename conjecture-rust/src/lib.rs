@@ -142,7 +142,7 @@ pub use choice_sequence_management::{
 };
 pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
 pub use datatree_enhanced_navigation::{TreeRecordingObserver as EnhancedTreeRecordingObserver, NavigationState, NavigationStats, ChildSelectionStrategy};
-pub use shrinking::{ChoiceShrinker, ShrinkingTransformation};
+pub use shrinking::{Shrinker, IntegerShrinker, shrink_conjecture_data, shrink_integer};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
 pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionPhase, ExecutionStatistics, OrchestrationError};
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};

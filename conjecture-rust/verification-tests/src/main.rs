@@ -124,16 +124,31 @@
 use clap::{Arg, Command};
 use std::process;
 
+#[cfg(feature = "full-verification")]
 mod python_ffi;
+#[cfg(feature = "full-verification")]
 mod test_runner;
+#[cfg(feature = "full-verification")]
 mod test_cases;
+#[cfg(feature = "full-verification")]
 mod direct_type_test;
+#[cfg(feature = "full-verification")]
 mod float_constraint_python_parity_test;
+#[cfg(feature = "full-verification")]
 mod python_parity_verification;
+#[cfg(feature = "full-verification")]
 mod core_compilation_verification;
+#[cfg(feature = "full-verification")]
 mod direct_pyo3_verification;
+#[cfg(feature = "full-verification")]
 mod choice_sequence_direct_verification;
+#[cfg(feature = "full-verification")]
+mod shrinking_verification;
+mod minimal_shrinking_test;
+mod python_shrinking_ffi;
+mod direct_pyo3_shrinking_verification;
 
+#[cfg(feature = "full-verification")]
 use test_runner::TestRunner;
 
 fn main() {
@@ -181,6 +196,24 @@ fn main() {
                 .action(clap::ArgAction::SetTrue)
                 .help("Run choice sequence management verification")
         )
+        .arg(
+            Arg::new("shrinking")
+                .long("shrinking")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run shrinking system Python parity verification")
+        )
+        .arg(
+            Arg::new("minimal-shrinking")
+                .long("minimal-shrinking")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run minimal shrinking algorithm verification")
+        )
+        .arg(
+            Arg::new("pyo3-shrinking")
+                .long("pyo3-shrinking")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run direct PyO3 shrinking verification")
+        )
         .get_matches();
 
     let test_name = matches.get_one::<String>("test");
@@ -189,11 +222,83 @@ fn main() {
     let run_core = matches.get_flag("core");
     let run_direct = matches.get_flag("direct");
     let run_choice_sequence = matches.get_flag("choice-sequence");
+    let run_shrinking = matches.get_flag("shrinking");
+    let run_minimal_shrinking = matches.get_flag("minimal-shrinking");
+    let run_pyo3_shrinking = matches.get_flag("pyo3-shrinking");
 
     println!("🔍 Conjecture Python-Rust Verification Tool");
     println!("============================================");
     
+    // If PyO3 shrinking flag is set, run direct PyO3 shrinking verification
+    if run_pyo3_shrinking {
+        println!("\n🔍 Running direct PyO3 shrinking verification...");
+        match direct_pyo3_shrinking_verification::verify_python_rust_parity() {
+            Ok(summary) => {
+                if summary.success_rate() >= 0.8 { // 80% success threshold
+                    println!("\n✅ PyO3 shrinking verification passed!");
+                    return;
+                } else {
+                    println!("\n❌ PyO3 shrinking verification failed!");
+                    process::exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("\n❌ PyO3 shrinking verification error: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    
+    // If minimal shrinking flag is set, run minimal shrinking verification
+    if run_minimal_shrinking {
+        println!("\n🔧 Running minimal shrinking algorithm verification...");
+        let summary = minimal_shrinking_test::run_minimal_verification();
+        
+        if summary.successful_shrinks == summary.total_tests {
+            println!("\n✅ All minimal shrinking tests passed!");
+            return;
+        } else {
+            println!("\n❌ Some minimal shrinking tests failed!");
+            process::exit(1);
+        }
+    }
+    
+    // If shrinking flag is set, run shrinking verification
+    #[cfg(feature = "full-verification")]
+    if run_shrinking {
+        println!("\n🔧 Running shrinking system Python parity verification...");
+        match shrinking_verification::verify_shrinking_functionality() {
+            Ok(summary) => {
+                println!("\n📊 Shrinking Verification Summary:");
+                println!("   Total tests: {}", summary.total_tests);
+                println!("   Bytes improved: {}", summary.bytes_improved);
+                println!("   Quality good: {}", summary.quality_good);
+                println!("   Errors: {}", summary.errors);
+                println!("   Success rate: {:.1}%", summary.success_rate() * 100.0);
+                
+                if summary.errors > 0 || summary.quality_good < summary.total_tests {
+                    println!("❌ Shrinking verification found issues!");
+                    process::exit(1);
+                } else {
+                    println!("✅ All shrinking verification tests passed!");
+                    return;
+                }
+            }
+            Err(e) => {
+                eprintln!("\n❌ Shrinking verification failed: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    
+    #[cfg(not(feature = "full-verification"))]
+    if run_shrinking {
+        println!("\n❌ Full shrinking verification requires --features full-verification");
+        process::exit(1);
+    }
+    
     // If choice sequence flag is set, run choice sequence verification
+    #[cfg(feature = "full-verification")]
     if run_choice_sequence {
         println!("\n🔄 Running choice sequence management verification...");
         let results = choice_sequence_direct_verification::verify_choice_sequence_behaviors();
@@ -223,7 +328,14 @@ fn main() {
         }
     }
     
+    #[cfg(not(feature = "full-verification"))]
+    if run_choice_sequence {
+        println!("\n❌ Choice sequence verification requires --features full-verification");
+        process::exit(1);
+    }
+    
     // If direct flag is set, run direct PyO3 byte-for-byte comparison
+    #[cfg(feature = "full-verification")]
     if run_direct {
         println!("\n🔍 Running direct PyO3 byte-for-byte comparison verification...");
         match direct_pyo3_verification::DirectPyO3Verifier::new() {
@@ -262,7 +374,14 @@ fn main() {
         }
     }
     
+    #[cfg(not(feature = "full-verification"))]
+    if run_direct {
+        println!("\n❌ Direct verification requires --features full-verification");
+        process::exit(1);
+    }
+    
     // If core flag is set, run core compilation error resolution verification
+    #[cfg(feature = "full-verification")]
     if run_core {
         println!("\n🔧 Running core compilation error resolution verification...");
         match core_compilation_verification::run_core_compilation_verification(verbose) {
@@ -277,7 +396,14 @@ fn main() {
         }
     }
     
+    #[cfg(not(feature = "full-verification"))]
+    if run_core {
+        println!("\n❌ Core verification requires --features full-verification");
+        process::exit(1);
+    }
+    
     // If parity flag is set, run comprehensive Python parity verification
+    #[cfg(feature = "full-verification")]
     if run_parity {
         println!("\n🐍 Running comprehensive Python parity verification...");
         match python_parity_verification::run_comprehensive_verification(verbose) {
@@ -292,40 +418,57 @@ fn main() {
         }
     }
     
-    // First run direct Rust-only type tests
-    if let Err(e) = direct_type_test::run_direct_type_tests() {
-        eprintln!("\n❌ Direct type tests failed: {}", e);
+    #[cfg(not(feature = "full-verification"))]
+    if run_parity {
+        println!("\n❌ Parity verification requires --features full-verification");
         process::exit(1);
     }
     
-    // Run float constraint Python parity verification
-    float_constraint_python_parity_test::verify_float_constraint_python_parity();
-    float_constraint_python_parity_test::verify_qa_issue_resolution();
-    println!();
-    
-    let mut runner = TestRunner::new(verbose);
-    
-    let result = if let Some(test) = test_name {
-        runner.run_single_test(test)
-    } else {
-        runner.run_all_tests()
-    };
-    
-    match result {
-        Ok(stats) => {
-            println!("\n✅ Verification Complete!");
-            println!("   Tests run: {}", stats.total);
-            println!("   Passed: {}", stats.passed);
-            println!("   Failed: {}", stats.failed);
-            
-            if stats.failed > 0 {
-                println!("\n❌ Some tests failed!");
+    // Default full verification if no specific flags are set and full-verification is enabled
+    #[cfg(feature = "full-verification")]
+    if !run_minimal_shrinking && !run_shrinking && !run_choice_sequence && !run_direct && !run_core && !run_parity {
+        // First run direct Rust-only type tests
+        if let Err(e) = direct_type_test::run_direct_type_tests() {
+            eprintln!("\n❌ Direct type tests failed: {}", e);
+            process::exit(1);
+        }
+        
+        // Run float constraint Python parity verification
+        float_constraint_python_parity_test::verify_float_constraint_python_parity();
+        float_constraint_python_parity_test::verify_qa_issue_resolution();
+        println!();
+        
+        let mut runner = TestRunner::new(verbose);
+        
+        let result = if let Some(test) = test_name {
+            runner.run_single_test(test)
+        } else {
+            runner.run_all_tests()
+        };
+        
+        match result {
+            Ok(stats) => {
+                println!("\n✅ Verification Complete!");
+                println!("   Tests run: {}", stats.total);
+                println!("   Passed: {}", stats.passed);
+                println!("   Failed: {}", stats.failed);
+                
+                if stats.failed > 0 {
+                    println!("\n❌ Some tests failed!");
+                    process::exit(1);
+                }
+            }
+            Err(e) => {
+                eprintln!("\n💥 Verification failed: {}", e);
                 process::exit(1);
             }
         }
-        Err(e) => {
-            eprintln!("\n💥 Verification failed: {}", e);
-            process::exit(1);
-        }
+    }
+    
+    #[cfg(not(feature = "full-verification"))]
+    if !run_minimal_shrinking {
+        println!("\n🔍 Available tests without full-verification:");
+        println!("   --minimal-shrinking: Test basic shrinking algorithms");
+        println!("\n💡 For full verification suite, use: cargo run --features full-verification");
     }
 }

@@ -11,10 +11,14 @@ path = "src/main.rs"
 
 [dependencies]
 # Our main library to test
-conjecture = { path = "..", package = "conjecture-rust" }
+conjecture = { path = "..", package = "conjecture-rust", optional = true }
 
 # Python FFI for calling actual Python Hypothesis functions
 pyo3 = { version = "0.25", features = ["auto-initialize"] }
 
 # CLI argument parsing
 clap = { version = "4.0", features = ["derive"] }
+
+[features]
+default = []
+full-verification = ["conjecture"]

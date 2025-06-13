@@ -4,8 +4,8 @@
 //! which orchestrates the entire property-based testing process including
 //! generation, execution, shrinking, and result collection.
 
-use crate::data::{ConjectureData, ConjectureResult};
-use crate::shrinking::ChoiceShrinker;
+use crate::data::{ConjectureData, ConjectureResult, Status};
+use crate::shrinking::Shrinker;
 use std::time::{Duration, Instant};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -297,67 +297,16 @@ impl ConjectureRunner {
         println!("RUNNER DEBUG: Starting shrinking phase with {} nodes", 
                  original_result.nodes.len());
         
-        let mut shrinker = ChoiceShrinker::new(original_result.clone());
+        // TODO: Implement shrinking with new Shrinker class
+        // For now, return the original result without shrinking
+        // let original_data = ConjectureData::from_choices(&original_result.nodes, self.current_seed);
+        // let mut shrinker = Shrinker::new(original_data, Box::new(test_predicate));
         
-        // Wrap the test function to work with ConjectureResult instead of ConjectureData
-        let shrink_test = |result: &ConjectureResult| -> bool {
-            // Create ConjectureData from the result nodes
-            let mut data = ConjectureData::new(self.current_seed);
-            
-            // Replay the nodes from the result, then freeze to prevent new nodes
-            for choice in &result.nodes {
-                match &choice.value {
-                    crate::choice::ChoiceValue::Integer(val) => {
-                        if let crate::choice::Constraints::Integer(constraints) = &choice.constraints {
-                            let min = constraints.min_value.unwrap_or(i128::MIN);
-                            let max = constraints.max_value.unwrap_or(i128::MAX);
-                            let _ = data.draw_integer_with_forced(min, max, Some(*val));
-                        }
-                    },
-                    crate::choice::ChoiceValue::Boolean(val) => {
-                        if let crate::choice::Constraints::Boolean(constraints) = &choice.constraints {
-                            let _ = data.draw_boolean_with_forced(constraints.p, Some(*val));
-                        }
-                    },
-                    crate::choice::ChoiceValue::Float(_val) => {
-                        // Float shrinking not implemented yet
-                        let _ = data.draw_float_simple();
-                    },
-                    crate::choice::ChoiceValue::String(_val) => {
-                        // String shrinking not implemented yet  
-                        let _ = data.draw_string_simple("abc", 0, 10);
-                    },
-                    crate::choice::ChoiceValue::Bytes(_val) => {
-                        // Bytes shrinking not implemented yet
-                        let _ = data.draw_bytes_simple(10);
-                    },
-                }
-            }
-            
-            // Freeze the data to prevent new nodes from being generated
-            data.freeze();
-            
-            // Use panic catch to handle attempts to draw after freeze
-            let test_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                test_function(&mut data)
-            }));
-            
-            // If the test panicked (likely due to frozen data), consider it invalid shrinking
-            // If it returned false, the shrinking is valid
-            match test_result {
-                Ok(false) => true,  // Test failed - valid shrinking
-                Ok(true) => false,  // Test passed - invalid shrinking
-                Err(_) => false,    // Test panicked - invalid shrinking
-            }
-        };
+        // TODO: Implement proper shrinking integration
+        // For now, just return the original result
+        println!("RUNNER DEBUG: Shrinking not yet implemented, returning original");
         
-        let shrunk_result = shrinker.shrink(shrink_test);
-        self.stats.shrink_attempts += shrinker.attempts;
-        
-        println!("RUNNER DEBUG: Shrinking complete. Original: {} nodes, Final: {} nodes", 
-                 original_result.nodes.len(), shrunk_result.nodes.len());
-        
-        shrunk_result
+        original_result
     }
     
     /// Execute a single test and determine the outcome
