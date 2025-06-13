@@ -132,6 +132,7 @@ mod float_constraint_python_parity_test;
 mod python_parity_verification;
 mod core_compilation_verification;
 mod direct_pyo3_verification;
+mod choice_sequence_direct_verification;
 
 use test_runner::TestRunner;
 
@@ -173,6 +174,13 @@ fn main() {
                 .action(clap::ArgAction::SetTrue)
                 .help("Run direct PyO3 byte-for-byte comparison verification")
         )
+        .arg(
+            Arg::new("choice-sequence")
+                .short('s')
+                .long("choice-sequence")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run choice sequence management verification")
+        )
         .get_matches();
 
     let test_name = matches.get_one::<String>("test");
@@ -180,9 +188,40 @@ fn main() {
     let run_parity = matches.get_flag("parity");
     let run_core = matches.get_flag("core");
     let run_direct = matches.get_flag("direct");
+    let run_choice_sequence = matches.get_flag("choice-sequence");
 
     println!("🔍 Conjecture Python-Rust Verification Tool");
     println!("============================================");
+    
+    // If choice sequence flag is set, run choice sequence verification
+    if run_choice_sequence {
+        println!("\n🔄 Running choice sequence management verification...");
+        let results = choice_sequence_direct_verification::verify_choice_sequence_behaviors();
+        
+        println!("\n📊 Choice Sequence Verification Results:");
+        let total = results.len();
+        let passed = results.iter().filter(|r| r.match_status).count();
+        let failed = total - passed;
+        
+        for result in &results {
+            let status = if result.match_status { "✅" } else { "❌" };
+            println!("   {} {}", status, result.test_name);
+            if verbose || !result.match_status {
+                println!("      Expected: {}", result.expected_behavior);
+                println!("      Actual:   {}", result.actual_behavior);
+            }
+        }
+        
+        println!("\n📈 Summary: {}/{} tests passed", passed, total);
+        
+        if failed > 0 {
+            println!("❌ Choice sequence verification found issues!");
+            process::exit(1);
+        } else {
+            println!("✅ All choice sequence verification tests passed!");
+            return;
+        }
+    }
     
     // If direct flag is set, run direct PyO3 byte-for-byte comparison
     if run_direct {

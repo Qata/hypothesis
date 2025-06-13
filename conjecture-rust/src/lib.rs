@@ -138,8 +138,7 @@ pub mod provider_system_advanced_error_handling_and_fallback;
 pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints, FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider};
 pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
 pub use choice_sequence_management::{
-    ChoiceSequenceManager, EnhancedChoiceNode, ChoiceSequenceError, 
-    SequenceIntegrityStatus, PerformanceMetrics, TypeMetadata, ConstraintMetadata, ReplayMetadata
+    ChoiceSequenceManager, ChoiceSequenceError, MisalignmentInfo, ChoiceTemplate
 };
 pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
 pub use datatree_enhanced_navigation::{TreeRecordingObserver as EnhancedTreeRecordingObserver, NavigationState, NavigationStats, ChildSelectionStrategy};
