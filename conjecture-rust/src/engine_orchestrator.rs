@@ -532,8 +532,8 @@ impl EngineOrchestrator {
     /// use conjecture::*;
     ///
     /// let test_fn = Box::new(|data: &mut ConjectureData| {
-    ///     let x = data.draw_integer(0, 100)?;
-    ///     let y = data.draw_integer(0, 100)?;
+    ///     let x = data.draw_integer(Some(0), Some(100), None, 0, None, true)?;
+    ///     let y = data.draw_integer(Some(0), Some(100), None, 0, None, true)?;
     ///     assert!(x + y >= x); // Integer overflow property
     ///     Ok(())
     /// });
@@ -671,7 +671,7 @@ impl EngineOrchestrator {
     /// use conjecture::*;
     ///
     /// let test_fn = Box::new(|data: &mut ConjectureData| {
-    ///     let values: Vec<i32> = (0..data.draw_integer(0, 10)?)
+    ///     let values: Vec<i32> = (0..data.draw_integer_simple(0, 10)?)
     ///         .map(|_| data.draw_integer(i32::MIN, i32::MAX))
     ///         .collect::<Result<Vec<_>, _>>()?;
     ///     
@@ -2200,7 +2200,7 @@ mod tests {
         // Simple test function for basic orchestrator functionality
         let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
             // Basic operations without extension traits
-            let _integer = data.draw_integer(1, 100).map_err(|e| OrchestrationError::ExecutionError(format!("Draw error: {:?}", e)))?;
+            let _integer = data.draw_integer_simple(1, 100).map_err(|e| OrchestrationError::ExecutionError(format!("Draw error: {:?}", e)))?;
             let _boolean = data.draw_boolean(0.5).map_err(|e| OrchestrationError::ExecutionError(format!("Draw error: {:?}", e)))?;
             
             Ok(())
@@ -2259,7 +2259,7 @@ mod tests {
         // Test function that handles different error types
         let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
             // Try an operation that might fail
-            match data.draw_integer(1, 10) {
+            match data.draw_integer_simple(1, 10) {
                 Ok(_) => Ok(()),
                 Err(e) => Err(convert_draw_error(e))
             }
@@ -2295,7 +2295,7 @@ mod tests {
                 drop(count);
                 
                 // Generate values and check a property
-                let a = data.draw_integer(1, 100)
+                let a = data.draw_integer_simple(1, 100)
                     .map_err(|e| OrchestrationError::Invalid { 
                         reason: format!("Integer generation failed: {:?}", e)
                     })?;
@@ -2460,7 +2460,7 @@ mod tests {
         // Test function using manual conversion patterns that macros would generate
         let test_fn = Box::new(|data: &mut ConjectureData| -> OrchestrationResult<()> {
             // Simulate macro-generated code patterns
-            let _value1 = data.draw_integer(1, 100).to_orchestration_result()?;
+            let _value1 = data.draw_integer_simple(1, 100).to_orchestration_result()?;
             let _value2 = data.draw_boolean(0.5).to_orchestration_result_with_context("macro_boolean")?;
             let _value3 = data.draw_float().to_orchestration_unit_result()?;
             

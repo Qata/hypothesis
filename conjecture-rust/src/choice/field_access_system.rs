@@ -67,15 +67,116 @@ impl<T> FieldAccessResult<T> {
     }
 }
 
-/// Trait for field access validation and management
+/// Trait for field access validation and management across choice structures
+/// 
+/// This trait provides a unified interface for validating and managing field access
+/// patterns across all choice-related structures. It ensures type safety, proper
+/// visibility control, and FFI compatibility while maintaining idiomatic Rust patterns.
+/// 
+/// # Design Philosophy
+/// 
+/// The trait follows several key principles:
+/// - **Type Safety**: All field access is validated at runtime to prevent type mismatches
+/// - **Visibility Control**: Fields are properly scoped with public/private access patterns
+/// - **FFI Compatibility**: All field access patterns work seamlessly with PyO3 bindings
+/// - **Performance**: Validation is optimized for common access patterns
+/// 
+/// # Implementation Notes
+/// 
+/// Implementers should ensure that:
+/// 1. Field validation is comprehensive but efficient
+/// 2. Type consistency checks cover all possible value combinations
+/// 3. Error messages are descriptive and actionable
+/// 4. Field visibility maps are accurate and complete
 pub trait FieldAccessible {
-    /// Validate that field access patterns are correct
+    /// Validate that field access patterns are correct and type-safe
+    /// 
+    /// Performs comprehensive validation of all accessible fields to ensure:
+    /// - Type consistency between related fields (e.g., choice_type matches value type)
+    /// - Required fields are present and properly initialized
+    /// - Optional fields have valid values when present
+    /// - Constraints are well-formed and internally consistent
+    /// 
+    /// # Returns
+    /// 
+    /// - `Ok(())` if all field access patterns are valid
+    /// - `Err(String)` with detailed error message if validation fails
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use crate::choice::field_access_system::FieldAccessible;
+    /// use crate::choice::ChoiceNode;
+    /// 
+    /// let node = ChoiceNode::new(ChoiceType::Integer, ChoiceValue::Integer(42));
+    /// assert!(node.validate_field_access().is_ok());
+    /// ```
     fn validate_field_access(&self) -> Result<(), String>;
     
-    /// Get field visibility information
+    /// Get comprehensive field visibility information for this type
+    /// 
+    /// Returns a mapping of field names to their visibility status, where:
+    /// - `true` indicates the field is publicly accessible
+    /// - `false` indicates the field is private or restricted
+    /// 
+    /// This information is used for:
+    /// - FFI interface generation
+    /// - Documentation generation
+    /// - Debug and introspection tools
+    /// - Access pattern optimization
+    /// 
+    /// # Returns
+    /// 
+    /// A HashMap where keys are field names and values indicate public accessibility.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use crate::choice::field_access_system::FieldAccessible;
+    /// use crate::choice::ChoiceNode;
+    /// 
+    /// let visibility = ChoiceNode::get_field_visibility();
+    /// assert_eq!(visibility.get("choice_type"), Some(&true));
+    /// assert_eq!(visibility.get("value"), Some(&true));
+    /// ```
     fn get_field_visibility() -> HashMap<String, bool>;
     
-    /// Validate field type consistency
+    /// Validate field type consistency across the entire structure
+    /// 
+    /// Performs deep validation to ensure that all field types are consistent
+    /// with each other and with the structure's invariants. This includes:
+    /// - Checking that choice_type matches the actual value type
+    /// - Validating constraint types match the choice type
+    /// - Ensuring index values are within valid ranges
+    /// - Verifying forced flags are correctly set
+    /// 
+    /// # Error Conditions
+    /// 
+    /// This method will return an error if:
+    /// - Choice type doesn't match value type (e.g., Integer type with Float value)
+    /// - Constraints are incompatible with the choice type
+    /// - Index values are out of bounds or invalid
+    /// - Required fields are missing or have invalid types
+    /// 
+    /// # Performance
+    /// 
+    /// Type validation is optimized for common cases but performs thorough
+    /// checking for edge cases. Expected time complexity is O(1) for most
+    /// structures, O(n) for complex constraint validation.
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use crate::choice::field_access_system::FieldAccessible;
+    /// use crate::choice::{ChoiceNode, ChoiceType, ChoiceValue};
+    /// 
+    /// let mut node = ChoiceNode::new(ChoiceType::Integer, ChoiceValue::Integer(42));
+    /// assert!(node.validate_field_types().is_ok());
+    /// 
+    /// // This would fail validation:
+    /// // node.value = ChoiceValue::String("invalid".to_string());
+    /// // assert!(node.validate_field_types().is_err());
+    /// ```
     fn validate_field_types(&self) -> Result<(), String>;
 }
 
@@ -157,7 +258,7 @@ impl FieldAccessible for NavigationChoiceNode {
             value: self.value.clone(),
             constraints: self.constraints.clone(),
             was_forced: self.was_forced,
-            index: self.index,
+            index: self.index.map(|i| i.try_into().unwrap()),
         };
         base_node.validate_field_access()?;
         
@@ -381,8 +482,8 @@ impl FieldAccessUtils {
             node.was_forced = forced;
         }
         
-        if let Some(idx) = index {
-            node.index = idx;
+        if let Some(idx_opt) = index {
+            node.index = idx_opt.map(|idx| idx.try_into().unwrap());
         }
         
         node.validate_field_access()
@@ -457,7 +558,7 @@ pub mod ffi_field_access {
         
         /// Set index (FFI-safe, -1 means None)
         pub fn set_index(node: &mut ChoiceNode, index: i64) -> Result<(), String> {
-            node.index = if index < 0 { None } else { Some(index as usize) };
+            node.index = if index < 0 { None } else { Some((index as usize).try_into().unwrap()) };
             node.validate_field_access()
         }
         
@@ -615,7 +716,7 @@ mod tests {
         assert_eq!(float_default.min_value, f64::NEG_INFINITY);
         assert_eq!(float_default.max_value, f64::INFINITY);
         assert!(float_default.allow_nan);
-        assert_eq!(float_default.smallest_nonzero_magnitude, f64::MIN_POSITIVE);
+        assert_eq!(float_default.smallest_nonzero_magnitude, Some(f64::MIN_POSITIVE));
     }
     
     #[test]

@@ -4,8 +4,10 @@ import subprocess
 import sys
 import os
 import time
+import signal
 from pathlib import Path
 from datetime import datetime, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # ──────────────────────────────────────────────────────────────────────────
 # Orchestrator Script for Module-Capability-Based Porting Workflow
@@ -40,27 +42,92 @@ MASTER_PROMPT = (
 )
 
 # Role-specific prompts
+PYTHON_ANALYZER_PROMPT = (
+    "PythonAnalyzer: Analyze the Python codebase structure at the provided path. "
+    "Use file reading tools to explore the codebase and identify key modules, classes, design patterns, "
+    "and architectural patterns. Document the overall architecture, data flow, and interdependencies. "
+    "Focus on understanding the core functionality and how components interact. "
+    "Output a comprehensive analysis of the Python codebase architecture."
+)
+RUST_ANALYZER_PROMPT = (
+    "RustAnalyzer: Analyze the existing Rust codebase at the provided path. "
+    "Use file reading tools to explore what has been implemented, what's missing, "
+    "and how the current Rust code is structured. Identify partial implementations, "
+    "architectural decisions, and areas that need completion. "
+    "Output a comprehensive analysis of the current Rust implementation state."
+)
+VERIFICATION_ANALYZER_PROMPT = (
+    "VerificationAnalyzer: Analyze PyO3 behavioral parity verification coverage between Python Hypothesis and Rust implementations. "
+    "IMPORTANT: PyO3 verification tests are ONLY for direct behavioral comparison - e.g., verifying that the lexicographic encoding of 2.5 is identical in both Rust and Python implementations. "
+    "These are NOT general interoperability tests, but specific parity checks to ensure the Rust port behaves identically to the original Python code. "
+    "Examine the Python codebase at the provided path to identify all core capabilities and functionality. "
+    "Then examine the Rust codebase and specifically check the verification-tests/ directory for existing PyO3 behavioral parity tests. "
+    "For each Python capability, determine: 1) Is it implemented in Rust? 2) Does it have PyO3 behavioral parity verification tests? "
+    "Focus on identifying capabilities that exist in BOTH Python and Rust but are NOT currently verified for behavioral parity via PyO3 tests. "
+    "Also note any gaps where Python functionality is missing behavioral parity verification entirely. "
+    "Output a detailed report of: 1) Capabilities with existing PyO3 behavioral parity verification, "
+    "2) Capabilities implemented in both Python and Rust but MISSING PyO3 behavioral parity verification, "
+    "3) Recommendations for priority PyO3 behavioral parity verification test creation."
+)
+CODE_ANALYZER_PROMPT = (
+    "CodeAnalyzer: Analyze the codebase to identify all mentions of TODO, FIXME, and 'simplified' across all source files. "
+    "Search through all Python and Rust source files in the provided paths to find these markers. "
+    "For each mention, analyze the context to understand what functionality is missing, incomplete, or deliberately simplified. "
+    "Categorize findings into: 1) Critical missing functionality that blocks core features, "
+    "2) Important improvements that affect correctness or performance, "
+    "3) Minor optimizations or enhancements. "
+    "Provide specific file locations and line numbers for each finding. "
+    "Create a prioritized list of issues that should be addressed first, focusing on items that: "
+    "- Block core functionality or cause incorrect behavior "
+    "- Are referenced by multiple components "
+    "- Affect critical algorithms or data structures "
+    "Output a succinct but complete report of missing functionality with priority recommendations."
+)
 ARCHITECT_PROMPT = (
-    "Architect: Analyze the entire Python codebase structure, identify key modules, classes, and design patterns. "
-    "Document the overall architecture, data flow, and interdependencies. Recommend idiomatic Rust equivalents "
-    "for Python patterns (e.g., duck typing → traits, inheritance → composition, etc.). "
-    "Create an architectural blueprint that guides language-appropriate porting rather than literal translation. "
-    "Output a comprehensive architectural analysis and porting strategy."
+    "Architect: Synthesize the Python architecture analysis, Rust implementation analysis, PyO3 behavioral parity verification analysis, and code issues analysis. "
+    "Use the Python analysis to understand what capabilities need to be ported, "
+    "the Rust analysis to understand current implementation status, "
+    "the verification analysis to understand PyO3 behavioral parity testing gaps, "
+    "and the code issues analysis to identify critical missing functionality marked with TODO, FIXME, or 'simplified'. "
+    "IMPORTANT: PyO3 verification is ONLY for behavioral parity testing - direct comparison of outputs between Python and Rust implementations (e.g., ensuring lexicographic encoding of 2.5 is identical). "
+    "PRIORITY: Issues identified in the code analysis (TODO, FIXME, simplified) should be prioritized first, especially those marked as critical or blocking core functionality. "
+    "Identify what Python functionality is missing from Rust, recommend idiomatic Rust patterns "
+    "for Python constructs (duck typing → traits, inheritance → composition, etc.), "
+    "and create a unified porting strategy that prioritizes: 1) Critical code issues first, 2) capabilities lacking PyO3 behavioral parity verification second. "
+    "For any missing PyO3 behavioral parity verification identified in the verification analysis, explicitly note it as a requirement in the blueprint. "
+    "Output a comprehensive architectural blueprint and porting plan that includes code issue fixes as top priority, followed by PyO3 behavioral parity verification "
+    "requirements and guides language-appropriate implementation rather than literal translation."
 )
 MODULE_EXTRACTOR_PROMPT = (
     "ModuleExtractor: Based on the architectural blueprint, identify the core functional modules that should be ported. "
+    "PRIORITY: Modules containing critical issues identified in the code analysis (TODO, FIXME, simplified) should be listed FIRST. "
     "Extract module names that represent coherent capabilities (e.g., 'ChoiceSystem', 'EngineOrchestrator', 'TreeStructures'). "
+    "Order the modules by priority: 1) Modules with critical code issues first, 2) Other important modules second. "
     "Return ONLY a newline-separated list of module names, one per line. No descriptions, no numbers, just module names. "
     "Focus on logical modules, not necessarily Python file names."
+)
+TEST_RUNNER_PROMPT = (
+    "TestRunner: Execute all available verification tests to identify current failing tests and their causes. "
+    "Run the PyO3 behavioral parity verification tests in the verification-tests/ directory and any other relevant test suites. "
+    "IMPORTANT: PyO3 verification tests are ONLY for direct behavioral comparison - they verify that Rust implementations produce identical outputs to Python implementations (e.g., same lexicographic encoding for number 2.5). "
+    "For each failing test, analyze the failure reason and identify which specific capabilities need fixing. "
+    "Focus on tests that validate exact behavioral parity between Python and Rust implementations. "
+    "Output a detailed report of: 1) All tests that are currently passing, "
+    "2) All tests that are currently failing with specific error details, "
+    "3) Which capabilities/modules each failing test relates to, "
+    "4) Priority recommendations for which failing tests should be fixed first."
 )
 PLANNER_PROMPT_INITIAL = (
     "Create a capability-focused TODO list for the specific TARGET MODULE by analyzing the provided Python codebase, "
     "scanning local Rust files for partial ports, and referencing the architectural blueprint. "
+    "CRITICAL: Use the TEST_RUNNER_FINDINGS to prioritize capabilities that are failing verification tests. "
+    "If the test runner identified specific failing tests related to this module, prioritize fixing those capabilities first. "
     "Break down the TARGET MODULE's work into coherent CAPABILITIES, not individual functions. "
     "Each item should be a complete capability that provides a coherent set of functionality within this module "
     "(e.g., 'Float encoding/decoding system', 'Choice constraint validation', 'Tree node management'). "
     "Focus on what the TARGET MODULE needs to DO, not how the Python code does it. "
     "Number each item clearly (1. 2. 3. etc.) with the capability name and its responsibilities. "
+    "For capabilities related to failing tests, note the specific test failures that need to be addressed. "
     "Respond only with the numbered TODO list of capabilities for this TARGET MODULE. Respond with 'None' if there's nothing left to do."
 )
 PLANNER_PROMPT_REVISION = (
@@ -68,44 +135,106 @@ PLANNER_PROMPT_REVISION = (
     "Respond only with the updated plan. Respond with 'None' if there's nothing left to do."
 )
 TEST_PROMPT = (
-    "TestGenerator: Create comprehensive tests for the specific MODULE CAPABILITY being worked on. "
-    "Focus on testing the complete capability's behavior, not individual functions. "
-    "Using PyO3 and FFI, write integration tests that validate the entire capability works correctly. "
-    "Tests should validate the capability's core responsibilities and interface contracts. "
-    "Follow the architectural blueprint for idiomatic Rust test patterns. "
-    "Output only the test code for this specific module capability."
+    "TestGenerator: Your job is to PORT EXISTING PYTHON TESTS to Rust. "
+    "SCOPE: Find the corresponding Python test files for this module capability and port them directly to Rust. "
+    "DO NOT create new test infrastructure or PyO3 wrapper classes. "
+    "DO NOT write comprehensive test suites from scratch. "
+    "DO: "
+    "1. Locate the relevant Python test files in the Python codebase "
+    "2. Port the existing Python test logic directly to Rust unit tests "
+    "3. Preserve the same test cases, edge cases, and assertions as the Python tests "
+    "4. Use standard Rust testing patterns (assert_eq!, #[test], etc.) "
+    "FORBIDDEN: Creating PyO3 bindings, wrapper classes, or feature-gated test infrastructure. "
+    "Output only the ported Rust test code that matches the existing Python test behavior."
 )
 CODER_PROMPT = (
-    "Coder: Implement the complete MODULE CAPABILITY specified in the current task. "
-    "Design and implement the entire capability as a cohesive Rust module using idiomatic patterns from the architectural blueprint. "
-    "Focus on the capability's core responsibilities and provide a clean, well-defined interface. "
-    "Use appropriate Rust patterns (traits, enums, error handling) rather than direct Python translation. "
-    "Add debug logging, use uppercase hex notation where applicable. "
-    "Output the complete Rust implementation for this module capability."
+    "Coder: Your job is to PORT EXISTING PYTHON CODE to idiomatic Rust. "
+    "SCOPE: Find the corresponding Python implementation for this module capability and port it directly to Rust. "
+    "DO NOT create PyO3 FFI interfaces or wrapper infrastructure. "
+    "DO NOT design new architectures or comprehensive systems. "
+    "DO: "
+    "1. Locate the relevant Python source files for this capability "
+    "2. Port the Python algorithms and data structures to idiomatic Rust "
+    "3. Preserve the same logic, edge case handling, and mathematical operations "
+    "4. Use appropriate Rust patterns (Option, Result, traits) for Python equivalents "
+    "5. Maintain the same public interface contracts as the Python version "
+    "FORBIDDEN: Creating PyO3 bindings, feature gates, or FFI infrastructure. Focus ONLY on porting Python logic to Rust. "
+    "Output only the Rust implementation that provides equivalent functionality to the Python original."
 )
 VERIFIER_PROMPT = (
-    "Verifier: Focus ONLY on the specific MODULE CAPABILITY being worked on. "
-    "Run the tests for this capability and ensure the Rust implementation provides the expected behavior and interface. "
-    "Verify that the capability integrates properly with other modules and follows the architectural blueprint. "
-    "Apply minimal modifications to make the capability tests pass while maintaining idiomatic Rust patterns. "
-    "Output only the verification results and any code adjustments needed for this specific capability."
+    "Verifier: Your job is to DIRECTLY COMPARE Rust outputs to Python outputs using PyO3. "
+    "SCOPE: Use PyO3 to call the original Python Hypothesis functions and compare their outputs to the new Rust implementation. "
+    "DO NOT create PyO3 wrapper classes or complex FFI infrastructure. "
+    "DO NOT write extensive verification frameworks. "
+    "DO: "
+    "1. Use PyO3 to call the original Python functions with specific test inputs "
+    "2. Call the equivalent Rust functions with the same inputs "
+    "3. Assert that outputs are byte-for-byte identical (e.g., encoding 2.5 produces same lexicographic bytes) "
+    "4. Report any discrepancies between Python and Rust behavior "
+    "FORBIDDEN: Creating PyO3 bindings, wrapper infrastructure, or feature-gated verification systems. "
+    "Use the existing verification-tests/ directory pattern for simple direct comparison. "
+    "Output only verification results and minimal code fixes needed to achieve parity."
 )
 QA_PROMPT = (
-    "QA: Review the code changes for the current MODULE CAPABILITY against the architectural blueprint and tests. "
-    "If the capability implementation has issues, find exactly ONE specific fault (correctness, design, or architectural compliance). "
-    "If the current capability is correctly implemented, check what's missing from the overall porting plan. "
-    "Reply with one of: "
-    "'OK' if the entire module porting is complete and all capabilities are implemented, "
-    "'NEXT' if the current capability is done and you want to move to the next capability, "
-    "or 'FAULT: [description]' with exactly ONE specific fault to fix in the current capability."
+    "QA: Review code changes for the current MODULE CAPABILITY. Ensure the work stays focused on DIRECT PYTHON PORTING. "
+    "SCOPE ENFORCEMENT: The agents should ONLY be: "
+    "1. TestGenerator: Porting existing Python tests to Rust (no new infrastructure) "
+    "2. Coder: Porting existing Python algorithms to Rust (no PyO3/FFI) "
+    "3. Verifier: Direct PyO3 comparison using verification-tests/ pattern (no wrapper classes) "
+    "REJECT if agents create: "
+    "- PyO3 wrapper classes or bindings "
+    "- Feature-gated infrastructure "
+    "- 'Comprehensive' test frameworks "
+    "- Over-engineered FFI systems "
+    "- New architectural patterns instead of direct porting "
+    "CRITICAL ERROR POLICY: ALL errors are critical blocking failures: "
+    "- ANY compilation errors "
+    "- ANY test failures "
+    "- ANY PyO3 verification failures "
+    "- ANY scope violations (creating cruft instead of porting) "
+    "DO NOT dismiss errors or rationalize failures. "
+    "Only consider complete if: 1) Code compiles cleanly, 2) All tests pass, 3) PyO3 verification passes, 4) No PyO3 cruft created. "
+    "Reply: 'OK' (module complete), 'NEXT' (capability complete), or 'FAULT: [description]' (including scope violations)."
+)
+DECISION_EXTRACTOR_PROMPT = (
+    "DecisionExtractor: Extract the decision from the QA agent's response. "
+    "The QA agent should have indicated one of: 'OK', 'NEXT', or 'FAULT: [description]'. "
+    "Find this decision in the provided QA response and return ONLY the decision keyword: "
+    "Return exactly 'OK', 'NEXT', or 'FAULT: [description]' - nothing else."
+)
+DOCUMENTATION_PROMPT = (
+    "DocumentationAgent: Add FAANG-quality inline documentation to all recently written code in the Rust output directory. "
+    "Analyze all newly written or modified Rust files and add comprehensive documentation including: "
+    "1. Detailed module-level documentation explaining purpose and design decisions "
+    "2. Comprehensive function/method documentation with parameter descriptions, return values, and usage examples "
+    "3. Complex algorithm explanations with time/space complexity where relevant "
+    "4. Error handling documentation and failure modes "
+    "5. Integration notes explaining how components interact with other modules "
+    "6. Safety documentation for unsafe code blocks if any "
+    "Focus on clarity, completeness, and maintainability. Use Rust documentation conventions (/// for public APIs, // for internal comments). "
+    "Output a summary of the documentation additions made."
 )
 COMMIT_PROMPT = (
     "CommitAgent: Stage all changes in the Rust output directory and create a git commit with a descriptive message. "
     "Treat the user as the sole author—do not mention co-authors. Output only the commit message."
 )
+LOG_ANALYZER_PROMPT = (
+    "LogAnalyzer: You need to analyze the orchestrator log to understand what work has already been completed. "
+    "The log file is located at /home/ch/Develop/hypothesis/logs/orchestrator.log - read this file yourself using the Read tool. "
+    "Identify which modules have been processed, which capabilities have been implemented, and what the current state is. "
+    "IMPORTANT: Your output will be written back to replace the original log file, so be extremely thorough and comprehensive. "
+    "Create a detailed technical summary that captures all important information from the log while being more organized and readable. "
+    "Include: 1) Completed modules and their capabilities with technical details, 2) Current work in progress, "
+    "3) Any failures or issues that need attention with error details, 4) Performance metrics and quality assessments, "
+    "5) Recommended next steps based on the log history, 6) Timeline of major events and milestones. "
+    "Your output should serve as a complete replacement for the raw log that preserves all critical information. "
+    "Note: The log file may be very large, so you may want to read it in chunks or focus on recent entries first."
+)
 SUMMARISER_PROMPT = (
     "Summariser: Provide a concise summary of the orchestrator log, highlighting key decisions and failures."
 )
+
+# Removed graceful shutdown handling - use standard signal handling
 
 # Helpers
 
@@ -147,77 +276,278 @@ def prompt(child_snippet: str) -> str:
     return f"{MASTER_PROMPT}\n{child_snippet}"
 
 
-def wait_until_next_hour():
-    """Wait until 1 minute past the next hour"""
-    now = datetime.now()
-    next_hour = now.replace(minute=1, second=0, microsecond=0) + timedelta(hours=1)
-    wait_seconds = (next_hour - now).total_seconds()
-    log(f"Waiting {wait_seconds/60:.1f} minutes until {next_hour.strftime('%H:%M')}")
+def parse_api_limit_timestamp(stdout: str) -> int:
+    """Parse Unix timestamp from API limit message"""
+    # Expected format: 'Claude AI usage limit reached|1749718800'
+    if '|' in stdout:
+        try:
+            timestamp_str = stdout.split('|')[-1].strip()
+            return int(timestamp_str)
+        except (ValueError, IndexError):
+            pass
+    return None
+
+
+def wait_for_api_limit(timestamp: int):
+    """Wait until the API limit expires"""
+    current_time = int(time.time())
+    if timestamp <= current_time:
+        log("API limit timestamp is in the past, retrying immediately")
+        return
+    
+    wait_seconds = max(0, timestamp - current_time)  # Clamp to zero
+    wait_minutes = wait_seconds / 60
+    log(f"API limit until {datetime.fromtimestamp(timestamp).isoformat()}")
+    log(f"Waiting {wait_minutes:.1f} minutes ({wait_seconds} seconds) for API limit to expire")
     time.sleep(wait_seconds)
 
 
-def run_agent(child_snippet: str, stdin_input: str) -> str:
+def cleanup_target_directories():
+    """Clean up Rust target directories to free up disk space"""
+    log("Cleaning up Rust target directories...")
+    
+    import shutil
+    
+    # Find all target directories
+    target_dirs = []
+    for root, dirs, files in os.walk(RUST_OUTPUT_DIR):
+        if 'target' in dirs:
+            target_path = Path(root) / 'target'
+            target_dirs.append(target_path)
+    
+    # Also check verification-tests target directory
+    verification_target = TEST_DIR / "target"
+    if verification_target.exists():
+        target_dirs.append(verification_target)
+    
+    total_freed = 0
+    for target_dir in target_dirs:
+        try:
+            if target_dir.exists():
+                # Calculate size before deletion
+                size = sum(f.stat().st_size for f in target_dir.rglob('*') if f.is_file())
+                total_freed += size
+                
+                shutil.rmtree(target_dir)
+                log(f"Deleted {target_dir} ({size // (1024*1024)} MB)")
+        except Exception as e:
+            log(f"Warning: Failed to delete {target_dir}: {e}")
+    
+    if total_freed > 0:
+        log(f"Total disk space freed: {total_freed // (1024*1024)} MB")
+    else:
+        log("No target directories found to clean up")
+
+
+def run_pyo3_verification() -> str:
+    """Run PyO3 behavioral parity verification tests to validate Rust implementation produces identical outputs to Python"""
+    log("Running PyO3 behavioral parity verification tests...")
+    
+    verification_dir = RUST_OUTPUT_DIR / "verification-tests"
+    if not verification_dir.exists():
+        return "SKIP: PyO3 behavioral parity verification tests not found (verification-tests directory missing)"
+    
+    try:
+        # Build the verification tests
+        log("Building PyO3 behavioral parity verification tests...")
+        build_proc = subprocess.run(
+            ["cargo", "build", "--release"],
+            cwd=verification_dir,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes for build
+        )
+        
+        if build_proc.returncode != 0:
+            log(f"PyO3 behavioral parity verification build failed:\n{build_proc.stderr}")
+            return f"BUILD_FAILED: {build_proc.stderr}"
+        
+        # Run the verification tests
+        log("Running PyO3 behavioral parity verification tests...")
+        test_proc = subprocess.run(
+            ["cargo", "run", "--release"],
+            cwd=verification_dir,
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minutes for tests
+        )
+        
+        if test_proc.returncode == 0:
+            log("✓ PyO3 behavioral parity verification tests PASSED")
+            return f"PASSED: All PyO3 behavioral parity verification tests passed\n{test_proc.stdout}"
+        else:
+            log(f"✗ PyO3 behavioral parity verification tests FAILED:\n{test_proc.stderr}")
+            return f"FAILED: PyO3 behavioral parity verification failed\n{test_proc.stderr}\n{test_proc.stdout}"
+            
+    except subprocess.TimeoutExpired:
+        log("PyO3 behavioral parity verification tests timed out")
+        return "TIMEOUT: PyO3 behavioral parity verification tests timed out after 5 minutes"
+    except Exception as e:
+        log(f"Error running PyO3 behavioral parity verification: {e}")
+        return f"ERROR: {e}"
+
+
+def run_agent(child_snippet: str, stdin_input: str, use_file_prompt: bool = False) -> str:
     full_prompt = prompt(child_snippet)
     agent_name = child_snippet.split(':')[0] if ':' in child_snippet else child_snippet[:20]
     log(f"RUN AGENT: {agent_name}")
     log(f"Input size: {len(stdin_input)} characters")
     
-    try:
-        proc = subprocess.run(
-            AGENT_CLI + ["-p", full_prompt],
-            input=stdin_input,
-            text=True,
-            capture_output=True,
-            timeout=TIMEOUT,
-            check=True,
-            cwd=RUST_OUTPUT_DIR
-        )
-        output = proc.stdout.strip()
+    # Use file-based prompt if requested or if input is very large
+    if use_file_prompt or len(stdin_input) > 100000:  # 100KB threshold
+        import tempfile
+        import hashlib
         
-        # Check for Claude API usage limit message
-        if output.startswith("Claude AI usage limit reached"):
-            log("Ran out of usage, will try again at the hour")
-            wait_until_next_hour()
+        # Create a unique filename based on content hash
+        content_hash = hashlib.md5((full_prompt + stdin_input).encode()).hexdigest()[:8]
+        prompt_file = f"/tmp/hypervisor_prompt_{agent_name}_{content_hash}.txt"
+        
+        log(f"Using file-based prompt due to large input size: {prompt_file}")
+        
+        # Write the full context to the file
+        with open(prompt_file, 'w', encoding='utf-8') as f:
+            f.write(f"AGENT_PROMPT:\n{full_prompt}\n\nINPUT_CONTEXT:\n{stdin_input}")
+        
+        # Use a minimal prompt that just references the file
+        file_prompt = f"{MASTER_PROMPT}\n{child_snippet}\n\nLARGE_CONTEXT_FILE: {prompt_file}\nPlease read the context from the file above using the Read tool."
+        actual_stdin = ""
+        
+        try:
+            proc = subprocess.run(
+                AGENT_CLI + ["-p", file_prompt],
+                input=actual_stdin,
+                text=True,
+                capture_output=True,
+                timeout=TIMEOUT,
+                check=True,
+                cwd=RUST_OUTPUT_DIR
+            )
+            output = proc.stdout.strip()
+            log(f"OUTPUT: {output}\n--- End of output ---")
+            
+            # Clean up the temporary file
+            try:
+                os.unlink(prompt_file)
+            except:
+                pass
+                
+            return output
+        except Exception as e:
+            # Clean up the temporary file on error
+            try:
+                os.unlink(prompt_file)
+            except:
+                pass
+            raise e
+    else:
+        # Use normal prompt method
+        try:
+            proc = subprocess.run(
+                AGENT_CLI + ["-p", full_prompt],
+                input=stdin_input,
+                text=True,
+                capture_output=True,
+                timeout=TIMEOUT,
+                check=True,
+                cwd=RUST_OUTPUT_DIR
+            )
+            output = proc.stdout.strip()
+            log(f"OUTPUT: {output}\n--- End of output ---")
+            return output
+            
+        except subprocess.TimeoutExpired:
+            log(f"Agent {agent_name} timed out after {TIMEOUT} seconds")
+            raise
+        except subprocess.CalledProcessError as e:
+            # Log stderr for debugging
+            if e.stderr:
+                log(f"Agent stderr: {e.stderr.strip()}")
+            if e.stdout:
+                log(f"Agent stdout: {e.stdout.strip()}")
+            log(f"Agent returned exit code: {e.returncode}")
+            
+            # Handle different exit codes appropriately
+            if e.returncode == 1:
+                # Exit code 1 indicates API usage limit
+                log("API usage limit reached (exit code 1)")
+                if e.stdout:
+                    timestamp = parse_api_limit_timestamp(e.stdout)
+                    if timestamp:
+                        wait_for_api_limit(timestamp)
+                    else:
+                        log("Could not parse API limit timestamp, waiting 5 minutes")
+                        time.sleep(5 * 60)
+                else:
+                    log("No stdout available for timestamp parsing, waiting 5 minutes")
+                    time.sleep(5 * 60)
+            elif e.returncode == -9:
+                # Exit code -9 indicates SIGKILL - assume prompt was too long
+                if use_file_prompt:
+                    log("Process killed by SIGKILL (-9) even with file-based prompt - retrying with same file approach")
+                    return run_agent(child_snippet, stdin_input, use_file_prompt=True)
+                else:
+                    log("Process killed by SIGKILL (-9), likely due to prompt being too long")
+                    log("Retrying with file-based prompt...")
+                    return run_agent(child_snippet, stdin_input, use_file_prompt=True)
+            else:
+                # Other non-zero exit codes should result in immediate retry
+                log(f"Non-API error (exit code {e.returncode}), retrying immediately")
+            
             # Recursive call with same arguments
-            return run_agent(child_snippet, stdin_input)
-        
-        log(f"OUTPUT: {output}\n--- End of output ---")
-        return output
-        
-    except subprocess.TimeoutExpired:
-        log(f"Agent {agent_name} timed out after {TIMEOUT} seconds")
-        raise
-    except subprocess.CalledProcessError as e:
-        # Check stderr for usage limit message too
-        error_output = e.stderr or ""
-        if error_output.startswith("Claude AI usage limit reached"):
-            log("Ran out of usage, will try again at the hour")
-            wait_until_next_hour()
-            # Recursive call with same arguments
-            return run_agent(child_snippet, stdin_input)
-        
-        # If not a usage limit error, re-raise
-        raise
+            return run_agent(child_snippet, stdin_input, use_file_prompt)
 
 
-def create_architectural_blueprint(folder: Path) -> str:
+def create_architectural_blueprint(python_folder: Path, log_analysis: str = None) -> str:
     log(f"\n=== Creating Architectural Blueprint ===")
     
-    # Gather all Python files and their contents
-    python_files = [f for f in sorted(folder.glob('**/*.py')) if f.name != '__init__.py']
-    codebase_content = []
+    # Prepare inputs for all four analyzers
+    python_input = f"PYTHON_CODEBASE_PATH: {python_folder.absolute()}"
+    if log_analysis:
+        python_input = f"PREVIOUS_WORK_ANALYSIS:\n{log_analysis}\n\n{python_input}"
+        log("Including previous work analysis in Python analysis")
     
-    for py_file in python_files:
-        rel_path = py_file.relative_to(folder)
-        content = read_file(py_file)
-        codebase_content.append(f"=== {rel_path} ===\n{content}\n")
+    rust_input = f"RUST_CODEBASE_PATH: {RUST_OUTPUT_DIR.absolute()}"
+    verification_input = f"PYTHON_CODEBASE_PATH: {python_folder.absolute()}\nRUST_CODEBASE_PATH: {RUST_OUTPUT_DIR.absolute()}"
+    code_issues_input = f"PYTHON_CODEBASE_PATH: {python_folder.absolute()}\nRUST_CODEBASE_PATH: {RUST_OUTPUT_DIR.absolute()}"
     
-    full_codebase = "\n".join(codebase_content)
-    log(f"Analyzing {len(python_files)} Python files for architectural blueprint")
+    # Step 1-4: Run Python, Rust, Verification, and Code analyzers in parallel
+    log("Steps 1-4: Running Python, Rust, Verification, and Code analyzers in parallel...")
     
-    blueprint = run_agent(ARCHITECT_PROMPT, full_codebase)
-    log("Architectural blueprint created")
-    return blueprint
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        # Submit all four analyzer tasks
+        python_future = executor.submit(run_agent, PYTHON_ANALYZER_PROMPT, python_input)
+        rust_future = executor.submit(run_agent, RUST_ANALYZER_PROMPT, rust_input)
+        verification_future = executor.submit(run_agent, VERIFICATION_ANALYZER_PROMPT, verification_input)
+        code_issues_future = executor.submit(run_agent, CODE_ANALYZER_PROMPT, code_issues_input)
+        
+        # Wait for all to complete and get results
+        python_analysis = python_future.result()
+        log("Python codebase analysis completed")
+        
+        rust_analysis = rust_future.result()
+        log("Rust codebase analysis completed")
+        
+        verification_analysis = verification_future.result()
+        log("PyO3 verification analysis completed")
+        
+        code_issues_analysis = code_issues_future.result()
+        log("Code issues analysis completed")
+    
+    log("All four analyzers completed successfully")
+    
+    # Step 5: Synthesize analyses into unified blueprint
+    log("Step 5: Synthesizing analyses into unified blueprint...")
+    synthesis_input = f"PYTHON_ANALYSIS:\n{python_analysis}\n\nRUST_ANALYSIS:\n{rust_analysis}\n\nVERIFICATION_ANALYSIS:\n{verification_analysis}\n\nCODE_ISSUES_ANALYSIS:\n{code_issues_analysis}"
+    blueprint = run_agent(ARCHITECT_PROMPT, synthesis_input)
+    log("Architectural blueprint synthesis completed")
+    
+    # Step 6: Run tests to identify current failures
+    log("Step 6: Running verification tests to identify current failures...")
+    test_runner_input = f"RUST_CODEBASE_PATH: {RUST_OUTPUT_DIR.absolute()}"
+    test_runner_report = run_agent(TEST_RUNNER_PROMPT, test_runner_input)
+    log("Test runner analysis completed")
+    
+    return blueprint, test_runner_report
 
 
 def extract_modules_from_blueprint(blueprint: str) -> list:
@@ -254,12 +584,15 @@ def parse_todo_capabilities(plan_text: str) -> list:
     return capabilities
 
 
-def process_module(module_name: str, architectural_blueprint: str, full_python_codebase: str):
+def process_module(module_name: str, architectural_blueprint: str, python_folder: Path, test_runner_report: str):
     log(f"\n=== Processing Module: {module_name} ===")
     log(f"Working on module capability: {module_name}")
 
-    # Include architectural blueprint and full codebase in planner input
-    planner_input = f"ARCHITECTURAL BLUEPRINT:\n{architectural_blueprint}\n\nTARGET MODULE:\n{module_name}\n\nFULL PYTHON CODEBASE:\n{full_python_codebase}"
+    # Planner will read files directly as needed
+
+    # Include architectural blueprint, target module, and test runner findings in planner input
+    planner_input = f"ARCHITECTURAL_BLUEPRINT:\n{architectural_blueprint}\n\nTARGET_MODULE:\n{module_name}\n\nPYTHON_CODEBASE_PATH:\n{python_folder}\n\nRUST_CODEBASE_PATH:\n{RUST_OUTPUT_DIR}\n\nTEST_RUNNER_FINDINGS:\n{test_runner_report}"
+    
     plan = run_agent(PLANNER_PROMPT_INITIAL, planner_input)
     if plan.strip() == 'None':
         log(f"Planner returned 'None'. No work needed for module {module_name}.")
@@ -273,16 +606,22 @@ def process_module(module_name: str, architectural_blueprint: str, full_python_c
 
     # Process each capability individually
     for capability_num, current_capability in enumerate(todo_capabilities, 1):
+        # Clean up target directories at the start of each capability
+        cleanup_target_directories()
+        
+        # Extract capability name from the numbered line (e.g. "1. Choice System" -> "Choice System")
+        capability_name = current_capability.split('.', 1)[1].strip() if '.' in current_capability else current_capability.strip()
+        
         log(f"\n--- Processing Capability {capability_num}/{len(todo_capabilities)} ---")
         log(f"Current capability: {current_capability}")
 
         # Create context for this specific capability
-        capability_context = f"ARCHITECTURAL BLUEPRINT:\n{architectural_blueprint}\n\nTARGET MODULE:\n{module_name}\n\nCURRENT CAPABILITY TO IMPLEMENT:\n{current_capability}\n\nFULL PYTHON CODEBASE:\n{full_python_codebase}"
+        capability_context = f"ARCHITECTURAL_BLUEPRINT:\n{architectural_blueprint}\n\nTARGET_MODULE:\n{module_name}\n\nCURRENT_CAPABILITY:\n{current_capability}\n\nPYTHON_CODEBASE_PATH:\n{python_folder}\n\nRUST_CODEBASE_PATH:\n{RUST_OUTPUT_DIR}"
 
         capability_iteration = 0
         while True:
             capability_iteration += 1
-            log(f"Capability {capability_num} - Attempt {capability_iteration}")
+            log(f"{capability_name} - {capability_num}/{len(todo_capabilities)} (Iteration {capability_iteration})")
 
             try:
                 test_out = run_agent(TEST_PROMPT, capability_context)
@@ -296,40 +635,94 @@ def process_module(module_name: str, architectural_blueprint: str, full_python_c
                 verifier_input = f"CAPABILITY CONTEXT:\n{capability_context}\n\nTESTS:\n{test_out}\n\nCODE:\n{coder_out}"
                 verifier_out = run_agent(VERIFIER_PROMPT, verifier_input)
 
-                qa_input = f"CAPABILITY:\n{current_capability}\n\nCODE CHANGES:\n{coder_out}\n\nVERIFICATION:\n{verifier_out}\n\nOVERALL PLAN:\n{plan}"
+                # Run PyO3 verification to validate Rust against Python implementation
+                pyo3_result = run_pyo3_verification()
+                
+                qa_input = f"CAPABILITY:\n{current_capability}\n\nCODE CHANGES:\n{coder_out}\n\nVERIFICATION:\n{verifier_out}\n\nPYO3_VERIFICATION:\n{pyo3_result}\n\nOVERALL PLAN:\n{plan}"
                 qa_out = run_agent(QA_PROMPT, qa_input)
+                
+                # Extract the actual decision from QA's potentially verbose response
+                decision = run_agent(DECISION_EXTRACTOR_PROMPT, qa_out)
+                log(f"QA decision extracted: {decision}")
             except Exception as e:
                 log(f"Error during verification/QA: {e}")
                 capability_context += f"\n\nERROR FEEDBACK:\nVerification/QA failed: {e}"
                 continue
 
-            if qa_out.strip() == "OK":
+            if decision.strip() == "OK":
                 log(f"✓ QA declares entire module complete. Finishing module processing.")
                 try:
+                    # Run documentation agent before commit
+                    log(f"Running documentation agent for completed module: {module_name}")
+                    documentation_context = f"MODULE: {module_name}\nCOMPLETED_WORK: Entire module implementation\nRUST_OUTPUT_DIR: {RUST_OUTPUT_DIR}"
+                    doc_summary = run_agent(DOCUMENTATION_PROMPT, documentation_context)
+                    log(f"DOCUMENTATION SUMMARY: {doc_summary}")
+                    
                     commit_msg = run_agent(COMMIT_PROMPT, f"Completed entire module: {module_name}")
                     log(f"COMMIT MESSAGE: {commit_msg}")
                 except Exception as e:
                     log(f"Warning: Commit failed: {e}")
                 return  # Exit the entire module processing
-            elif qa_out.strip() == "NEXT":
+            elif decision.strip() == "NEXT":
                 log(f"✓ Capability {capability_num} completed. QA requests moving to next capability.")
                 try:
+                    # Run documentation agent before commit
+                    log(f"Running documentation agent for completed capability: {capability_name}")
+                    documentation_context = f"MODULE: {module_name}\nCAPABILITY: {current_capability}\nCOMPLETED_WORK: Single capability implementation\nRUST_OUTPUT_DIR: {RUST_OUTPUT_DIR}"
+                    doc_summary = run_agent(DOCUMENTATION_PROMPT, documentation_context)
+                    log(f"DOCUMENTATION SUMMARY: {doc_summary}")
+                    
                     commit_msg = run_agent(COMMIT_PROMPT, f"Completed capability: {current_capability}")
                     log(f"COMMIT MESSAGE: {commit_msg}")
                 except Exception as e:
                     log(f"Warning: Commit failed: {e}")
                 break  # Exit current capability loop, continue to next capability
-            elif qa_out.strip().startswith("FAULT:"):
-                fault_description = qa_out.strip()[6:].strip()  # Remove "FAULT:" prefix
+            elif decision.strip().startswith("FAULT:"):
+                fault_description = decision.strip()[6:].strip()  # Remove "FAULT:" prefix
                 log(f"✗ Capability {capability_num} needs revision: {fault_description}")
                 # Update capability context with QA feedback for next iteration
                 capability_context += f"\n\nQA FEEDBACK:\n{fault_description}"
             else:
-                log(f"✗ Capability {capability_num} unexpected QA response: {qa_out}")
+                log(f"✗ Capability {capability_num} unexpected decision: {decision}")
+                log(f"Original QA response: {qa_out}")
                 # Treat unexpected responses as feedback
                 capability_context += f"\n\nQA FEEDBACK:\n{qa_out}"
 
         log(f"✓ Completed capability {capability_num}: {current_capability.split('.', 1)[1].strip() if '.' in current_capability else current_capability}")
+
+
+def analyze_existing_log():
+    """Analyze existing log to understand what work has been completed"""
+    if not LOG_FILE.exists():
+        log("No existing log file found, starting fresh.")
+        return None
+    
+    log("Analyzing existing log to understand previous work...")
+    try:
+        # Check if log file is empty without reading entire contents
+        if LOG_FILE.stat().st_size == 0:
+            log("Log file is empty, starting fresh.")
+            return None
+            
+        # LogAnalyzer will read the file itself - don't pass contents
+        analysis = run_agent(LOG_ANALYZER_PROMPT, "")
+        log("=== LOG ANALYSIS ===")
+        log(analysis)
+        log("=== END LOG ANALYSIS ===")
+        
+        # Write the analysis back to the log file to replace the raw log
+        log("Writing LogAnalyzer output back to log file...")
+        try:
+            with LOG_FILE.open("w", encoding="utf-8") as f:
+                f.write(analysis)
+            log("Log file successfully updated with LogAnalyzer output")
+        except Exception as e:
+            log(f"Warning: Failed to write analysis back to log file: {e}")
+        
+        return analysis
+    except Exception as e:
+        log(f"Warning: Log analysis failed: {e}")
+        return None
 
 
 def summarise_log():
@@ -350,9 +743,14 @@ def main():
         print(f"Usage: {sys.argv[0]} <path-to-python-folder>")
         sys.exit(1)
 
+    # Use default signal handling - no custom graceful shutdown
+
     ensure_directories()
-    if LOG_FILE.exists():
-        LOG_FILE.unlink()
+    
+    # Analyze existing log before starting new work
+    log_analysis = analyze_existing_log()
+    
+    # Continue with existing log after analysis
     log("Orchestrator started.")
 
     folder = Path(sys.argv[1])
@@ -360,9 +758,9 @@ def main():
         print(f"Error: {folder} is not a directory")
         sys.exit(1)
 
-    # Create architectural blueprint first
+    # Create architectural blueprint and run initial tests
     try:
-        architectural_blueprint = create_architectural_blueprint(folder)
+        architectural_blueprint, test_runner_report = create_architectural_blueprint(folder, log_analysis)
     except Exception as e:
         log(f"Fatal error creating architectural blueprint: {e}")
         sys.exit(1)
@@ -377,20 +775,62 @@ def main():
         log(f"Fatal error extracting modules: {e}")
         sys.exit(1)
     
-    # Gather full Python codebase once for all modules to reference
-    # We already have this from the blueprint creation, let's reuse it
-    python_files = [f for f in sorted(folder.glob('**/*.py')) if f.name != '__init__.py']
-    codebase_content = []
-    for py_file in python_files:
-        rel_path = py_file.relative_to(folder)
-        content = read_file(py_file)
-        codebase_content.append(f"=== {rel_path} ===\n{content}\n")
-    full_python_codebase = "\n".join(codebase_content)
+    # Agents will read Python files directly as needed
+    
+    # Present plan to user for approval
+    print("\n=== EXECUTION PLAN ===")
+    print(f"The following {len(modules)} modules will be processed:")
+    for i, module in enumerate(modules, 1):
+        print(f"  {i}. {module}")
+    print()
+    
+    while True:
+        response = input("Do you want to proceed with this plan? (y/n): ").strip().lower()
+        if response in ['y', 'yes']:
+            log("User approved the execution plan")
+            break
+        elif response in ['n', 'no']:
+            log("User declined the execution plan, launching interactive Claude instance")
+            print("\nLaunching interactive Claude instance to modify the plan...")
+            
+            # Launch interactive Claude instance (without -p flag)
+            interactive_prompt = (
+                "The user has declined the automatically generated execution plan. "
+                "Work with them interactively to understand what they want to change about the plan. "
+                "The current plan was to process these modules:\n\n"
+            )
+            for i, module in enumerate(modules, 1):
+                interactive_prompt += f"  {i}. {module}\n"
+            interactive_prompt += (
+                "\nPlease work with the user to understand their concerns and help them create "
+                "a modified plan that better suits their needs."
+            )
+            
+            try:
+                # Run interactive Claude without -p flag
+                subprocess.run(
+                    ["claude", "--dangerously-skip-permissions"],
+                    input=interactive_prompt,
+                    text=True,
+                    cwd=RUST_OUTPUT_DIR
+                )
+            except Exception as e:
+                log(f"Error launching interactive Claude: {e}")
+                print(f"Error launching interactive Claude: {e}")
+            
+            # Exit the script after interactive session
+            print("Interactive session completed. Please restart the hypervisor with any changes.")
+            sys.exit(0)
+        else:
+            print("Please answer 'y' for yes or 'n' for no.")
     
     # Process each derived module
     for module_name in modules:
         try:
-            process_module(module_name, architectural_blueprint, full_python_codebase)
+            # Clean up target directories at the start of each module
+            cleanup_target_directories()
+            
+            process_module(module_name, architectural_blueprint, folder, test_runner_report)
         except Exception as e:
             log(f"Error processing module {module_name}: {e}")
             log("Continuing with next module...")

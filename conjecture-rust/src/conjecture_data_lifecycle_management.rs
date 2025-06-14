@@ -856,8 +856,8 @@ mod tests {
         // Test replay validation with a mock test function
         let test_function = |data: &mut ConjectureData| -> Result<(), crate::engine_orchestrator::OrchestrationError> {
             // Mock test that draws the expected values
-            let _int_val = data.draw_integer(0, 100)?;
-            let _bool_val = data.draw_boolean(0.5)?;
+            let _int_val = data.draw_integer_simple(0, 100).map_err(|_| crate::engine_orchestrator::OrchestrationError::Invalid { reason: "Draw failed".to_string() })?;
+            let _bool_val = data.draw_boolean(0.5, None, true).map_err(|_| crate::engine_orchestrator::OrchestrationError::Invalid { reason: "Draw failed".to_string() })?;
             Ok(())
         };
         

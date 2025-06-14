@@ -309,7 +309,79 @@ impl ConjectureRunner {
         original_result
     }
     
-    /// Execute a single test and determine the outcome
+    /// **Single Test Execution with Comprehensive Error Handling**
+    /// 
+    /// Executes a single property-based test function with sophisticated error handling,
+    /// status tracking, and outcome classification. This method forms the core of the
+    /// test execution pipeline with proper isolation and recovery mechanisms.
+    /// 
+    /// ## Parameters
+    /// - `data`: Mutable ConjectureData instance for value generation and state tracking
+    /// - `test_function`: User-defined test function that consumes ConjectureData and returns bool
+    /// 
+    /// ## Return Value
+    /// Returns `TestOutcome` enum indicating the final classification:
+    /// - `Valid`: Test passed successfully (returned true with valid final state)
+    /// - `Invalid`: Test was invalid (panicked, exception, or violated constraints)  
+    /// - `Interesting`: Test failed assertion (returned false) - potential counterexample
+    /// - `Overrun`: Test exceeded buffer size limits during execution
+    /// - `Discarded`: Test was filtered out (reserved for future filtering support)
+    /// 
+    /// ## Performance Characteristics
+    /// - **Time Complexity**: O(T + S) where T = test execution time, S = status checking overhead
+    /// - **Space Complexity**: O(1) additional space beyond test function requirements
+    /// - **Exception Safety**: Strong exception safety with automatic state recovery
+    /// 
+    /// ## Error Handling Strategy
+    /// 
+    /// ### 1. Pre-execution Status Validation
+    /// Validates ConjectureData state before test execution:
+    /// - `Overrun` status: Immediate termination with buffer limit exceeded
+    /// - `Invalid` status: Immediate termination with constraint violation
+    /// - Ensures clean state for reliable test execution
+    /// 
+    /// ### 2. Panic Recovery with `catch_unwind`
+    /// Uses Rust's panic handling mechanism for robust test isolation:
+    /// - **`AssertUnwindSafe`**: Explicitly marks test function as unwind-safe for controlled panic recovery
+    /// - **Panic Classification**: All panics are classified as `Invalid` outcomes
+    /// - **State Preservation**: ConjectureData state is properly cleaned up after panics
+    /// - **Resource Safety**: Automatic resource cleanup through RAII patterns
+    /// 
+    /// ### 3. Post-execution Status Reconciliation
+    /// Reconciles test function return value with final ConjectureData status:
+    /// - **Passed Tests**: `true` return with status validation for edge cases
+    /// - **Failed Tests**: `false` return indicates potential counterexample
+    /// - **Status Override**: ConjectureData status can override test function result
+    /// - **Consistency Checking**: Validates that final state is consistent with outcome
+    /// 
+    /// ## State Transition Handling
+    /// 
+    /// ### Success Path (Test Returns `true`)
+    /// ```text
+    /// Initial State → Execute Test → Check Final Status → Freeze Data → Return Valid/Overrun/Invalid
+    /// ```
+    /// 
+    /// ### Failure Path (Test Returns `false`)  
+    /// ```text
+    /// Initial State → Execute Test → Generate Result → Freeze Data → Return Interesting
+    /// ```
+    /// 
+    /// ### Exception Path (Test Panics)
+    /// ```text
+    /// Initial State → Catch Panic → Set Invalid Status → Freeze Data → Return Invalid
+    /// ```
+    /// 
+    /// ## Integration with ConjectureData Lifecycle
+    /// - **Automatic Freezing**: All code paths ensure ConjectureData is frozen before return
+    /// - **Status Preservation**: Final status is preserved for shrinking and debugging
+    /// - **Choice Recording**: All choices remain recorded for replay and analysis
+    /// - **Observer Notification**: Observers are notified of test completion and status
+    /// 
+    /// ## Thread Safety and Isolation
+    /// - **Single-threaded Execution**: Each test executes in isolation on a dedicated thread
+    /// - **State Encapsulation**: ConjectureData state is fully encapsulated within test execution
+    /// - **No Shared State**: No global state modifications during test execution
+    /// - **Clean Separation**: Each test gets fresh state with no cross-test contamination
     fn execute_test<F>(&self, data: &mut ConjectureData, test_function: F) -> TestOutcome
     where
         F: Fn(&mut ConjectureData) -> bool,
@@ -404,7 +476,7 @@ mod tests {
         
         // Property that always passes
         let result = runner.run(|data| {
-            let _x = data.draw_integer(0, 100).unwrap();
+            let _x = data.draw_integer(Some(0), Some(100), None, 0, None, true).unwrap();
             true // Always pass
         });
         
@@ -437,7 +509,7 @@ mod tests {
         
         // Property that always fails
         let result = runner.run(|data| {
-            let _x = data.draw_integer(0, 100).unwrap();
+            let _x = data.draw_integer(Some(0), Some(100), None, 0, None, true).unwrap();
             false // Always fail
         });
         
@@ -471,7 +543,7 @@ mod tests {
         
         // Property that fails when x > 50
         let result = runner.run(|data| {
-            let x = match data.draw_integer(0, 100) {
+            let x = match data.draw_integer(Some(0), Some(100), None, 0, None, true) {
                 Ok(val) => val,
                 Err(_) => return true, // If draw fails (e.g., frozen), consider test passed
             };

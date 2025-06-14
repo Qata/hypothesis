@@ -119,6 +119,7 @@ pub mod value_generation;
 pub mod weighted_selection;
 pub mod values;
 pub mod core_compilation_error_resolution;
+pub mod choice_sequence_recording;
 
 
 
@@ -150,6 +151,9 @@ pub use self::values::*;
 pub use self::core_compilation_error_resolution::{
     CompilationErrorType, CompilationErrorResolver, ResolutionResult, ResolutionStatistics,
     ChoiceNodeBuilder, CompilationErrorAnalyzer
+};
+pub use self::choice_sequence_recording::{
+    ChoiceSequenceRecorder, ChoiceSequenceRecording
 };
 
 /// Choice types that can be drawn

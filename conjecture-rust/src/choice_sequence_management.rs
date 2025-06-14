@@ -137,7 +137,7 @@ impl ChoiceSequenceManager {
                 value.clone(),
                 constraints,
                 was_forced,
-                self.nodes.len(),
+                self.nodes.len().try_into().unwrap(),
             );
             
             self.nodes.push(node);

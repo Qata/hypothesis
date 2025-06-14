@@ -12,6 +12,7 @@
 //! - Performance-optimized pass ordering
 
 use crate::choice::{ChoiceNode, ChoiceValue, ChoiceType, Constraints, IntegerConstraints, BooleanConstraints, FloatConstraints, StringConstraints, BytesConstraints};
+use crate::choice::constraints::IntervalSet;
 use std::collections::HashMap;
 
 /// Result of applying an advanced shrinking transformation
@@ -135,7 +136,35 @@ pub struct ShrinkingMetrics {
 }
 
 impl AdvancedShrinkingEngine {
-    /// Create a new advanced shrinking engine
+    /// Create a new advanced shrinking engine with all 71+ transformation algorithms
+    /// 
+    /// Initializes the engine with a comprehensive suite of advanced shrinking transformations
+    /// that provide Python Hypothesis parity for test case minimization. The engine uses
+    /// adaptive algorithms to select the most effective transformations based on context.
+    /// 
+    /// # Architecture
+    /// 
+    /// The shrinking engine implements a multi-phase approach:
+    /// 1. **Pattern Identification**: Analyzes choice sequences to identify optimization opportunities
+    /// 2. **Context-Aware Selection**: Chooses transformations based on historical success rates
+    /// 3. **Adaptive Execution**: Applies transformations in priority order with performance tracking
+    /// 4. **Quality Assessment**: Evaluates transformation results using multiple metrics
+    /// 
+    /// # Time Complexity
+    /// 
+    /// - Pattern identification: O(n²) where n is sequence length
+    /// - Transformation selection: O(t log t) where t is number of transformations
+    /// - Individual transformations: O(n) to O(n log n) depending on type
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use crate::choice::advanced_shrinking::AdvancedShrinkingEngine;
+    /// 
+    /// let mut engine = AdvancedShrinkingEngine::new();
+    /// // Engine is now ready with 71+ transformation algorithms
+    /// assert!(!engine.transformations.is_empty());
+    /// ```
     pub fn new() -> Self {
         Self {
             transformations: Self::create_advanced_transformations(),
@@ -149,7 +178,82 @@ impl AdvancedShrinkingEngine {
         }
     }
     
-    /// Apply advanced shrinking to a choice sequence
+    /// Apply advanced shrinking to a choice sequence using sophisticated algorithms
+    /// 
+    /// This is the main entry point for the advanced shrinking system that implements
+    /// 71+ transformation algorithms to minimize test cases while preserving their
+    /// essential properties. The function uses adaptive selection to choose the most
+    /// effective transformations based on pattern analysis and historical performance.
+    /// 
+    /// # Algorithm Overview
+    /// 
+    /// The shrinking process follows a sophisticated multi-phase approach:
+    /// 
+    /// ## Phase 1: Pattern Identification (O(n²))
+    /// - Scans for duplicated blocks, integer sequences, string patterns
+    /// - Identifies float-to-integer conversion candidates
+    /// - Detects boolean clusters and structural redundancies
+    /// 
+    /// ## Phase 2: Context-Aware Transformation Selection (O(t log t))
+    /// - Ranks transformations by historical success rate and pattern affinity
+    /// - Considers computational cost vs. expected impact
+    /// - Applies priority-based ordering (Critical → High → Medium → Low → Fallback)
+    /// 
+    /// ## Phase 3: Adaptive Execution (O(n) to O(n log n) per transformation)
+    /// - Executes transformations in optimal order
+    /// - Tracks performance metrics for future optimization
+    /// - Stops on first significant improvement (greedy approach)
+    /// 
+    /// # Quality Metrics
+    /// 
+    /// The quality score combines multiple factors:
+    /// - **Size reduction**: Shorter sequences score higher
+    /// - **Structural simplicity**: Fewer complex patterns preferred
+    /// - **Value minimization**: Smaller numeric values favored
+    /// - **Type consistency**: Uniform types score higher
+    /// 
+    /// # Parameters
+    /// 
+    /// * `nodes` - The input choice sequence to shrink. Must be non-empty and well-formed.
+    /// 
+    /// # Returns
+    /// 
+    /// Returns a `ShrinkResult` containing:
+    /// - `nodes`: The optimized choice sequence (may be unchanged if no improvements found)
+    /// - `success`: Whether any transformations were successfully applied
+    /// - `quality_score`: Numerical quality rating (higher = better)
+    /// - `impact_score`: Estimated minimization impact (0.0 to 1.0)
+    /// 
+    /// # Examples
+    /// 
+    /// ```rust
+    /// use crate::choice::advanced_shrinking::AdvancedShrinkingEngine;
+    /// use crate::choice::{ChoiceNode, ChoiceType, ChoiceValue};
+    /// 
+    /// let mut engine = AdvancedShrinkingEngine::new();
+    /// let nodes = vec![
+    ///     ChoiceNode::new(ChoiceType::Integer, ChoiceValue::Integer(100)),
+    ///     ChoiceNode::new(ChoiceType::Integer, ChoiceValue::Integer(101)),
+    ///     ChoiceNode::new(ChoiceType::Integer, ChoiceValue::Integer(102)),
+    /// ];
+    /// 
+    /// let result = engine.shrink_advanced(&nodes);
+    /// if result.success {
+    ///     println!("Shrinking improved quality from base to {:.3}", result.quality_score);
+    /// }
+    /// ```
+    /// 
+    /// # Performance Characteristics
+    /// 
+    /// - **Best case**: O(n) when no improvements are possible
+    /// - **Average case**: O(n log n) for typical choice sequences
+    /// - **Worst case**: O(n²) for highly repetitive patterns requiring extensive analysis
+    /// 
+    /// # Error Handling
+    /// 
+    /// The function is designed to be robust and will return the original sequence
+    /// unchanged if transformations fail. All errors are captured in the quality
+    /// scoring rather than propagated as exceptions.
     pub fn shrink_advanced(&mut self, nodes: &[ChoiceNode]) -> ShrinkResult {
         println!("ADVANCED SHRINKING: Starting with {} nodes", nodes.len());
         
@@ -193,6 +297,67 @@ impl AdvancedShrinkingEngine {
     }
     
     /// Identify patterns in the choice sequence for targeted optimization
+    /// 
+    /// This function implements sophisticated pattern recognition algorithms to identify
+    /// optimization opportunities in choice sequences. It serves as the foundation for
+    /// the context-aware transformation selection that follows.
+    /// 
+    /// # Pattern Detection Algorithms
+    /// 
+    /// ## 1. Duplicated Block Detection (O(n²))
+    /// Identifies repeated subsequences that can be deduplicated:
+    /// - Scans for blocks of length 2-8 (configurable)
+    /// - Uses efficient string matching for repetition detection
+    /// - Prioritizes longer blocks and higher repetition counts
+    /// 
+    /// ## 2. Integer Sequence Recognition (O(n))
+    /// Detects arithmetic progressions in integer choices:
+    /// - Identifies ascending sequences (1, 2, 3, 4...)
+    /// - Detects descending sequences (10, 9, 8, 7...)
+    /// - Can optimize to single representative values
+    /// 
+    /// ## 3. Float-to-Integer Conversion Candidates (O(n))
+    /// Finds floating-point values that are effectively integers:
+    /// - Detects values like 42.0, 100.0 that can become 42, 100
+    /// - Preserves precision requirements where necessary
+    /// - Reduces type complexity in mixed sequences
+    /// 
+    /// ## 4. String Pattern Analysis (O(n·m))
+    /// Analyzes string content for structural optimization:
+    /// - Repeated character patterns ("aaaa" → "a")
+    /// - ASCII-only strings that might be simplified
+    /// - Numeric strings that could become integers
+    /// - Structured data with redundant formatting
+    /// 
+    /// ## 5. Boolean Cluster Detection (O(n))
+    /// Identifies groups of boolean values with patterns:
+    /// - Consecutive true/false values
+    /// - Alternating patterns that might be simplified
+    /// - Skewed distributions toward one value
+    /// 
+    /// # Parameters
+    /// 
+    /// * `nodes` - The choice sequence to analyze for patterns
+    /// 
+    /// # Side Effects
+    /// 
+    /// Updates `self.context.identified_patterns` with all detected patterns,
+    /// sorted by potential optimization impact (highest first).
+    /// 
+    /// # Performance Notes
+    /// 
+    /// - Uses early termination to avoid expensive analysis of very long sequences
+    /// - Implements sliding window optimization for block detection
+    /// - Caches pattern results to avoid recomputation
+    /// 
+    /// # Examples of Detected Patterns
+    /// 
+    /// ```text
+    /// Input: [1, 2, 1, 2, 1, 2, 3, 4, 5]
+    /// Patterns found:
+    /// - DuplicatedBlock { start: 0, length: 2, repetitions: 3 }  // [1,2] repeated
+    /// - IntegerSequence { start: 6, length: 3, ascending: true }  // [3,4,5]
+    /// ```
     pub fn identify_patterns(&mut self, nodes: &[ChoiceNode]) {
         self.context.identified_patterns.clear();
         
@@ -2340,7 +2505,7 @@ mod tests {
                 Constraints::String(StringConstraints {
                     min_size: 5,
                     max_size: 20,
-                    intervals: None,
+                    intervals: IntervalSet::default(),
                 }),
                 false,
             ),
@@ -2670,6 +2835,8 @@ mod tests {
                 Constraints::Float(FloatConstraints {
                     min_value: 5.0,
                     max_value: 100.0,
+                    allow_nan: false,
+                    smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                 }),
                 false,
             ),
@@ -2819,7 +2986,7 @@ mod tests {
                 Constraints::String(StringConstraints {
                     min_size: 5,
                     max_size: 20,
-                    intervals: None,
+                    intervals: IntervalSet::default(),
                 }),
                 false,
             ),
@@ -2867,6 +3034,8 @@ mod tests {
                 Constraints::Float(FloatConstraints {
                     min_value: 10.0,
                     max_value: 100.0,
+                    allow_nan: false,
+                    smallest_nonzero_magnitude: Some(f64::MIN_POSITIVE),
                 }),
                 false,
             ),

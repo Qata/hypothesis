@@ -40,7 +40,7 @@ use std::cmp::Ordering;
 use serde::{Serialize, Deserialize};
 
 use crate::choice::{ChoiceNode, ChoiceValue};
-use crate::data::{ConjectureData, ConjectureResult};
+use crate::data::{ConjectureData, ConjectureResult, ExtraInformation, Status};
 
 /// Type alias for targeting operation results
 pub type TargetingResult<T> = Result<T, TargetingError>;
@@ -990,6 +990,18 @@ mod tests {
             buffer: vec![1, 2, 3],
             examples: Vec::new(),
             interesting_origin: None,
+            output: Vec::new(),
+            extra_information: ExtraInformation::new(),
+            expected_exception: None,
+            expected_traceback: None,
+            has_discards: false,
+            target_observations: HashMap::new(),
+            tags: HashSet::new(),
+            spans: Vec::new(),
+            arg_slices: Vec::new(),
+            slice_comments: HashMap::new(),
+            misaligned_at: None,
+            cannot_proceed_scope: None,
         };
         
         // Update engine with result

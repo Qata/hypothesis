@@ -151,6 +151,11 @@ mod direct_pyo3_shrinking_verification;
 mod simple_float_verification;
 #[cfg(feature = "full-verification")]
 mod conjecture_data_verification;
+#[cfg(feature = "full-verification")]
+mod tree_structures_pyo3_verification;
+#[cfg(feature = "full-verification")]
+mod float_encoding_pyo3_verification;
+mod simple_float_encoding_verification;
 
 #[cfg(feature = "full-verification")]
 use test_runner::TestRunner;
@@ -218,6 +223,18 @@ fn main() {
                 .action(clap::ArgAction::SetTrue)
                 .help("Run direct PyO3 shrinking verification")
         )
+        .arg(
+            Arg::new("tree-structures")
+                .long("tree-structures")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run TreeStructures PyO3 verification")
+        )
+        .arg(
+            Arg::new("float-encoding")
+                .long("float-encoding")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run float encoding PyO3 verification")
+        )
         .get_matches();
 
     let test_name = matches.get_one::<String>("test");
@@ -229,9 +246,48 @@ fn main() {
     let run_shrinking = matches.get_flag("shrinking");
     let run_minimal_shrinking = matches.get_flag("minimal-shrinking");
     let run_pyo3_shrinking = matches.get_flag("pyo3-shrinking");
+    let run_tree_structures = matches.get_flag("tree-structures");
+    let run_float_encoding = matches.get_flag("float-encoding");
 
     println!("🔍 Conjecture Python-Rust Verification Tool");
     println!("============================================");
+    
+    // If float encoding flag is set, run float encoding verification
+    if run_float_encoding {
+        println!("\n🔢 Running simple float encoding verification...");
+        match simple_float_encoding_verification::run_simple_float_encoding_verification() {
+            Ok(()) => {
+                println!("\n✅ Float encoding verification passed!");
+                return;
+            }
+            Err(e) => {
+                eprintln!("\n❌ Float encoding verification failed: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    
+    // If TreeStructures flag is set, run TreeStructures PyO3 verification
+    #[cfg(feature = "full-verification")]
+    if run_tree_structures {
+        println!("\n🌳 Running TreeStructures PyO3 verification...");
+        match tree_structures_pyo3_verification::run_tree_structures_verification() {
+            Ok(()) => {
+                println!("\n✅ TreeStructures verification passed!");
+                return;
+            }
+            Err(e) => {
+                eprintln!("\n❌ TreeStructures verification failed: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    
+    #[cfg(not(feature = "full-verification"))]
+    if run_tree_structures {
+        println!("\n❌ TreeStructures verification requires --features full-verification");
+        process::exit(1);
+    }
     
     // If PyO3 shrinking flag is set, run direct PyO3 shrinking verification
     if run_pyo3_shrinking {
@@ -430,7 +486,7 @@ fn main() {
     
     // Default full verification if no specific flags are set and full-verification is enabled
     #[cfg(feature = "full-verification")]
-    if !run_minimal_shrinking && !run_shrinking && !run_choice_sequence && !run_direct && !run_core && !run_parity {
+    if !run_minimal_shrinking && !run_shrinking && !run_choice_sequence && !run_direct && !run_core && !run_parity && !run_tree_structures && !run_float_encoding {
         // First run direct Rust-only type tests
         if let Err(e) = direct_type_test::run_direct_type_tests() {
             eprintln!("\n❌ Direct type tests failed: {}", e);
@@ -470,7 +526,7 @@ fn main() {
     }
     
     // If no specific test flags are set, run simple float verification by default
-    if !run_parity && !run_core && !run_direct && !run_choice_sequence && !run_shrinking && !run_minimal_shrinking && !run_pyo3_shrinking {
+    if !run_parity && !run_core && !run_direct && !run_choice_sequence && !run_shrinking && !run_minimal_shrinking && !run_pyo3_shrinking && !run_tree_structures && !run_float_encoding {
         #[cfg(feature = "full-verification")]
         {
             println!("\n🔥 Running Simple Float Encoding Verification by default...");

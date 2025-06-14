@@ -74,7 +74,63 @@ macro_rules! debug_log {
     };
 }
 
-/// Re-exported FloatWidth enum with additional utility methods for external consumers
+/// **IEEE 754 Float Width Specification for Multi-Precision Encoding**
+///
+/// This enum defines the supported IEEE 754 floating-point formats for the encoding system,
+/// enabling width-specific optimizations and ensuring correct bit-level manipulation across
+/// different precision levels. Each variant corresponds to a standard IEEE 754 format with
+/// specific bit layouts and encoding strategies.
+///
+/// ## Supported IEEE 754 Formats
+///
+/// ### Width16 (Half Precision - binary16)
+/// - **Total Bits**: 16 (1 sign + 5 exponent + 10 mantissa)
+/// - **Exponent Range**: -14 to +15 (biased by 15)
+/// - **Precision**: ~3.3 decimal digits
+/// - **Use Cases**: Graphics, neural networks, memory-constrained applications
+/// - **Special Values**: ±0, ±∞, NaN (with reduced NaN payload)
+///
+/// ### Width32 (Single Precision - binary32) 
+/// - **Total Bits**: 32 (1 sign + 8 exponent + 23 mantissa)
+/// - **Exponent Range**: -126 to +127 (biased by 127)
+/// - **Precision**: ~7.2 decimal digits  
+/// - **Use Cases**: Standard floating-point computation, graphics, general applications
+/// - **Special Values**: Full IEEE 754 special value support
+///
+/// ### Width64 (Double Precision - binary64)
+/// - **Total Bits**: 64 (1 sign + 11 exponent + 52 mantissa)
+/// - **Exponent Range**: -1022 to +1023 (biased by 1023)
+/// - **Precision**: ~15.9 decimal digits
+/// - **Use Cases**: Scientific computing, high-precision calculations, default Rust f64
+/// - **Special Values**: Complete IEEE 754 special value support with extended NaN payload
+///
+/// ## Encoding Strategy Impact
+///
+/// Different widths require different encoding approaches for optimal shrinking:
+/// - **Mantissa Reversal**: Width-specific bit reversal patterns for lexicographic ordering
+/// - **Exponent Mapping**: Width-dependent exponent reordering for shrink-friendly sequences
+/// - **Special Value Encoding**: Width-specific special value index allocation
+/// - **Performance Optimization**: Width-specific lookup tables and fast paths
+///
+/// ## Memory and Performance Characteristics
+///
+/// ### Memory Layout
+/// - **Width16**: 2 bytes storage, efficient for bulk operations
+/// - **Width32**: 4 bytes storage, standard platform alignment  
+/// - **Width64**: 8 bytes storage, may require alignment considerations
+///
+/// ### Computational Complexity
+/// - **Encoding Time**: O(1) for all widths with width-specific optimizations
+/// - **Lookup Tables**: Pre-computed tables sized proportionally to width
+/// - **Cache Performance**: Smaller widths provide better cache utilization for bulk operations
+///
+/// ## Cross-Platform Compatibility
+///
+/// All width variants provide:
+/// - **Deterministic Behavior**: Identical encoding across platforms and architectures
+/// - **Endianness Independence**: Bit manipulation works consistently across byte orders
+/// - **IEEE 754 Compliance**: Strict adherence to IEEE 754 standards for interoperability
+/// - **Rust Integration**: Native compatibility with Rust's f16, f32, f64 types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FloatWidth {
     /// IEEE 754 half precision (binary16) - 16 bits total

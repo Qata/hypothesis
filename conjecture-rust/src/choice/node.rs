@@ -312,7 +312,7 @@ pub struct ChoiceNode {
     /// - `None`: Position not assigned (default state)
     /// - `Some(i)`: Position `i` within the sequence
     /// **Important**: Not copied during node copying to prevent stale references.
-    pub index: Option<usize>,
+    pub index: Option<u128>,
 }
 
 impl ChoiceNode {
@@ -343,7 +343,7 @@ impl ChoiceNode {
         value: ChoiceValue,
         constraints: Constraints,
         was_forced: bool,
-        index: usize,
+        index: u128,
     ) -> Self {
         Self {
             choice_type,
@@ -355,7 +355,7 @@ impl ChoiceNode {
     }
     
     /// Set the index on this node, consuming self and returning a new node
-    pub fn set_index(mut self, index: usize) -> Self {
+    pub fn set_index(mut self, index: u128) -> Self {
         self.index = Some(index);
         self
     }

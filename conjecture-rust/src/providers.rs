@@ -2319,7 +2319,7 @@ mod tests {
         let mut provider = HypothesisProvider::new();
         
         // These shouldn't panic
-        provider.span_start("test_span");
+        provider.span_start(42u32); // Use numeric label instead of string
         provider.span_end(false);
         provider.span_end(true);
     }
