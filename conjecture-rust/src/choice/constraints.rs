@@ -1091,8 +1091,9 @@ mod tests {
             Some(10.0), Some(0.0), true, Some(1e-6)
         );
         assert!(invalid_range.is_err());
-        assert!(invalid_range.unwrap_err().contains("min_value"));
-        assert!(invalid_range.unwrap_err().contains("max_value"));
+        let error_msg = invalid_range.unwrap_err();
+        assert!(error_msg.contains("min_value"));
+        assert!(error_msg.contains("max_value"));
         
         // Test None smallest_nonzero_magnitude (should be valid)
         let none_magnitude = FloatConstraints::with_smallest_nonzero_magnitude(

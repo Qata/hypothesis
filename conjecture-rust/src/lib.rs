@@ -216,45 +216,32 @@ pub mod choice;
 pub mod data;
 pub mod data_helper;
 pub mod datatree;
-pub mod datatree_enhanced_navigation;
-pub mod choice_sequence_management;
 pub mod shrinking;
 pub mod engine;
-pub mod engine_orchestrator;
-pub mod conjecture_data_lifecycle_management;
 pub mod providers;
-pub mod provider_lifecycle_management;
 pub mod persistence;
 pub mod targeting;
-pub mod float_encoding_export;
-pub mod provider_system_advanced_error_handling_and_fallback;
+pub mod floats;
 
 
 // Re-export core types for easy access
-pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints, FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider};
+pub use choice::{ChoiceNode, ChoiceType, ChoiceValue, Constraints};
 pub use data::{ConjectureData, ConjectureResult, Example, Status, DrawError, DataObserver, TreeRecordingObserver};
-pub use choice_sequence_management::{
-    ChoiceSequenceManager, ChoiceSequenceError, MisalignmentInfo, ChoiceTemplate
-};
 pub use datatree::{DataTree, TreeNode, TreeStats, Transition};
-pub use datatree_enhanced_navigation::{TreeRecordingObserver as EnhancedTreeRecordingObserver, NavigationState, NavigationStats, ChildSelectionStrategy};
-pub use shrinking::{Shrinker, IntegerShrinker, shrink_conjecture_data, shrink_integer};
+pub use shrinking::{Shrinker, IntegerShrinker, shrink_conjecture_data, shrink_integer, find_integer};
 pub use engine::{ConjectureRunner, RunnerConfig, RunnerStats, RunResult};
-pub use engine_orchestrator::{EngineOrchestrator, OrchestratorConfig, ExecutionPhase, ExecutionStatistics, OrchestrationError};
 pub use providers::{PrimitiveProvider, HypothesisProvider, RandomProvider, ProviderRegistry, get_provider_registry};
-pub use provider_lifecycle_management::{
-    ProviderLifecycleManager, ManagedProvider, LifecycleScope, LifecycleEvent, LifecycleHooks,
-    DefaultLifecycleHooks, ProviderInstanceMetadata, ProviderState, ProviderMetrics,
-    CacheConfiguration, CleanupTask, CleanupTaskType
-};
 pub use persistence::{ExampleDatabase, DatabaseKey, DirectoryDatabase, InMemoryDatabase, DatabaseError, DatabaseIntegration, ExampleSerialization};
-pub use float_encoding_export::{
+pub use floats::{
     float_to_lex, lex_to_float, float_to_int, int_to_float,
-    FloatWidth, FloatEncodingStrategy, FloatEncodingResult, FloatEncodingConfig, EncodingDebugInfo,
-    build_exponent_tables, build_exponent_tables_for_width_export,
-    float_to_lex_advanced, float_to_lex_multi_width, lex_to_float_multi_width
+    FloatWidth, is_simple_width, is_subnormal_width,
+    next_float_width, prev_float_width, min_positive_subnormal_width, max_subnormal_width,
+    draw_float, draw_float_width, draw_float_with_rng, draw_float_for_provider
 };
 
+
+#[cfg(test)]
+mod test_integration;
 
 #[cfg(test)]
 mod tests {

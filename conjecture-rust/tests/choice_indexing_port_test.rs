@@ -3,13 +3,13 @@
 //! This file ports existing Python test logic to Rust to ensure behavioral parity.
 //! These tests validate choice sequence recording, indexing, and deterministic replay capability.
 
-use conjecture_rust::choice::{
+use conjecture::choice::{
     ChoiceValue, Constraints, IntegerConstraints, FloatConstraints, BooleanConstraints,
     StringConstraints, BytesConstraints, IntervalSet, ChoiceType, ChoiceNode,
     choice_to_index, choice_from_index, choice_equal, choice_permitted, choices_key,
     compute_max_children, all_children
 };
-use conjecture_rust::data::{ConjectureData, Status, choices_size};
+use conjecture::data::{ConjectureData, Status};
 use std::collections::{HashMap, HashSet};
 
 // Test helper functions to match Python test patterns
@@ -33,8 +33,8 @@ fn integer_constr_with_shrink(min_value: Option<i128>, max_value: Option<i128>, 
 
 fn float_constr(min_value: f64, max_value: f64) -> FloatConstraints {
     FloatConstraints {
-        min_value: Some(min_value),
-        max_value: Some(max_value),
+        min_value: min_value,
+        max_value: max_value,
         allow_nan: true,
         smallest_nonzero_magnitude: None,
     }
@@ -42,8 +42,8 @@ fn float_constr(min_value: f64, max_value: f64) -> FloatConstraints {
 
 fn float_constr_full() -> FloatConstraints {
     FloatConstraints {
-        min_value: None,
-        max_value: None,
+        min_value: f64::NEG_INFINITY,
+        max_value: f64::INFINITY,
         allow_nan: true,
         smallest_nonzero_magnitude: None,
     }

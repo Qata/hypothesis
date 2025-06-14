@@ -488,6 +488,8 @@ mod tests {
         let int_constraints = Constraints::Integer(IntegerConstraints {
             min_value: Some(10),
             max_value: Some(20),
+            weights: None,
+            shrink_towards: Some(10),
         });
         
         assert!(manager.choice_permitted(&ChoiceValue::Integer(15), &int_constraints));
@@ -506,6 +508,8 @@ mod tests {
         let int_constraints = Constraints::Integer(IntegerConstraints {
             min_value: Some(10),
             max_value: Some(20),
+            weights: None,
+            shrink_towards: Some(10),
         });
         let result = manager.choice_from_index(0, ChoiceType::Integer, &int_constraints);
         assert!(result.is_ok());

@@ -9,7 +9,7 @@
 //! - Plugin architecture for extensibility
 //! - Observability and instrumentation hooks
 
-use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints, IntegerConstraints, BooleanConstraints, IntervalSet, templating::TemplateError};
+use crate::choice::{ChoiceValue, Constraints, ChoiceType, FloatConstraints, IntegerConstraints, BooleanConstraints, IntervalSet};
 use crate::data::DrawError;
 use rand::{Rng, RngCore, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -101,6 +101,7 @@ impl From<DrawError> for ProviderError {
     }
 }
 
+/*
 impl From<TemplateError> for ProviderError {
     fn from(err: TemplateError) -> Self {
         match err {
@@ -112,6 +113,7 @@ impl From<TemplateError> for ProviderError {
         }
     }
 }
+*/
 
 impl From<ProviderError> for DrawError {
     fn from(err: ProviderError) -> Self {
@@ -814,20 +816,30 @@ impl PrimitiveProvider for RandomProvider {
     
     fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, ProviderError> {
         let mut rng = ChaCha8Rng::from_entropy();
-        let value = rng.gen::<f64>();
         
-        // Apply constraints if specified
-        let constrained_value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
-            constraints.min_value + value * (constraints.max_value - constraints.min_value)
-        } else {
-            value
-        };
+        // Use our sophisticated lexicographic float generation
+        use crate::floats::draw_float_for_provider;
         
-        if !constraints.allow_nan && constrained_value.is_nan() {
-            return self.draw_float(constraints); // Retry
+        match draw_float_for_provider(&mut rng, constraints) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                // Fallback to basic generation
+                let value = rng.gen::<f64>();
+                
+                // Apply constraints if specified
+                let constrained_value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
+                    constraints.min_value + value * (constraints.max_value - constraints.min_value)
+                } else {
+                    value
+                };
+                
+                if !constraints.allow_nan && constrained_value.is_nan() {
+                    return self.draw_float(constraints); // Retry
+                }
+                
+                Ok(constrained_value)
+            }
         }
-        
-        Ok(constrained_value)
     }
     
     fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
@@ -1073,24 +1085,32 @@ impl PrimitiveProvider for HypothesisProvider {
         let constraints_obj = Constraints::Float(constraints.clone());
         let mut rng = ChaCha8Rng::from_entropy();
         
-        // Try to draw a constant first (5% probability)
+        // Try to draw a constant first (5% probability) - keep the existing constant injection
         if let Some(ChoiceValue::Float(constant)) = self.maybe_draw_constant(&mut rng, "float", &constraints_obj) {
             return Ok(constant);
         }
         
-        // Fall back to random generation with constraints
-        let value = rng.gen::<f64>();
-        let constrained_value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
-            constraints.min_value + value * (constraints.max_value - constraints.min_value)
-        } else {
-            value
-        };
+        // **CRITICAL FIX**: Use our sophisticated lexicographic float generation!
+        use crate::floats::draw_float_for_provider;
         
-        if !constraints.allow_nan && constrained_value.is_nan() {
-            return self.draw_float(constraints); // Retry
+        match draw_float_for_provider(&mut rng, constraints) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                // Fallback to the old basic generation if our advanced system fails
+                let value = rng.gen::<f64>();
+                let constrained_value = if constraints.min_value.is_finite() && constraints.max_value.is_finite() {
+                    constraints.min_value + value * (constraints.max_value - constraints.min_value)
+                } else {
+                    value
+                };
+                
+                if !constraints.allow_nan && constrained_value.is_nan() {
+                    return self.draw_float(constraints); // Retry
+                }
+                
+                Ok(constrained_value)
+            }
         }
-        
-        Ok(constrained_value)
     }
     
     fn draw_string(&mut self, intervals: &IntervalSet, min_size: usize, max_size: usize) -> Result<String, ProviderError> {
@@ -2326,7 +2346,7 @@ mod tests {
 }
 
 // Implement FloatPrimitiveProvider for existing providers to work with FloatConstraintTypeSystem
-impl crate::choice::float_constraint_type_system::FloatPrimitiveProvider for RandomProvider {
+/*impl crate::choice::float_constraint_type_system::FloatPrimitiveProvider for RandomProvider {
     fn generate_u64(&mut self) -> u64 {
         let mut rng = ChaCha8Rng::from_entropy();
         rng.gen()
@@ -2393,3 +2413,4 @@ impl crate::choice::float_constraint_type_system::FloatPrimitiveProvider for Hyp
 // Implement FloatConstraintAwareProvider for existing providers
 impl crate::choice::float_constraint_type_system::FloatConstraintAwareProvider for RandomProvider {}
 impl crate::choice::float_constraint_type_system::FloatConstraintAwareProvider for HypothesisProvider {}
+*/

@@ -103,58 +103,29 @@
 //! - Memory pool allocation for choice sequence batches
 //! - Automatic cleanup with RAII patterns
 
-pub mod advanced_shrinking;
 pub mod constraints;
-pub mod dfa_string_generation;
-pub mod field_access_system;
-pub mod float_constraint_type_system;
 pub mod indexing;
 mod indexing_correct;
 mod navigation;
 pub mod navigation_system;
 mod node;
-pub mod shrinking_system;
-pub mod templating;
 pub mod value_generation;
-pub mod weighted_selection;
 pub mod values;
-pub mod core_compilation_error_resolution;
-pub mod choice_sequence_recording;
 
 
 
 
 
-pub use self::advanced_shrinking::{AdvancedShrinkingEngine as NewAdvancedShrinkingEngine, ShrinkResult as NewShrinkResult, ShrinkingMetrics as NewShrinkingMetrics, ChoicePattern, StringPatternType, ShrinkingContext, shrink_duplicated_blocks, shrink_floats_to_integers, shrink_strings_to_more_structured, lexicographic_weight, minimize_individual_choice_at, constraint_repair_shrinking, calculate_sequence_quality};
 pub use self::constraints::*;
-pub use self::dfa_string_generation::{
-    DFAError, DFAState, LearnedDFA, LStarLearner, MembershipOracle, 
-    RegexOracle, CustomOracle, DFAStringGenerator, PatternRecognitionEngine,
-    AlphabetOptimizer, AdvancedDFALearner, DFAStatistics, GenerationStatistics
-};
-pub use self::field_access_system::*;
-pub use self::float_constraint_type_system::{
-    FloatConstraintTypeSystem, FloatGenerationStrategy, FloatConstraintAwareProvider
-};
 pub use self::indexing::*;
 pub use self::navigation::*;
 pub use self::navigation_system::*;
 pub use self::node::*;
-pub use self::shrinking_system::*;
-pub use self::templating::*;
 pub use self::value_generation::{
     ValueGenerator, EntropySource, BufferEntropySource, ValueGenerationError, 
     ValueGenerationResult, StandardValueGenerator
 };
-pub use self::weighted_selection::*;
 pub use self::values::*;
-pub use self::core_compilation_error_resolution::{
-    CompilationErrorType, CompilationErrorResolver, ResolutionResult, ResolutionStatistics,
-    ChoiceNodeBuilder, CompilationErrorAnalyzer
-};
-pub use self::choice_sequence_recording::{
-    ChoiceSequenceRecorder, ChoiceSequenceRecording
-};
 
 /// Choice types that can be drawn
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]

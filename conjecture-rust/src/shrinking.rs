@@ -6,6 +6,7 @@
 //! shrinking modules.
 
 use crate::choice::{ChoiceNode, ChoiceValue, Constraints};
+use crate::floats::float_to_lex;
 use crate::data::ConjectureData;
 use std::collections::HashSet;
 use std::time::{Duration, Instant};
@@ -30,13 +31,7 @@ fn choice_to_index(value: &ChoiceValue, _constraints: &Constraints) -> u64 {
         }
         ChoiceValue::Boolean(false) => 0,
         ChoiceValue::Boolean(true) => 1,
-        ChoiceValue::Float(val) => {
-            if val.is_nan() || val.is_infinite() {
-                u64::MAX
-            } else {
-                val.abs() as u64
-            }
-        }
+        ChoiceValue::Float(val) => float_to_lex(*val, crate::floats::FloatWidth::Width64),
         ChoiceValue::String(s) => s.len() as u64,
         ChoiceValue::Bytes(b) => b.len() as u64,
     }
@@ -47,8 +42,6 @@ fn choice_to_index(value: &ChoiceValue, _constraints: &Constraints) -> u64 {
 pub struct Shrinker {
     /// Current best ConjectureData
     pub current: ConjectureData,
-    /// Initial ConjectureData
-    pub initial: ConjectureData,
     /// Test function to check if data is still interesting
     predicate: Option<Box<dyn Fn(&ConjectureData) -> bool>>,
     /// Set of already seen choice sequences (using choice hash as key)
@@ -82,7 +75,7 @@ impl Shrinker {
     /// 
     /// A new `Shrinker` instance ready to perform shrinking operations. The shrinker maintains
     /// internal state including:
-    /// - Current best test case (initially equal to `initial`)
+    /// - Current best test case (initially equal to input)
     /// - Deduplication cache to avoid re-testing identical sequences
     /// - Performance metrics (call count, change count)
     /// 
@@ -170,7 +163,6 @@ impl Shrinker {
         
         Self {
             current: initial,
-            initial: ConjectureData::new(0), // Placeholder - we'll need to copy this properly
             predicate: Some(predicate),
             seen,
             calls: 0,
@@ -483,8 +475,6 @@ impl Shrinker {
 pub struct IntegerShrinker {
     /// Current integer value
     current: i128,
-    /// Initial integer value
-    initial: i128,
     /// Predicate function to test if value is still interesting
     predicate: Box<dyn Fn(i128) -> bool>,
     /// Set of already tested values
@@ -501,7 +491,6 @@ impl IntegerShrinker {
         
         Self {
             current: initial,
-            initial,
             predicate,
             seen,
             calls: 0,
@@ -648,6 +637,117 @@ where
     shrinker.shrink()
 }
 
+/// Port of Python's find_integer function from junkdrawer.py
+/// 
+/// This is the core adaptive search algorithm used throughout Python Hypothesis.
+/// It efficiently finds the largest integer where a predicate holds true.
+/// 
+/// # Algorithm Design
+/// 
+/// The function uses a hybrid approach optimized for different value ranges:
+/// 
+/// ## Phase 1: Linear Scan (values 0-4)
+/// For small values, linear scanning is most efficient:
+/// ```text
+/// for i in [0, 1, 2, 3, 4]:
+///     if not predicate(i):
+///         return i - 1
+/// ```
+/// 
+/// ## Phase 2: Exponential Probe (finding upper bound)
+/// For larger values, exponentially expand the search range:
+/// ```text
+/// lo, hi = 4, 5
+/// while predicate(hi):
+///     lo = hi
+///     hi *= 2
+/// ```
+/// 
+/// ## Phase 3: Binary Search (exact boundary)
+/// Once an upper bound is found, binary search to the exact boundary:
+/// ```text
+/// while lo + 1 < hi:
+///     mid = (lo + hi) / 2
+///     if predicate(mid):
+///         lo = mid
+///     else:
+///         hi = mid
+/// return lo
+/// ```
+/// 
+/// # Performance Characteristics
+/// 
+/// - **Best Case**: O(1) for values 0-4
+/// - **Average Case**: O(log n) where n is the result value
+/// - **Worst Case**: O(log max_value) due to exponential probing + binary search
+/// - **Space Complexity**: O(1) - constant space usage
+/// 
+/// # Examples
+/// 
+/// ```rust
+/// // Find largest n where n^2 <= 100
+/// let result = find_integer(|n| n * n <= 100);
+/// assert_eq!(result, 10);
+/// 
+/// // Find largest n where n < 50
+/// let result = find_integer(|n| n < 50);
+/// assert_eq!(result, 49);
+/// 
+/// // Edge case: predicate never true
+/// let result = find_integer(|n| false);
+/// assert_eq!(result, -1);
+/// ```
+/// 
+/// # Compatibility with Python
+/// 
+/// This implementation maintains exact compatibility with Python Hypothesis's 
+/// `find_integer` function behavior, including:
+/// - Same phase transition points (linear scan up to 4)
+/// - Identical exponential growth factor (2x)
+/// - Same binary search termination condition
+/// - Equivalent handling of edge cases
+pub fn find_integer<F>(mut predicate: F) -> i128
+where
+    F: FnMut(i128) -> bool,
+{
+    // Phase 1: Linear scan for small values (0-4)
+    // This is more efficient than binary search for small ranges
+    for i in 0..5 {
+        if !predicate(i) {
+            return i - 1;
+        }
+    }
+    
+    // Phase 2: Exponential probe to find upper bound
+    // Start from 4 (last successful value) and double until predicate fails
+    let mut lo = 4i128;
+    let mut hi = 5i128;
+    
+    while predicate(hi) {
+        lo = hi;
+        hi = hi.saturating_mul(2); // Prevent overflow
+        
+        // Safety check: if we've hit the limit, return lo
+        if hi <= lo {
+            return lo;
+        }
+    }
+    
+    // Phase 3: Binary search between lo and hi
+    // Invariant: predicate(lo) is true, predicate(hi) is false
+    while lo + 1 < hi {
+        let mid = lo + (hi - lo) / 2; // Avoid overflow
+        
+        if predicate(mid) {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    
+    lo
+}
+
 /// Convenience function to shrink an integer using Python's algorithm
 pub fn shrink_integer<F>(initial: i128, predicate: F) -> i128
 where
@@ -748,5 +848,28 @@ mod tests {
         
         let bool_true = ChoiceValue::Boolean(true);
         assert_eq!(choice_to_index(&bool_true, &bool_constraints), 1);
+    }
+    
+    #[test]
+    fn test_find_integer() {
+        // Test basic functionality
+        let result = find_integer(|n| n * n <= 100);
+        assert_eq!(result, 10);
+        
+        // Test boundary case
+        let result = find_integer(|n| n < 50);
+        assert_eq!(result, 49);
+        
+        // Test small values (linear scan phase)
+        let result = find_integer(|n| n <= 2);
+        assert_eq!(result, 2);
+        
+        // Test edge case: predicate never true
+        let result = find_integer(|_| false);
+        assert_eq!(result, -1);
+        
+        // Test edge case: predicate always true for reasonable range
+        let result = find_integer(|n| n < 1000000);
+        assert!(result > 100000); // Should find a large value
     }
 }

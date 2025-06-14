@@ -5,11 +5,11 @@
 //! - tests/conjecture/test_test_data.py  
 //! - tests/cover/test_replay_logic.py
 
-use conjecture_rust::choice::{
+use conjecture::choice::{
     ChoiceValue, Constraints, IntegerConstraints, BooleanConstraints, FloatConstraints,
     StringConstraints, BytesConstraints, IntervalSet, choice_equal
 };
-use conjecture_rust::choice::indexing::{choice_to_index, choice_from_index, clamped_shrink_towards};
+use conjecture::choice::indexing::{choice_to_index, choice_from_index, clamped_shrink_towards};
 
 // Helper functions to create constraints (ported from Python test utilities)
 

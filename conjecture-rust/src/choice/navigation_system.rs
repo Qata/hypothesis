@@ -1201,7 +1201,7 @@ mod tests {
     #[test]
     fn test_weighted_selection_logic() {
         let tree = DataTree::new();
-        let nav_system = NavigationSystem::new(tree);
+        let mut nav_system = NavigationSystem::new(tree);
         
         // Test exploration weight calculation
         let node = Arc::clone(&nav_system.state.current_node);

@@ -109,7 +109,6 @@
 //! - Alphabet constraint enforcement for character validity
 
 use super::{ChoiceValue, Constraints, IntegerConstraints, FloatConstraints, IntervalSet, ChoiceType, choice_equal};
-pub mod float_encoding;
 
 // Conditional debug logging - disabled during tests for performance
 macro_rules! debug_log {
@@ -174,12 +173,12 @@ fn generate_bounded_integer_sequence(constraints: &IntegerConstraints, max_size:
 
 /// Convert float to lexicographic ordering using Python's sophisticated algorithm
 fn float_to_lex(f: f64) -> u64 {
-    float_encoding::float_to_lex(f)
+    crate::floats::float_to_lex(f, crate::floats::FloatWidth::Width64)
 }
 
 /// Convert lexicographic ordering back to float using Python's algorithm
 fn lex_to_float(lex: u64) -> f64 {
-    float_encoding::lex_to_float(lex)
+    crate::floats::lex_to_float(lex, crate::floats::FloatWidth::Width64)
 }
 
 /// Apply float constraints to clamp a value into valid range

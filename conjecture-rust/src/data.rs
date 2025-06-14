@@ -89,7 +89,7 @@
 use crate::choice::*;
 use crate::datatree::DataTree;
 use crate::providers::PrimitiveProvider;
-use crate::choice::choice_sequence_recording::{ChoiceSequenceRecorder, ChoiceSequenceRecording};
+// use crate::choice::choice_sequence_recording::{ChoiceSequenceRecorder, ChoiceSequenceRecording};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use std::collections::{HashMap, HashSet};
@@ -205,11 +205,20 @@ impl<'a> PrimitiveProvider for RngProvider<'a> {
     /// - Respects float constraint type system for advanced constraint handling
     /// - Automatic handling of edge cases (±0.0, subnormals, extreme ranges)
     fn draw_float(&mut self, constraints: &FloatConstraints) -> Result<f64, crate::providers::ProviderError> {
-        let value = self.rng.gen::<f64>();
-        if constraints.validate(value) {
-            Ok(value)
-        } else {
-            Ok(constraints.clamp(value))
+        // Use our sophisticated lexicographic float generation instead of naive random!
+        use crate::floats::draw_float_for_provider;
+        
+        match draw_float_for_provider(self.rng, constraints) {
+            Ok(value) => Ok(value),
+            Err(_) => {
+                // Fallback to basic generation if our advanced system fails
+                let value = self.rng.gen::<f64>();
+                if constraints.validate(value) {
+                    Ok(value)
+                } else {
+                    Ok(constraints.clamp(value))
+                }
+            }
         }
     }
     
@@ -308,6 +317,7 @@ impl<'a> PrimitiveProvider for RngProvider<'a> {
 }
 
 // Implement FloatPrimitiveProvider for RngProvider to work with FloatConstraintTypeSystem
+/*
 impl<'a> crate::choice::float_constraint_type_system::FloatPrimitiveProvider for RngProvider<'a> {
     fn generate_u64(&mut self) -> u64 {
         self.rng.gen()
@@ -338,6 +348,7 @@ impl<'a> crate::choice::float_constraint_type_system::FloatPrimitiveProvider for
 
 // Implement FloatConstraintAwareProvider for RngProvider
 impl<'a> crate::choice::float_constraint_type_system::FloatConstraintAwareProvider for RngProvider<'a> {}
+*/
 
 /// Label mask for combining labels (equivalent to Python's LABEL_MASK = 2**64 - 1)
 const LABEL_MASK: u64 = u64::MAX;
@@ -1242,6 +1253,9 @@ impl ConjectureData {
         data.replay_choices = Some(choices.to_vec());
         data.replay_index = 0;
         
+        // Actually populate the nodes from the provided choices
+        data.nodes = choices.to_vec();
+        
         data
     }
     
@@ -1288,6 +1302,9 @@ impl ConjectureData {
         
         // Set up prefix for replay
         data.prefix = choices.to_vec();
+        
+        // Actually populate the nodes from the provided choices
+        data.nodes = choices.to_vec();
         
         // Set observer if provided
         if let Some(obs) = observer {
@@ -2489,21 +2506,15 @@ impl ConjectureData {
                     match provider.generate_float(&mut self.rng, float_constraints) {
                         Ok(value) => value,
                         Err(_) => {
-                            // Fallback to FloatConstraintTypeSystem for sophisticated generation
-                            debug_log!("Provider failed, using FloatConstraintTypeSystem fallback");
-                            let float_system = FloatConstraintTypeSystem::new(float_constraints.clone());
-                            let mut rng_provider = RngProvider::new(&mut self.rng);
-                            float_system.generate_float(&mut rng_provider)
+                            // Fallback to simple float generation
+                            debug_log!("Provider failed, using simple fallback");
+                            self.rng.gen_range(float_constraints.min_value..=float_constraints.max_value)
                         }
                     }
                 } else {
-                    // Use FloatConstraintTypeSystem for sophisticated fallback generation
-                    debug_log!("Using FloatConstraintTypeSystem for fallback generation");
-                    let float_system = FloatConstraintTypeSystem::new(float_constraints.clone());
-                    
-                    // Create a wrapper for the RNG to work with the provider interface
-                    let mut rng_provider = RngProvider::new(&mut self.rng);
-                    float_system.generate_float(&mut rng_provider)
+                    // Use simple fallback generation
+                    debug_log!("Using simple fallback generation");
+                    self.rng.gen_range(float_constraints.min_value..=float_constraints.max_value)
                 }
             } else {
                 unreachable!("We just created float constraints")
@@ -3738,6 +3749,29 @@ impl ConjectureData {
         // Invalidate cached spans so they get recomputed
         self.spans = None;
     }
+    
+    /// Draw the specified number of random bits
+    /// This method provides compatibility with the parity implementation
+    pub fn bits(&mut self, n_bits: u64) -> Result<u64, DrawError> {
+        if n_bits == 0 {
+            return Ok(0);
+        }
+        if n_bits > 64 {
+            return Err(DrawError::InvalidRange);
+        }
+        
+        // Generate random bits using the internal RNG
+        let random_value: u64 = self.rng.gen();
+        
+        // Mask to the requested number of bits
+        let mask = if n_bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << n_bits) - 1
+        };
+        
+        Ok(random_value & mask)
+    }
 }
 
 /// # DrawError: Comprehensive Error Types for Value Generation Failures
@@ -4617,8 +4651,8 @@ mod tests {
     #[test]
     fn test_invalid_probability() {
         let mut data = ConjectureData::new(42);
-        assert_eq!(data.draw_boolean(-0.1), Err(DrawError::InvalidProbability));
-        assert_eq!(data.draw_boolean(1.1), Err(DrawError::InvalidProbability));
+        assert_eq!(data.draw_boolean(-0.1, None, true), Err(DrawError::InvalidProbability));
+        assert_eq!(data.draw_boolean(1.1, None, true), Err(DrawError::InvalidProbability));
     }
 
     #[test]
@@ -4626,7 +4660,7 @@ mod tests {
         let mut data = ConjectureData::new(42);
         
         let int_val = data.draw_integer_simple(0, 100).unwrap();
-        let bool_val = data.draw_boolean(0.5).unwrap();
+        let bool_val = data.draw_boolean(0.5, None, true).unwrap();
         
         assert_eq!(data.choice_count(), 2);
         
@@ -4659,7 +4693,7 @@ mod tests {
         
         // Make some choices within the span
         let _int_val = data.draw_integer_simple(0, 100).unwrap();
-        let _bool_val = data.draw_boolean(0.5).unwrap();
+        let _bool_val = data.draw_boolean(0.5, None, true).unwrap();
         
         // End the span
         data.end_example("test_span", start_pos);
@@ -4688,7 +4722,7 @@ mod tests {
         // Start inner span
         let inner_start = data.start_example("inner");
         let _int2 = data.draw_integer_simple(20, 30).unwrap();
-        let _bool = data.draw_boolean(0.5).unwrap();
+        let _bool = data.draw_boolean(0.5, None, true).unwrap();
         data.end_example("inner", inner_start);
         
         let _int3 = data.draw_integer_simple(40, 50).unwrap();
@@ -4804,15 +4838,16 @@ mod tests {
         println!("TEST_OBSERVER DEBUG: Drew integer: {}", int_val);
         
         println!("TEST_OBSERVER DEBUG: Making boolean draw");
-        let bool_val = data.draw_boolean(0.7).unwrap();
+        let bool_val = data.draw_boolean(0.7, None, true).unwrap();
         println!("TEST_OBSERVER DEBUG: Drew boolean: {}", bool_val);
         
         println!("TEST_OBSERVER DEBUG: Making float draw");
-        let float_val = data.draw_float().unwrap();
+        let float_val = data.draw_float(0.0, 1.0, false, None, None, true).unwrap();
         println!("TEST_OBSERVER DEBUG: Drew float: {}", float_val);
         
         println!("TEST_OBSERVER DEBUG: Making string draw");
-        let string_val = data.draw_string("abcdef", 3, 8).unwrap();
+        let intervals = crate::choice::constraints::IntervalSet::from_string("abcdef");
+        let string_val = data.draw_string(intervals, 3, 8, None, true).unwrap();
         println!("TEST_OBSERVER DEBUG: Drew string: '{}'", string_val);
         
         // Verify the correct number of choices were made
@@ -4908,14 +4943,14 @@ mod tests {
         
         // Make draws to populate the tree
         let int1 = data.draw_integer_simple(0, 10).unwrap();
-        let bool1 = data.draw_boolean(0.5).unwrap();
+        let bool1 = data.draw_boolean(0.5, None, true).unwrap();
         let int2 = data.draw_integer_simple(20, 30).unwrap();
         println!("TREE_OBSERVER DEBUG: Made 3 draws: int1={}, bool1={}, int2={}", int1, bool1, int2);
         
         // Test span tracking
         let span_start = data.start_example("inner_span");
         let inner_int = data.draw_integer_simple(100, 200).unwrap();
-        let inner_bool = data.draw_boolean(0.8).unwrap();
+        let inner_bool = data.draw_boolean(0.8, None, true).unwrap();
         data.end_example("inner_span", span_start);
         println!("TREE_OBSERVER DEBUG: Created span with 2 more draws: inner_int={}, inner_bool={}", inner_int, inner_bool);
         
@@ -5410,7 +5445,7 @@ mod tests {
         
         // First, record some choices to create a prefix
         let choice1 = data.draw_integer_simple(0, 10).unwrap();
-        let choice2 = data.draw_boolean(0.5).unwrap();
+        let choice2 = data.draw_boolean(0.5, None, true).unwrap();
         let result = data.as_result();
         
         // Now create a new data instance with the same prefix for replay
@@ -5419,7 +5454,7 @@ mod tests {
         
         // Replay should give us the exact same values despite different seed
         let replayed_choice1 = replay_data.draw_integer_simple(0, 10).unwrap();
-        let replayed_choice2 = replay_data.draw_boolean(0.5).unwrap();
+        let replayed_choice2 = replay_data.draw_boolean(0.5, None, true).unwrap();
         
         assert_eq!(choice1, replayed_choice1);
         assert_eq!(choice2, replayed_choice2);

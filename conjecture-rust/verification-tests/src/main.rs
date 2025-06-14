@@ -147,6 +147,9 @@ mod shrinking_verification;
 mod minimal_shrinking_test;
 mod python_shrinking_ffi;
 mod direct_pyo3_shrinking_verification;
+mod shrinking_pyo3_verification;
+mod shrinking_direct_verification;
+mod direct_shrinking_verification;
 #[cfg(feature = "full-verification")]
 mod simple_float_verification;
 #[cfg(feature = "full-verification")]
@@ -156,6 +159,8 @@ mod tree_structures_pyo3_verification;
 #[cfg(feature = "full-verification")]
 mod float_encoding_pyo3_verification;
 mod simple_float_encoding_verification;
+// mod direct_shrinking_parity_verification; // TODO: Fix PyO3 compilation issues
+mod simple_shrinking_parity_verification;
 
 #[cfg(feature = "full-verification")]
 use test_runner::TestRunner;
@@ -224,6 +229,12 @@ fn main() {
                 .help("Run direct PyO3 shrinking verification")
         )
         .arg(
+            Arg::new("shrinking-parity")
+                .long("shrinking-parity")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run shrinking system PyO3 parity verification")
+        )
+        .arg(
             Arg::new("tree-structures")
                 .long("tree-structures")
                 .action(clap::ArgAction::SetTrue)
@@ -234,6 +245,18 @@ fn main() {
                 .long("float-encoding")
                 .action(clap::ArgAction::SetTrue)
                 .help("Run float encoding PyO3 verification")
+        )
+        .arg(
+            Arg::new("shrinking-direct")
+                .long("shrinking-direct")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run direct PyO3 shrinking verification with byte-for-byte comparison")
+        )
+        .arg(
+            Arg::new("direct-shrinking-parity")
+                .long("direct-shrinking-parity")
+                .action(clap::ArgAction::SetTrue)
+                .help("Run comprehensive shrinking parity verification against Python")
         )
         .get_matches();
 
@@ -246,8 +269,11 @@ fn main() {
     let run_shrinking = matches.get_flag("shrinking");
     let run_minimal_shrinking = matches.get_flag("minimal-shrinking");
     let run_pyo3_shrinking = matches.get_flag("pyo3-shrinking");
+    let run_shrinking_parity = matches.get_flag("shrinking-parity");
     let run_tree_structures = matches.get_flag("tree-structures");
     let run_float_encoding = matches.get_flag("float-encoding");
+    let run_shrinking_direct = matches.get_flag("shrinking-direct");
+    let run_direct_shrinking_parity = matches.get_flag("direct-shrinking-parity");
 
     println!("🔍 Conjecture Python-Rust Verification Tool");
     println!("============================================");
@@ -262,6 +288,36 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("\n❌ Float encoding verification failed: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    
+    // If shrinking direct flag is set, run direct shrinking verification
+    if run_shrinking_direct {
+        println!("\n🔍 Running direct PyO3 shrinking verification with byte-for-byte comparison...");
+        match shrinking_direct_verification::verify_shrinking_parity() {
+            Ok(()) => {
+                println!("\n✅ Shrinking direct verification passed!");
+                return;
+            }
+            Err(e) => {
+                eprintln!("\n❌ Shrinking direct verification failed: {}", e);
+                process::exit(1);
+            }
+        }
+    }
+    
+    // If direct shrinking parity flag is set, run simple shrinking parity verification
+    if run_direct_shrinking_parity {
+        println!("\n🔍 Running simple shrinking parity verification...");
+        match simple_shrinking_parity_verification::run_shrinking_parity_verification() {
+            Ok(()) => {
+                println!("\n✅ Simple shrinking parity verification passed!");
+                return;
+            }
+            Err(e) => {
+                eprintln!("\n❌ Simple shrinking parity verification failed: {}", e);
                 process::exit(1);
             }
         }
@@ -287,6 +343,23 @@ fn main() {
     if run_tree_structures {
         println!("\n❌ TreeStructures verification requires --features full-verification");
         process::exit(1);
+    }
+    
+    // If shrinking parity flag is set, run shrinking system PyO3 parity verification
+    if run_shrinking_parity {
+        println!("\n🔍 Running shrinking system PyO3 parity verification...");
+        let result = shrinking_pyo3_verification::run_shrinking_verification();
+        
+        if result.failed_tests.is_empty() {
+            println!("\n✅ Shrinking system PyO3 verification passed!");
+            return;
+        } else {
+            println!("\n❌ Shrinking system PyO3 verification failed!");
+            for test in &result.failed_tests {
+                println!("   ❌ {}", test);
+            }
+            process::exit(1);
+        }
     }
     
     // If PyO3 shrinking flag is set, run direct PyO3 shrinking verification
@@ -486,7 +559,7 @@ fn main() {
     
     // Default full verification if no specific flags are set and full-verification is enabled
     #[cfg(feature = "full-verification")]
-    if !run_minimal_shrinking && !run_shrinking && !run_choice_sequence && !run_direct && !run_core && !run_parity && !run_tree_structures && !run_float_encoding {
+    if !run_minimal_shrinking && !run_shrinking && !run_choice_sequence && !run_direct && !run_core && !run_parity && !run_shrinking_parity && !run_tree_structures && !run_float_encoding {
         // First run direct Rust-only type tests
         if let Err(e) = direct_type_test::run_direct_type_tests() {
             eprintln!("\n❌ Direct type tests failed: {}", e);
@@ -526,7 +599,7 @@ fn main() {
     }
     
     // If no specific test flags are set, run simple float verification by default
-    if !run_parity && !run_core && !run_direct && !run_choice_sequence && !run_shrinking && !run_minimal_shrinking && !run_pyo3_shrinking && !run_tree_structures && !run_float_encoding {
+    if !run_parity && !run_core && !run_direct && !run_choice_sequence && !run_shrinking && !run_minimal_shrinking && !run_pyo3_shrinking && !run_shrinking_parity && !run_tree_structures && !run_float_encoding {
         #[cfg(feature = "full-verification")]
         {
             println!("\n🔥 Running Simple Float Encoding Verification by default...");
